@@ -388,3 +388,72 @@ cause.) The original wording produces a clean thobe with a correct collar and
 placket, so it stays and the entry is called `thobe_grey` / "Grey thobe".
 
 Same principle as the agal: the menu says what is in the picture.
+
+## Camera 1-7: mechanism done, assets not — 2026-09-02
+
+Seven camera buttons in the preview window. A camera, like an outfit, is a whole
+generated master frame rather than a runtime transform, because there is no 3D
+scene here: LivePortrait warps a face crop out of one photograph and cannot
+invent the back of a head or a ceiling.
+
+### The split that shapes the rig
+
+`evaluate_scenes.py` rejects a master frame past 10 degrees of head yaw, because
+LivePortrait hallucinates beyond it. That gate decides which cameras can be
+alive, and it lines up with how real multicam works:
+
+- A camera he **looks into** is near-frontal to *that* lens whatever angle his
+  body sits at, so it passes the gate and can be animated. Cameras 1-5.
+- A camera showing his **back**, or wide enough that his face is a few pixels,
+  has no drivable face. Cameras 6-7 are stills, and the application never calls
+  the renderer for them at all - which is also why those cuts are instant and
+  cost no VRAM.
+
+Marking a still `animated: false` is not hiding a limitation. A locked-off room
+camera in a real show is an angle you cut to for a few seconds, and the subject
+is what moves in it; there is no subject motion available from a photograph.
+
+### What works
+
+The mechanism, end to end: the rig loader, the seven-button row with live/still
+marking and greying of ungenerated cameras, the single mouse dispatcher (OpenCV
+allows one callback per window and there are now two widgets on the frame), the
+still-display path that bypasses the renderer, `[` / `]` stepping, and the
+interaction with the wardrobe - an outfit and a camera are both "a source
+portrait" and cannot both be in force, so picking one clears the other. 36 tests.
+
+**Cameras 6 and 7 are genuinely good.** The over-shoulder shot and the wide room
+shot are exactly the two angles that were asked for and could not be faked.
+
+### What does not work, and why
+
+**Identity is not preserved across cameras.** Cameras 2, 3, 4 and 5 are visibly
+different men - different faces, beards and ages. That is the direct consequence
+of generating each camera from a text prompt: independent text-to-image samples
+share a description, not a person.
+
+This is the exact failure the wardrobe avoided, and it avoided it by
+*inpainting* - masking the face out of the edit so identity is copied through
+rather than re-rolled. Generating from scratch per camera threw that away.
+
+**The room is different in every frame too.** Sharing the room text buys a
+shared vocabulary, not a shared room. Camera 1 is a bright white room, camera 3
+a wall of monitors, camera 7 a luxury lounge.
+
+**Camera 1 ignored its own brief** - it returned a wide desk shot with him
+turned away rather than the hero close-up its prompt asks for, and camera 3 came
+back as a true profile, which would fail the yaw gate.
+
+### The fix, concretely
+
+Two stages, both reusing machinery that already works here:
+
+1. **img2img from the chosen master scene** instead of text-to-image, so
+   palette, materials and lighting carry over rather than being re-described.
+2. **Inpaint the face** in each live camera from the identity source, exactly as
+   `generate_wardrobe.py` does. The live cameras are near-frontal by design,
+   which is the case face inpainting handles best.
+
+Geometric room consistency - the same shelf in the same place from two angles -
+is beyond both, and needs depth reprojection from one master or a real 3D set.
+Worth saying plainly rather than implying seven prompts can produce it.
