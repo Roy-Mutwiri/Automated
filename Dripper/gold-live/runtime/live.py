@@ -330,6 +330,21 @@ class LiveSession:
             proposer=proposer,
         )
 
+        # Resume what this session had already covered. Without this a restart
+        # -- crash, upgrade, reboot -- makes the host repeat an hour of
+        # material, which to a regular viewer is indistinguishable from a bug.
+        saved = self.store.load_session_state(self.session_id)
+        if saved:
+            self.runtime.load_state(saved)
+            log.info(
+                "%s resumed: %d topics, %d utterances previously covered",
+                self.session_id,
+                len(self.runtime.memory.topics_last_seen),
+                self.runtime.memory.utterance_count,
+            )
+        else:
+            log.info("%s starting with no prior state", self.session_id)
+
         self.router = AudioRouter(self.session_id, tts, Path(self.args.out))
         await self.router.start()
 
@@ -347,6 +362,7 @@ class LiveSession:
             asyncio.create_task(self._bar_loop(), name="bars"),
             asyncio.create_task(self._speak_loop(), name="speak"),
             asyncio.create_task(heartbeat(self.health, self.store), name="heartbeat"),
+            asyncio.create_task(self._checkpoint_loop(), name="checkpoint"),
         ]
         if self.adapter is not None:
             self._tasks.append(asyncio.create_task(self._comment_loop(), name="comments"))
@@ -361,8 +377,30 @@ class LiveSession:
         await self.shutdown(feed, llm)
         return 0
 
+    async def _checkpoint_loop(self) -> None:
+        """Save state periodically, not only on clean shutdown.
+
+        A process that is killed -9, or a machine that loses power, never runs
+        its shutdown path. Checkpointing bounds how much the host forgets to
+        the checkpoint interval rather than the whole session.
+        """
+        while not self.stopping.is_set():
+            await asyncio.sleep(self.args.checkpoint_s)
+            self._checkpoint()
+
+    def _checkpoint(self) -> None:
+        if self.runtime is None:
+            return
+        try:
+            self.store.save_session_state(
+                self.session_id, self.runtime.export_state()
+            )
+        except Exception:
+            log.exception("[%s] checkpoint failed", self.session_id)
+
     async def shutdown(self, feed: Feed, llm) -> None:
         log.info("%s shutting down", self.session_id)
+        self._checkpoint()
         METRICS.gauge("goldlive_session_up", 0, {"session": self.session_id})
         for task in self._tasks:
             task.cancel()
@@ -400,6 +438,8 @@ def main() -> None:
     ap.add_argument("--db", default=str(data_path("data", "gold-live.db", create_parent=False)))
     ap.add_argument("--health-port", type=int, default=9101)
     ap.add_argument("--tick-s", type=float, default=2.0)
+    ap.add_argument("--checkpoint-s", type=float, default=60.0,
+                    help="how often to save what has been covered")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 

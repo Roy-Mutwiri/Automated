@@ -238,6 +238,41 @@ class TraceStore:
             out["provenance"] = json.loads(out["provenance"])
             return out
 
+    def load_session_state(self, session_id: str) -> dict[str, Any] | None:
+        """What this session had covered when it last shut down.
+
+        Read synchronously at startup, before the speech loop begins -- this is
+        the one place a blocking read is correct, because resuming without it
+        means the host repeats an hour of material it already covered.
+        """
+        try:
+            with closing(self.connect()) as conn:
+                row = conn.execute(
+                    "SELECT payload FROM session_state WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+        except sqlite3.Error as exc:
+            log.warning("could not read saved state for %s: %s", session_id, exc)
+            return None
+        if row is None:
+            return None
+        try:
+            return json.loads(row[0])
+        except json.JSONDecodeError:
+            log.warning("saved state for %s is corrupt; starting fresh", session_id)
+            return None
+
+    def flush_now(self) -> int:
+        """Synchronous drain, for shutdown. The async flush loop is already
+        cancelled by then, and losing the final state write is the one that
+        matters most."""
+        import asyncio
+
+        try:
+            return asyncio.get_event_loop().run_until_complete(self._drain_once())
+        except RuntimeError:
+            return asyncio.run(self._drain_once())
+
     def stats(self, session_id: str, since_minutes: int = 60) -> dict:
         since = (
             datetime.now(timezone.utc) - timedelta(minutes=since_minutes)

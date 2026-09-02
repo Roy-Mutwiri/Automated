@@ -249,6 +249,72 @@ class SessionRuntime:
         self.planner.mark_used(beat, now)
         return beat
 
+    # -- persistence ------------------------------------------------------
+
+    def export_state(self) -> dict:
+        """Everything that must survive a restart.
+
+        A 24/7 system restarts -- on crash, on upgrade, on a machine reboot.
+        Without this the host wakes up having forgotten every topic it covered
+        and immediately repeats an hour of material, which to a regular viewer
+        looks exactly like a broken bot.
+
+        Deliberately excludes the utterance similarity index: it guards phrasing
+        over a short window, and rebuilding it from the recent transcript on
+        restart is both cheaper and more correct than serialising it.
+        """
+        state: dict = {
+            "topics_last_seen": {
+                k: v.isoformat() for k, v in self.memory.topics_last_seen.items()
+            },
+            "audience_questions": dict(self.memory.audience_questions),
+            "utterance_count": self.memory.utterance_count,
+            "recent_transcript": [
+                {"text": u.text, "topic": u.topic, "at": u.at.isoformat()}
+                for u in self.memory.short_term
+            ],
+        }
+        if self.coverage is not None:
+            state["coverage"] = self.coverage.export_state()
+        if self.planner is not None:
+            state["planner"] = self.planner.export_state()
+        return state
+
+    def load_state(self, state: dict) -> None:
+        from collections import Counter
+        from datetime import datetime as _dt
+
+        try:
+            self.memory.topics_last_seen = {
+                k: _dt.fromisoformat(v)
+                for k, v in state.get("topics_last_seen", {}).items()
+            }
+            self.memory.audience_questions = Counter(state.get("audience_questions", {}))
+
+            # Rehydrating the transcript also rebuilds the similarity index, so
+            # the host does not repeat its last few sentences verbatim.
+            for entry in state.get("recent_transcript", []):
+                self.memory.record_utterance(
+                    entry["text"], entry["topic"], _dt.fromisoformat(entry["at"])
+                )
+
+            # Set the counter AFTER replaying the transcript. record_utterance
+            # increments it, so assigning first double-counts every restored
+            # utterance and the number drifts upward on every restart.
+            self.memory.utterance_count = int(state.get("utterance_count", 0))
+
+            if self.coverage is not None and "coverage" in state:
+                self.coverage.load_state(state["coverage"])
+            if self.planner is not None and "planner" in state:
+                self.planner.load_state(state["planner"])
+        except (KeyError, ValueError, TypeError) as exc:
+            # Corrupt state must never stop a session starting. Losing memory
+            # is recoverable; refusing to broadcast is not.
+            log.warning(
+                "[%s] saved state could not be restored (%s); starting fresh",
+                self.state.session_id, exc,
+            )
+
     # -- the speak cycle --------------------------------------------------
 
     async def tick(self, market: MarketState, now: datetime | None = None) -> AIResponse | None:
