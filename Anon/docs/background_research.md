@@ -129,22 +129,39 @@ plane with a weaker blur (a real focus ramp, not one flat backdrop); vignette;
 grain; 2× supersample. That is most of the list, and none of it was derived from
 these sources — it agrees with them anyway.
 
-**Gaps, ranked by realism gained per unit of work:**
+**Gaps found, and what was done about them:**
 
-| # | Change | Why |
+| # | Change | Status |
 |---|---|---|
-| 1 | **Light wrap** at the subject/plate boundary | The standard blend step, and the one thing missing that compositors treat as mandatory |
-| 2 | **Measure and enforce the 1–2 stop rule** — mean luminance of the face region vs the wall region, target ratio ≈ 0.25–0.5 | Turns "does it look flat" into a number, the way the behaviour metrics already are |
-| 3 | **Cat's-eye bokeh** — squash each sprite radially, scaled by distance from centre | Genuine optical signature of a fast lens; uniform round discs are a render tell |
-| 4 | **Chromatic fringing on bokeh** — sub-pixel radial offset of R vs B in the glow layer | Fast lenses always show it; nearly free once the glow layer exists |
-| 5 | **Third depth plane** — shelf blurred slightly less than the wall | Sources explicitly recommend micro-layers; we have two planes, real rooms have three |
-| 6 | Reconsider **shelf object count** (~6 generated) against the 3–5 / odd-grouping / varied-height guidance | Heavy blur may already hide this — check visually before touching it |
-| 7 | Optional **±2 % LED breathe**, ~30 s period, intensity only | Adds life without moving geometry, so it cannot violate the stability requirement |
+| 1 | **Light wrap** at the subject/plate boundary | Done — `light_wrap()`, applied per frame over the rebuilt edge |
+| 2 | **Measure and enforce the 1–2 stop rule** | Done — `key_luminance()` + `fit_exposure()`; currently lands at **−1.51 stops** and is reported in the renderer's info line |
+| 3 | **Cat's-eye bokeh** | Done — `_radial_sprite(cats_eye, angle)`, two-circle clip |
+| 4 | **Chromatic fringing on bokeh** | Done — per-channel radial zoom on the glow layer |
+| 5 | **Third depth plane** | Done — shelf *objects* at 0.78× the wall blur; see the correction below |
+| 6 | **Shelf object count** | Done — 5 objects in two groups with varied heights, was ~6 spread evenly |
+| 7 | ±2 % LED breathe | **Rejected.** It would mean recomposing the background every frame, and that is precisely the optimisation that took the composite from 44 ms to a fraction of it. Paying a per-frame full-frame multiply for a 2 % brightness wobble nobody is going to consciously see is a bad trade at 13.4 FPS |
 
-Not recommended: a synthesised rim light on the subject. The research is clear
-that a rim at 10–25 % of key is the standard separation tool, but our source
-portrait does not have one, and faking it from the alpha edge is exactly the
-kind of thing that reads as a glowing sticker when it fails.
+Not recommended, and still not done: a synthesised rim light on the subject.
+The research is clear that a rim at 10–25 % of key is the standard separation
+tool, but our source portrait does not have one, and faking it from the alpha
+edge is exactly the kind of thing that reads as a glowing sticker when it fails.
+
+### Two things the research got right and I got wrong first
+
+**The shelf board is not a separate plane.** Reading "create micro-layers" as
+"blur the shelf less than the wall" produced a hard rule ruled straight across
+the frame — visible immediately in a render, invisible in any of the numbers.
+The board is fixed *to* the wall and is at wall distance; it is the objects
+standing on it that are nearer the camera. Only they get the weaker kernel.
+
+**"The brightness of the face" is not the median of the face.** A landmark
+bounding box on this source is 60 % beard, hair and shadow, so its median reads
+72 against lit skin at 140–170. Fitting the plate to that drove the entire room
+two thirds of a stop too dark, and the error is worst on exactly the subjects
+where separation matters most. `key_luminance` uses the 80th percentile: inside
+the lit cheek, below the speculars. With that fixed, the fitted exposure lands
+within 3 % of the constants that had been tuned by eye — which is the best
+evidence available that both are right.
 
 ## Sources
 
