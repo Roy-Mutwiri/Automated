@@ -521,35 +521,46 @@ def test_replacing_menus_keeps_layout_and_open_state():
 
 
 # -- cameras ----------------------------------------------------------------
-def test_camera_rig_separates_live_cameras_from_stills():
-    """Only a camera he looks into has a face LivePortrait can drive.
+def test_every_camera_showing_his_face_is_the_same_photograph():
+    """The rule that keeps it one man rather than seven.
 
-    evaluate_scenes.py rejects a master frame past 10 degrees of yaw, so a shot
-    of his back or a wide room shot cannot be animated. The rig has to say which
-    is which, because the application takes a completely different path for a
-    still - it never calls the renderer at all."""
+    Generating each camera from a prompt produced a different person every time
+    - prompts share a description, not a face. So any camera whose face is
+    visible enough to animate must *derive* from the one master frame, and only
+    cameras with no recognisable face may be separately generated.
+
+    This is the invariant that failure would be most embarrassing to ship, and
+    it is cheap to check."""
     from presenter.render.cameras import CameraRig
 
     rig = CameraRig.load()
     assert len(rig.cameras) == 7, "the buttons are camera 1 to camera 7"
+    assert [c.index for c in rig.ordered()] == [1, 2, 3, 4, 5, 6, 7]
 
-    live = [c for c in rig.ordered() if c.animated]
-    stills = [c for c in rig.ordered() if not c.animated]
-    assert live and stills, "a rig of all-live or all-still cameras is suspect"
+    derived = [c for c in rig.ordered() if c.derive]
+    generated = [c for c in rig.ordered() if not c.derive]
+    assert derived and generated, "a rig that is all one kind is suspect"
 
-    for cam in live:
-        # A live camera must ask him to look into the lens, or its yaw will
-        # fail the gate and the frame cannot be animated.
-        assert "look" in cam.subject.lower(), (
-            f"{cam.key} is marked live but never asks him to look at the lens"
+    for cam in derived:
+        assert cam.animated, f"{cam.key} derives from the master but is a still"
+        assert not cam.subject, f"{cam.key} derives; its prompt would be ignored"
+        assert rig.path(cam.key) == rig.master
+        assert cam.framing in ("full", "shoulders", "close")
+
+    for cam in generated:
+        assert not cam.animated, (
+            f"{cam.key} is separately generated *and* animated - that is the "
+            f"combination that puts a different man on screen"
         )
-    for cam in stills:
         assert cam.negative, (
             f"{cam.key} is a still but inherits the shared negative, which "
             f"forbids exactly the shot it is trying to make"
         )
 
-    assert [c.index for c in rig.ordered()] == [1, 2, 3, 4, 5, 6, 7]
+    # Every derived camera must show a distinct framing, or two buttons do the
+    # same thing.
+    framings = [c.framing for c in derived]
+    assert len(set(framings)) == len(framings), f"duplicate framings {framings}"
 
 
 def test_camera_default_prefers_a_live_camera():
