@@ -205,6 +205,8 @@ def main() -> int:
             liveportrait_root=args.liveportrait_root,
             output_size=(args.width, args.height),
             framing=args.framing,
+            environment=args.environment,
+            room_seed=args.room_seed,
         )
         if args.compile:
             print("[app] torch.compile - first frames will be slow")
