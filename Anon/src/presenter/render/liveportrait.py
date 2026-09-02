@@ -694,7 +694,7 @@ class LivePortraitRenderer:
         # frame over both rebuilt zones, and baked into the static background
         # for the pixels the per-frame path never touches.
         self.wrap_idx = None
-        wrap = getattr(self, "wrap_layer", None)
+        wrap = self.wrap_layer
         if wrap is not None:
             wl = wrap[y0:y1, x0:x1]
             # Below ~0.75/255 the wrap cannot change the output byte, so those
