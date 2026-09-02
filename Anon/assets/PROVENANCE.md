@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | Depicts | **A synthetic person. No real individual.** |
-| File | `SDXL_image_0012281.jpg` (renamed) |
+| File | `SDXL_image_0000227.jpg` (renamed) |
 | Resolution | 1024 × 1024 |
 | Dataset | [SFHQ-T2I](https://github.com/SelfishGene/SFHQ-T2I-dataset) — Synthetic Faces High Quality, Text2Image (122,726 curated synthetic faces) |
 | Dataset licence | **MIT** |
