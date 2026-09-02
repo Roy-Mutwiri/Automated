@@ -358,6 +358,15 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
     # under the occluder by normalised convolution, the same estimate the matte
     # is solved against - it only has to be right
     # where the subject partially covers it, and the panel is defocused there.
+    # `old_bg` has to be the plate itself wherever the screen is fully visible.
+    # Using the smoothed extrapolation everywhere computed
+    # `plate + new - blur(plate)`, which is `new` plus the old picture's high
+    # frequencies - the previous content ghosted straight through the new
+    # interface. The extrapolation is only needed in the thin band where the
+    # subject partially covers the panel and the plate is a mixture.
+    conf = np.clip((alpha - 0.90) / 0.08, 0.0, 1.0)[..., None]
+    old_bg = conf * frame.astype(np.float32) + (1.0 - conf) * old_bg
+
     w = screen[..., None]
     out = frame.astype(np.float32) + w * (np.clip(warped, 0, 255) - old_bg)
     out = np.clip(out, 0, 255).astype(np.uint8)
