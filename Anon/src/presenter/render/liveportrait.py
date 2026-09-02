@@ -530,8 +530,18 @@ class LivePortraitRenderer:
             fy = np.maximum(fy, np.clip((ey0 + eh - 1 - ys_e) / band, 0, 1))
             edge = np.minimum(fx[None, :], fy[:, None])
             alpha_out = (alpha_out * edge)[..., None]
+
+            # Light wrap. The subject was not lit by this room, so without it
+            # the silhouette is an algebraic cut: a hard boundary between two
+            # images that a photograph would never produce, because in a real
+            # room the background's light spills around the edge of the head.
+            # Kept as its own layer because the per-frame path overwrites the
+            # interior of the silhouette - see _finish_blend_setup.
+            self.wrap_layer = light_wrap(
+                fill, alpha_out[..., 0], style.wrap_width, style.wrap_strength
+            )
             self.background = np.clip(
-                content + fill * (1.0 - alpha_out), 0, 255
+                content + fill * (1.0 - alpha_out) + self.wrap_layer, 0, 255
             ).astype(np.uint8)
             # Per-frame, the generated crop must be confined to the subject:
             # LivePortrait regenerates the whole crop including the portrait's
@@ -543,6 +553,7 @@ class LivePortraitRenderer:
 
         self.person_matte = None
         self.subject_alpha_out = None
+        self.wrap_layer = None
         fill = self._build_fill(img_bgr, out_w, out_h).astype(np.float32)
         content = cv2.warpAffine(
             img_bgr, M_src2out, (out_w, out_h),
