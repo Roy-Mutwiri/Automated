@@ -131,3 +131,74 @@ decision to make unilaterally — it is the face of the product.
 3. Write `render/liveportrait.py` mapping `AvatarPose` → `(R, δ, s, t)`.
 4. Benchmark FPS / VRAM / latency; add identity-drift and flicker checks.
 5. Long-duration visual run and tuning against the real face.
+
+## [Phase 4] Photoreal renderer — 2026-09-02
+
+Source portrait resolved (see `assets/PROVENANCE.md`): a synthetic face from
+SFHQ-T2I, restricted to the **SDXL** subset because that is the only generator
+in that dataset whose output licence (CreativeML Open RAIL++-M) unambiguously
+permits commercial use. The sample also contained Flux1.dev images, which are
+explicitly non-commercial — the generating model is encoded in each filename,
+so this was verifiable rather than assumed.
+
+`render/liveportrait.py` implemented. Renders correctly on the first working
+run: identity preserved, skin texture intact (pores and fine lines survive),
+background bokeh stable, and **blinks are anatomically correct** — proper lid
+crease and lash line, because closure goes through LivePortrait's trained
+`retarget_eye` network rather than hand-nudged keypoints.
+
+**Removed every non-commercial component from the runtime.** LivePortrait's
+stock cropper needs InsightFace (non-commercial models). MediaPipe was the
+planned substitute but its current release has dropped the `solutions` API.
+Better solution found: LivePortrait's own `landmark.onnx` bootstraps itself in
+two passes — coarse pass on the whole image, then refine on the resulting crop.
+Detection runs once at startup so the second pass is free, and the pipeline now
+depends on neither InsightFace nor MediaPipe.
+
+### Performance: below target, root cause identified
+
+| Stage | Time |
+|---|---|
+| keypoints + stitching | 2.8 ms |
+| **warp_decode** | **66 ms** |
+| parse_output | 3.3 ms |
+| compositing (original) | 44 ms |
+| **total (original)** | **116 ms → 8.4 FPS** |
+| total (after compositing fix) | 101 ms → 9.9 FPS |
+
+**Target is 25 FPS minimum. This does not meet it.**
+
+*Compositing fix.* The naive path pasted the crop into the full 1024×1024
+source, then letterboxed that into 1280×720 — 44 ms of recomputing a composite
+whose background never changes, then discarding most of the pixels as bars.
+Replaced with one precomputed affine from crop space directly to output space,
+a static background composed once, and a per-frame blend. This also fixed the
+16:9 composition requirement, which the letterbox had been violating.
+
+*The real bottleneck is not compute.* Sampling the GPU under load:
+**14–18 % utilisation, 1065–1297 MHz, 30 W.** The GPU is idle most of each
+frame. This is a **launch-bound** workload — many small kernels the CPU cannot
+dispatch fast enough — not a compute limit. That reframes the fix entirely:
+
+- fp32 → true fp16 weights: 68.9 → 65.0 ms. Negligible, as expected for a
+  launch-bound workload.
+- `cudnn.benchmark`: negligible for the same reason.
+- **CUDA graphs / `torch.compile`** attack the actual problem. `triton` is not
+  installed by default on Windows; `triton-windows` provides it.
+
+Attempting to hit 25 FPS by reducing quality would be the wrong trade — the
+brief explicitly ranks a stable realistic 30 FPS above an unstable 60, and
+16 % utilisation means there is a large amount of performance being left on the
+table for free.
+
+### Known visual defects
+
+1. **Framing is a tight close-up, not head-and-shoulders.** Cropping 16:9 from
+   a 1024×1024 square source cannot retain shoulders. This is a source-image
+   limitation, not a code defect — fix by using a source portrait framed wider
+   or in landscape.
+2. **Gaze and brow mapping are uncalibrated.** LivePortrait has no native gaze
+   control and its `exp` dimensions are undocumented. Current indices are a
+   hypothesis borrowed from community tooling, marked `verified=False` in
+   `render/calibration.py` with deliberately tiny gains so a wrong guess is
+   ineffective rather than face-distorting.
