@@ -246,8 +246,8 @@ class LivePortraitRenderer:
         import torch
         import torchvision
 
-        weights = torchvision.models.segmentation.DeepLabV3_MobileNet_V3_Large_Weights.DEFAULT
-        model = torchvision.models.segmentation.deeplabv3_mobilenet_v3_large(
+        weights = torchvision.models.segmentation.DeepLabV3_ResNet101_Weights.DEFAULT
+        model = torchvision.models.segmentation.deeplabv3_resnet101(
             weights=weights
         ).eval().to(self.device)
 
@@ -266,9 +266,38 @@ class LivePortraitRenderer:
             torch.cuda.empty_cache()
 
         h, w = img_bgr.shape[:2]
-        matte = cv2.resize(probs.astype(np.float32), (w, h),
+        probs = cv2.resize(probs.astype(np.float32), (w, h),
                            interpolation=cv2.INTER_LINEAR)
-        matte = (matte > 0.5).astype(np.float32)
+
+        # Refine the semantic mask against the image's own colour statistics.
+        # The raw network output is a smooth blob - correct about *where* the
+        # person is, wrong about exactly where they end, and it drifts several
+        # dozen pixels into the background around hair. Composited directly it
+        # leaves a halo of the original backdrop, which against a replaced
+        # background reads as a cut-out.
+        #
+        # GrabCut, seeded from the confident interior and exterior, snaps the
+        # boundary onto the real edge. It will not resolve individual strands
+        # of hair - no colour-model method does - but it recovers the hair
+        # *mass*, and against a defocused background that is the difference
+        # that matters.
+        gc = np.full((h, w), cv2.GC_PR_BGD, np.uint8)
+        gc[probs > 0.55] = cv2.GC_PR_FGD
+        kernel = np.ones((25, 25), np.uint8)
+        gc[cv2.erode((probs > 0.90).astype(np.uint8), kernel) > 0] = cv2.GC_FGD
+        gc[cv2.dilate((probs < 0.10).astype(np.uint8), kernel) > 0] = cv2.GC_BGD
+        try:
+            cv2.grabCut(img_bgr, gc, None,
+                        np.zeros((1, 65), np.float64),
+                        np.zeros((1, 65), np.float64),
+                        4, cv2.GC_INIT_WITH_MASK)
+            matte = np.where(
+                (gc == cv2.GC_FGD) | (gc == cv2.GC_PR_FGD), 1.0, 0.0
+            ).astype(np.float32)
+        except cv2.error:
+            # Seeds can be degenerate on an unusual portrait; the unrefined
+            # mask is worse but still usable, so do not fail the whole run.
+            matte = (probs > 0.5).astype(np.float32)
 
         if matte.mean() < 0.03:
             raise RuntimeError(
