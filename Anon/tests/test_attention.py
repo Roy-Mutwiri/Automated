@@ -68,7 +68,13 @@ def test_head_yaw_does_not_drift_over_time():
     n = 30 * 60 * 10
     for i in range(n):
         p = engine.update(1.0 / 30.0)
-        if engine.attention.current != "LENS" or engine.attention.is_shifting:
+        # Settled, not merely arrived: the neck eases home over about 1.4 s,
+        # so samples taken just after a shift still carry residual yaw. Whether
+        # those land in one third or another is noise, and comparing thirds
+        # without excluding them measures the noise.
+        settled = engine.now - engine.attention.last_change > 3.0
+        if (engine.attention.current != "LENS" or engine.attention.is_shifting
+                or not settled):
             continue
         (first if i < n // 3 else last if i > n * 2 // 3 else []).append(p.yaw)
     assert len(first) > 200 and len(last) > 200

@@ -92,13 +92,26 @@ def test_head_move_rate_matches_profile():
 
 
 def test_frame_rate_invariance():
-    """Behaviour must be identical at 25 and 60 FPS - it is time-driven."""
-    slow = run(minutes=15.0, fps=25.0, seed=11)
-    fast = run(minutes=15.0, fps=60.0, seed=11)
+    """Rates must not depend on frame rate - the engine is time-driven.
+
+    Averaged over several seeds, because a single pair of runs does not measure
+    this. The subsystems consume random numbers per frame, so the same seed at
+    two frame rates diverges into two different but equally valid performances;
+    comparing one against one measures that divergence, not frame-rate
+    sensitivity. It passed for a long time by luck and failed at 17.8% the
+    moment an unrelated tuning change shifted the draw sequence.
+
+    Across five seeds the spread is about 2%, which is the real claim.
+    """
+    seeds = (0, 1, 2, 3, 4)
     for attr in ("blinks", "breaths"):
-        a = getattr(slow.stats, attr) / 15.0
-        b = getattr(fast.stats, attr) / 15.0
-        assert abs(a - b) / max(a, b) < 0.15, f"{attr} varies with frame rate"
+        means = []
+        for fps in (25.0, 60.0):
+            vals = [getattr(run(minutes=12.0, fps=fps, seed=s).stats, attr)
+                    for s in seeds]
+            means.append(statistics.fmean(vals))
+        a, b = means
+        assert abs(a - b) / max(a, b) < 0.08, f"{attr} varies with frame rate"
 
 
 # -- the core requirement ---------------------------------------------------
