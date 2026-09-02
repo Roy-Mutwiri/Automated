@@ -126,32 +126,39 @@ Measured on the RTX 5080 Laptop, 1280×720 output, 150–200 frame runs.
 
 VRAM: 1.25 GB reserved. **Target is 25 FPS minimum. This does not meet it.**
 
-### Why — and why it is not a quality problem
+### Why
 
-Sampling the GPU under load: **14–18 % utilisation, 1065–1297 MHz, 30 W.** The
-GPU sits idle most of every frame. This is a **launch-bound** workload — many
-small kernels the CPU cannot dispatch fast enough — not a compute limit. The
-evidence is consistent: converting weights fp32→fp16 moved the needle only
-68.9→65.0 ms, exactly what you expect when the GPU is not the constraint.
+Sampled in **steady state with the app running**: **58–73 % GPU utilisation,
+1755–2002 MHz, 76–78 W, 67–70 °C.** The GPU is working hard but is not
+saturated, so roughly 30–40 % headroom remains. The workload is mixed —
+partly genuine compute, partly dispatch and CPU-side compositing.
 
-So the remaining performance is available *for free*, without touching visual
-quality. Reducing resolution or model size to buy frames would be the wrong
-trade: the brief ranks a stable realistic 30 FPS above an unstable 60, and
-there is a large amount of headroom being wasted.
+> **Correction.** An earlier revision of this file reported 14–18 %
+> utilisation at 30 W and concluded the workload was almost entirely
+> launch-bound. That measurement was taken 12 s after launching a process
+> whose *first frame alone takes 31 s* (cudnn autotune), so it sampled the
+> autotune phase — CPU-side algorithm search — rather than rendering. The real
+> figure is 58–73 %. The practical consequence: the available win is roughly
+> **1.5–2×, not 5×**. Reaching 25 FPS from 13.4 needs ~1.9×, which is at the
+> optimistic end of that range and is not guaranteed.
+
+Corroborating that compute matters here: fp32→fp16 gave only 68.9→65.0 ms,
+while `torch.compile` (better kernels *and* less dispatch) gave 69.1→47.9 ms.
 
 **Routes to 25–30 FPS, in order of expected return:**
 
-1. **CUDA graphs.** Directly eliminates launch overhead.
-   `torch.compile(mode="reduce-overhead")` currently fails with
-   `accessing tensor output of CUDAGraphs that has been overwritten` inside
-   `warping_network.forward` — the fix is cloning the module outputs.
-2. **TensorRT.** [FasterLivePortrait](https://github.com/warmshao/FasterLivePortrait)
+1. **TensorRT.** [FasterLivePortrait](https://github.com/warmshao/FasterLivePortrait)
    reports 30+ FPS on an RTX 3090 including pre/post-processing. It targets
    TensorRT 8.x and CUDA 12.2, so Blackwell/CUDA 12.8 needs work.
-3. **GPU-side compositing.** The warp and blend still run on CPU.
+2. **GPU-side compositing.** The warp and blend still run on CPU and are now a
+   proportionally larger share of the budget (~20 ms of 74.7 ms).
+3. **CUDA graphs.** `torch.compile(mode="reduce-overhead")` currently fails
+   with `accessing tensor output of CUDAGraphs that has been overwritten`
+   inside `warping_network.forward`; the fix is cloning the module outputs.
+   Worth less than originally thought, but still real.
 
-Also worth checking: 30 W draw suggests the laptop may be on a power-saving
-profile. Worth confirming before attributing everything to software.
+Reducing resolution or model size to buy frames would be the wrong trade: the
+brief ranks a stable realistic 30 FPS above an unstable 60.
 
 ## Configuration
 
