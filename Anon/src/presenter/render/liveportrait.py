@@ -379,9 +379,20 @@ class LivePortraitRenderer:
         )
 
         frame = self.background.copy()
-        blended = warped[y0:y1, x0:x1].astype(np.float32) * self.mask_box
-        blended += self.bg_box_premul
-        frame[y0:y1, x0:x1] = np.clip(blended, 0, 255).astype(np.uint8)
+        box = frame[y0:y1, x0:x1]
+        warped_box = warped[y0:y1, x0:x1]
+
+        # Opaque interior: integer copy, no float conversion.
+        np.copyto(box, warped_box, where=self.opaque_mask[..., None])
+
+        # Feather band only: per-pixel alpha over a thin strip.
+        if self.feather_alpha.size:
+            blended = (
+                warped_box[self.feather_mask].astype(np.float32) * self.feather_alpha
+                + self.feather_bg_premul
+            )
+            box[self.feather_mask] = blended.astype(np.uint8)
+
         return frame
 
     @property
