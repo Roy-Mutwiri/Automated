@@ -220,6 +220,24 @@ def main() -> int:
         cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(WINDOW, args.width, args.height)
 
+    # Warm up before the clock starts. The first render is dramatically slower
+    # than steady state - measured at 31.5 s with the LivePortrait backend,
+    # because cudnn.benchmark autotunes every 3D convolution shape on its first
+    # call (and torch.compile, if enabled, compiles here too). Without this the
+    # first frame's cost lands in the frame-time statistics and, worse, a short
+    # --duration run can exit having rendered two frames.
+    warm_frames = 3 if args.renderer == "liveportrait" else 1
+    print(f"[app] warming up ({warm_frames} frames)...", flush=True)
+    warm_start = time.perf_counter()
+    warm_pose = engine.pose if engine.stats.frames else engine.update(1.0 / 30.0)
+    for _ in range(warm_frames):
+        try:
+            renderer.render(warm_pose)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[app] warmup render failed: {exc}", file=sys.stderr)
+            break
+    print(f"[app] warmup took {time.perf_counter() - warm_start:.1f}s", flush=True)
+
     target_dt = 1.0 / max(args.fps, 1.0)
     previous = time.perf_counter()
     start = previous
