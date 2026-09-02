@@ -30,6 +30,8 @@ class StubConfig:
         self.truncate_after = 0
         self.requests: list[dict] = []
         self.cached_tokens = 0
+        #: Simulate a server that is up but has nothing loaded.
+        self.no_models = False
 
 
 def make_handler(cfg: StubConfig) -> type[BaseHTTPRequestHandler]:
@@ -49,7 +51,8 @@ def make_handler(cfg: StubConfig) -> type[BaseHTTPRequestHandler]:
 
         def do_GET(self) -> None:
             if self.path.endswith("/models"):
-                self._json(200, {"data": [{"id": "stub-model", "object": "model"}]})
+                data = [] if cfg.no_models else [{"id": "stub-model", "object": "model"}]
+                self._json(200, {"data": data})
             else:
                 self._json(404, {"error": "not found"})
 

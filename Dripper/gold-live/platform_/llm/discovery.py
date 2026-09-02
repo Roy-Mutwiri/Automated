@@ -45,11 +45,25 @@ async def discover(explicit_url: str | None = None) -> LocalLLM | None:
             await llm.close()
             continue
 
-        if not os.environ.get("LLM_MODEL"):
-            served = await llm.first_model()
-            if served:
-                llm.model = served
-                llm.name = f"local:{served}"
+        pinned = os.environ.get("LLM_MODEL")
+        served = await llm.first_model()
+
+        if not pinned and not served:
+            # A running server with no models loaded passes a health check but
+            # cannot generate anything. Treating it as usable means the first
+            # utterance fails with a model-not-found error and the offline
+            # fallback never engages, because health already said yes.
+            log.warning(
+                "%s is running at %s but has no models loaded. "
+                "Pull one first, e.g. `ollama pull llama3.2:3b`.",
+                label, url,
+            )
+            await llm.close()
+            continue
+
+        if not pinned and served:
+            llm.model = served
+            llm.name = f"local:{served}"
         log.info("found %s at %s serving %s", label, url, llm.model)
         return llm
 

@@ -77,3 +77,28 @@ def test_hints_name_the_easy_option_first():
     assert "Ollama" in hints
     assert "vllm serve" in hints
     assert hints.index("Ollama") < hints.index("vLLM")
+
+
+async def test_a_server_with_no_models_is_not_usable(monkeypatch):
+    """A running server with nothing loaded passes a health check but cannot
+    generate. Accepting it means the first utterance fails with model-not-found
+    and the offline fallback never engages, because health already said yes."""
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+
+    with StubLLMServer() as (url, cfg):
+        cfg.no_models = True
+        monkeypatch.setattr(discovery, "KNOWN_ENDPOINTS", [("stub", url)])
+        assert await discovery.discover() is None
+
+
+async def test_a_pinned_model_is_used_even_if_none_are_listed(monkeypatch):
+    """An operator who names a model knows better than the listing -- some
+    servers load on first use."""
+    monkeypatch.setenv("LLM_MODEL", "my-model")
+    with StubLLMServer() as (url, cfg):
+        cfg.no_models = True
+        monkeypatch.setattr(discovery, "KNOWN_ENDPOINTS", [("stub", url)])
+        llm = await discovery.discover()
+        assert llm is not None and llm.model == "my-model"
+        await llm.close()
