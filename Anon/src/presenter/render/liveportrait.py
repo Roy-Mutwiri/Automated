@@ -463,7 +463,38 @@ class LivePortraitRenderer:
             alpha_out = cv2.warpAffine(
                 matte, M_src2out, (out_w, out_h),
                 flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
-            )[..., None]
+            )
+
+            # Fade the subject out at the edge of the source frame.
+            #
+            # The portrait is a fixed crop, so the torso is simply cut off at
+            # the image boundary. Against the original background that was
+            # invisible - the cut coincided with the frame edge. Against a
+            # replaced background it becomes a hard vertical line where the
+            # body stops in mid-air, which is far more obvious than the missing
+            # shoulders themselves.
+            #
+            # Feathering the alpha at that boundary turns the cut into a
+            # falloff into shadow, which in a dimly lit room reads as the body
+            # continuing out of the light. It is the difference between
+            # "cropped" and "unlit", and it is what lets the desk sit low
+            # enough to leave the shoulders visible.
+            edge = np.ones((out_h, out_w), np.float32)
+            ex0, ey0, ew, eh = self.content_rect
+            band = max(int(min(ew, eh) * 0.06), 12)
+            xs_e = np.arange(out_w, dtype=np.float32)
+            ys_e = np.arange(out_h, dtype=np.float32)
+            fx = np.clip((xs_e - ex0) / band, 0, 1) * np.clip(
+                (ex0 + ew - 1 - xs_e) / band, 0, 1
+            )
+            fy = np.clip((ys_e - ey0) / band, 0, 1) * np.clip(
+                (ey0 + eh - 1 - ys_e) / band, 0, 1
+            )
+            # Top edge is left alone: the crown of the head genuinely reaches
+            # the frame top and fading it would erase the hair.
+            fy = np.maximum(fy, np.clip((ey0 + eh - 1 - ys_e) / band, 0, 1))
+            edge = np.minimum(fx[None, :], fy[:, None])
+            alpha_out = (alpha_out * edge)[..., None]
             self.background = np.clip(
                 content + fill * (1.0 - alpha_out), 0, 255
             ).astype(np.uint8)
