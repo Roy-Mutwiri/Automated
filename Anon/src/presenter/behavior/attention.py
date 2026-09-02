@@ -202,6 +202,7 @@ class AttentionSystem:
         self._shift: _Shift | None = None
         self._recent: list[str] = []
         self._planned_dwell = 3.0
+        self._requested: tuple[str, float | None] | None = None
         self._state_at_shift = "IDLE_ATTENTIVE"
         self.shift_count = 0
         self.torso_yaw = 0.0
@@ -395,6 +396,20 @@ class AttentionSystem:
                       "dwell": dwell},
         ))
 
+    # -- external control ----------------------------------------------------
+    def request(self, name: str, dwell: float | None = None) -> None:
+        """Ask him to look at something.
+
+        The seam the content pipeline will drive: `human.set_attention(...)`
+        eventually lands here. It expresses an *intention*, not a pose - the
+        shift still goes through the same eye-head division, the same
+        minimum-jerk trajectory and the same latency as a self-directed one, so
+        a scripted look is indistinguishable in kind from a spontaneous one.
+        """
+        if name not in self.targets:
+            raise ValueError(f"unknown attention target {name!r}")
+        self._requested = (name, dwell)
+
     # -- per frame ----------------------------------------------------------
     def update(self, drives) -> None:
         if self._shift is not None:
@@ -450,7 +465,13 @@ class AttentionSystem:
         self.eye_az = self.point_az - self.head_yaw
         self.eye_el = self.point_el - self.head_pitch
 
-        if drives.now >= self.dwell_until and drives.allow_voluntary():
+        if self._requested is not None:
+            name, dwell = self._requested
+            self._requested = None
+            self._begin_shift(drives, name)
+            if dwell is not None:
+                self.dwell_until = drives.now + dwell
+        elif drives.now >= self.dwell_until and drives.allow_voluntary():
             self._begin_shift(drives, self._choose(drives))
 
     # -- outputs ------------------------------------------------------------

@@ -1,0 +1,71 @@
+{
+  "_comment": "Pinned environment for the first identity reconstruction. Every value here is something that must be reproducible, or that we will want to compare against if a second run behaves differently.",
+
+  "target": {
+    "repository": "https://github.com/aigc3d/LHM-plusplus",
+    "commit": "906b5d9fb967ab42efb92f6fa55bf22cac86b653",
+    "commit_date": "2026-05-29T08:32:57Z",
+    "commit_subject": "dna reconstruction benchmarks (1/2)",
+    "why_pinned": "A moving main branch makes a failed run impossible to distinguish from an upstream change. setup.sh checks out this exact commit."
+  },
+
+  "model": {
+    "name": "LHMPP-700M-SMPLX-FREE",
+    "modelscope": "Damo_XR_Lab/LHMPP-700M-SMPLX-FREE",
+    "gaussian_points": 160000,
+    "documented_service_requirement_gb": 8,
+    "documented_inference_1view_s": 0.79,
+    "why_this_one": "Exports standard 3DGS PLY, is listed in GS_RENDER_SUPPORTED_MODEL_NAMES, and may avoid the licence-gated SMPL-X asset. PixelShuffle is the newer default but its hub weights are marked pending, so it is not a candidate for a first run.",
+    "not_using": {
+      "LHMPP-700M-PixelShuffle": "hub weights pending upstream",
+      "LHM-1B-HF": "previous plan; kept as fallback only"
+    }
+  },
+
+  "environment_policy": {
+    "principle": "Run the repository's DOCUMENTED stack. This box is disposable precisely so the old research stack can run natively.",
+    "python": "3.10",
+    "cuda": "12.1",
+    "torch": "2.3.0",
+    "torchvision": "0.18.0",
+    "xformers": "0.0.26.post1",
+    "modernise_only_if": "something actually breaks, or the GPU cannot run it"
+  },
+
+  "gpu_selection": {
+    "prefer": ["A10", "A5000", "A6000", "RTX 3090", "RTX 4090", "L40S"],
+    "vram_min_gb": 16,
+    "vram_comfortable_gb": 24,
+    "avoid": "Blackwell / sm_120",
+    "avoid_reason": "torch 2.3.0+cu121 contains no sm_120 kernels. Choosing a Blackwell box recreates exactly the compatibility problem this remote plan exists to escape, and would force modernising a stack we deliberately want to run as documented.",
+    "do_not_rent": "80 GB cards. This is inference, not training."
+  },
+
+  "run": {
+    "input": "inputs/avatar_rgba.png",
+    "mode": "T-pose canonical Gaussians",
+    "script": "scripts/inference/to_gs_ply.py",
+    "pose_dir": null,
+    "pose_dir_note": "Deliberately empty. Omitting --pose_dir gives canonical T-pose Gaussians via inference_gs with a synthetic camera, which is stage A+B only. Supplying a SMPL-X JSON is animation (stage C) and is not part of the identity gate.",
+    "seeds_or_sweeps": "none - default settings, one run"
+  },
+
+  "open_question_to_resolve_on_the_box": {
+    "question": "Does the SMPLX-FREE checkpoint complete a single-image -> canonical PLY export WITHOUT the gated MPI human_model_files?",
+    "why_it_matters": "If yes, the SMPL-X registration and download can be postponed until animation integration, and may never be needed for the identity gate at all.",
+    "how_verify_environment.py_answers_it": "It reports whether human_model_files exists and whether SMPL-X files were found, and run_lhmpp.sh does NOT fetch them - so a successful export with 'none found' is the answer.",
+    "do_not": "Assume the model name settles this. The repository's motion/any-pose paths still reference SMPL-X JSON and human_model_files."
+  },
+
+  "recorded_after_the_run": {
+    "gpu": null,
+    "vram_total_gb": null,
+    "peak_vram_gb": null,
+    "setup_duration_min": null,
+    "inference_duration_s": null,
+    "gaussian_count": null,
+    "ply_bytes": null,
+    "human_model_files_required": null,
+    "notes": null
+  }
+}

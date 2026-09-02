@@ -44,6 +44,10 @@ def run(cmd):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--lhmpp", action="store_true",
+                    help="check LHM++'s dependency set instead of LHM's; "
+                         "LHM++ additionally needs pointops, spconv and "
+                         "torch_scatter, none of which LHM required")
     ap.add_argument("--build", action="store_true",
                     help="compile a trivial CUDA extension for this GPU; this "
                          "is the check that actually predicts whether the "
@@ -103,8 +107,15 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         record("cuda kernel launch", False, f"{type(exc).__name__}: {exc}"[:140])
 
-    print("\n=== LHM's compiled dependencies ===")
-    for mod, why in (
+    print("\n=== compiled dependencies ===")
+    # LHM++ needs three more than LHM did, and each has a different failure
+    # mode: pointops is built in-tree, spconv must match the CUDA version, and
+    # torch_scatter needs a wheel matching the exact torch+CUDA pair.
+    extra = (("pointops", "LHM++ only, built in-tree from lib/pointops"),
+             ("spconv", "LHM++ only, must match the CUDA version"),
+             ("torch_scatter", "LHM++ only, wheel must match torch+CUDA")) \
+        if args.lhmpp else ()
+    for mod, why in extra + (
         ("diff_gaussian_rasterization", "3DGS rasterizer, compiled"),
         ("simple_knn", "compiled"),
         ("pytorch3d", "compiled"),

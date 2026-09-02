@@ -6,10 +6,22 @@ disposable Linux GPU machine, run two scripts, get one avatar back.
 Nothing here runs on, or changes, the Windows workstation. LHM is a one-time
 offline reconstruction tool; the streaming application stays Windows + Blender.
 
-    bash setup.sh
-    # put SMPL-X in private_models/  (see below)
-    bash run_reconstruction.sh
-    # look at outputs/lhm_identity_turntable.png
+### The path to run
+
+LHM++ is now the target, not LHM. `environment_manifest.json` pins the exact
+repository commit, model and stack; read it before changing anything.
+
+    bash setup_lhmpp.sh     # documented stack: python 3.10 / CUDA 12.1 / torch 2.3.0
+    bash run_lhmpp.sh       # single image -> canonical T-pose 3DGS .ply
+    # look at outputs/lhmpp_identity_turntable.png
+
+**Do not download SMPL-X first.** `run_lhmpp.sh` deliberately does not fetch it,
+because whether `LHMPP-700M-SMPLX-FREE` actually needs it is an open question
+the run itself answers — see `open_question_to_resolve_on_the_box` in the
+manifest. Register with MPI only if the run demands it.
+
+The original LHM path (`setup.sh` / `run_reconstruction.sh`) is kept as a
+fallback and still works; it needs SMPL-X up front.
 
 ## What you must download yourself
 
@@ -75,9 +87,13 @@ out of `requirements.txt` so pip cannot quietly downgrade them back.
 
 | | |
 |---|---|
-| `setup.sh` | builds the whole environment; compiles the CUDA extensions |
-| `verify_environment.py` | **run before downloading weights** — proves CUDA, torch arch, and every compiled dependency; `--build` compiles a test kernel |
-| `run_reconstruction.sh` | one model, one image, one run; exports mesh |
+| `environment_manifest.json` | **the pinned truth**: repo commit, model, stack, GPU policy, and the blanks to fill in after the run |
+| `setup_lhmpp.sh` | **primary** — builds the LHM++ environment at the pinned commit; refuses Blackwell unless `FORCE_MODERN=1` |
+| `run_lhmpp.sh` | **primary** — one image, one run, canonical T-pose `.ply`; fetches no SMPL-X |
+| `verify_environment.py` | **run before downloading weights** — proves CUDA, torch arch, and every compiled dependency; `--lhmpp` adds `pointops`/`spconv`/`torch_scatter`; `--build` compiles a test kernel |
+| `inspect_ply.py` | reports Gaussian count and confirms a `.ply` really is 3DGS |
+| `setup.sh` | fallback — the original LHM environment |
+| `run_reconstruction.sh` | fallback — one model, one image, one run; exports mesh |
 | `export_results.py` | renders the turntable, packages the outputs |
 | `patches/apply_patches.py` | the minimal recorded edits to upstream |
 | `patches/APPLIED_PATCHES.md` | written on each run — what we changed vs upstream |
@@ -145,9 +161,9 @@ length and f-stop per camera, which is everything a converter needs.
 
 ---
 
-## Update: LHM++ is probably the better target
+## Why LHM++ rather than LHM
 
-Researched after this package was written. `LHM-plusplus` (March 2026, same
+Researched after this package was first written, and now the decided path. `LHM-plusplus` (March 2026, same
 team) changes two things that matter to us, and both point the same way.
 
 | | LHM | LHM++ (`LHMPP-700M-*`) |
@@ -177,5 +193,18 @@ Model: `Damo_XR_Lab/LHMPP-700M-SMPLX-FREE` on ModelScope. Note the README's
 caveat that hub weights for the `PixelShuffle` default were still pending at the
 time of writing.
 
-**Suggested order:** build the environment, try `LHMPP-700M-SMPLX-FREE` first,
-and keep `LHM-1B-HF` in this package as the fallback if LHM++ misbehaves.
+**Decided order:** `LHMPP-700M-SMPLX-FREE` first, `LHM-1B-HF` kept in this
+package as the fallback if LHM++ misbehaves.
+
+`PixelShuffle` is the newer upstream default but its hub weights were still
+marked pending, so it is not a candidate for a first run. Do not substitute it.
+
+## After the run
+
+Fill in `recorded_after_the_run` in `environment_manifest.json` — GPU, peak
+VRAM, wall time, Gaussian count, and above all whether `human_model_files` was
+required. A second run that behaves differently is impossible to diagnose
+without it.
+
+Bring back only `outputs/`. Nothing else on that box matters, and the
+checkpoints must not be redistributed.
