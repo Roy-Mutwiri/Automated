@@ -208,31 +208,6 @@ def render_streaming_room(
     room += np.array(style.led_left, np.float32)[None, None, :] * left_wash * style.led_strength
     room += np.array(style.led_right, np.float32)[None, None, :] * right_wash * style.led_strength
 
-    # -- shelf silhouette ---------------------------------------------------
-    if style.shelf:
-        sy = int(h * style.shelf_y)
-        thickness = max(int(h * 0.014), 2)
-        # Drawn as a *darkening* of the wall rather than as black. A hard black
-        # bar survives even heavy blur as a visible band, which reads as a
-        # graphic element rather than as a piece of furniture.
-        shelf_layer = np.zeros((h, w), np.float32)
-        cv2.rectangle(shelf_layer, (0, sy), (w, sy + thickness), 1.0, -1)
-        x = int(w * 0.04)
-        while x < w * 0.96:
-            ow = rng.uniform(0.025, 0.07) * w
-            oh = rng.uniform(0.03, 0.09) * h
-            if rng.chance(0.6):
-                cv2.rectangle(
-                    shelf_layer,
-                    (int(x), int(sy - oh)), (int(x + ow), sy),
-                    float(rng.uniform(0.35, 0.8)), -1,
-                )
-            x += ow + rng.uniform(0.02, 0.07) * w
-        shelf_layer = cv2.GaussianBlur(
-            shelf_layer, (max(int(short * 0.012) | 1, 3),) * 2, 0
-        )
-        room *= (1.0 - style.shelf_darkness * shelf_layer)[..., None]
-
     # -- defocus the wall ---------------------------------------------------
     # Everything above is at wall distance and goes out of focus together.
     # Bokeh is added *after* this: a defocused highlight already carries its
@@ -241,6 +216,42 @@ def render_streaming_room(
     # makes synthetic bokeh look like a stock overlay.
     k = int(short * style.blur) | 1
     room = cv2.GaussianBlur(room, (k, k), 0)
+
+    # -- shelf silhouette, one plane nearer than the wall -------------------
+    # Applied *after* the wall blur and with a weaker kernel of its own. The
+    # shelf stands proud of the wall, so it is not at the same focus distance,
+    # and giving both the same blur is what flattens a room into a backdrop.
+    if style.shelf:
+        sy = int(h * style.shelf_y)
+        thickness = max(int(h * 0.014), 2)
+        # Drawn as a *darkening* of the wall rather than as black. A hard black
+        # bar survives even heavy blur as a visible band, which reads as a
+        # graphic element rather than as a piece of furniture.
+        shelf_layer = np.zeros((h, w), np.float32)
+        cv2.rectangle(shelf_layer, (0, sy), (w, sy + thickness), 1.0, -1)
+
+        # A small odd number of objects in two loose groups, heights varied.
+        # An even rank of similarly-sized blocks spread across the whole width
+        # reads as a graphic pattern rather than as somebody's belongings, and
+        # the eye picks that up even through this much blur.
+        n = max(int(style.shelf_objects), 0)
+        groups = 2 if n >= 4 else 1
+        for g in range(groups):
+            x = (0.10 + g * 0.44 + rng.uniform(0.0, 0.10)) * w
+            count = n // groups + (1 if g < n % groups else 0)
+            for _ in range(count):
+                ow = rng.uniform(0.022, 0.055) * w
+                oh = rng.uniform(0.025, 0.10) * h
+                cv2.rectangle(
+                    shelf_layer,
+                    (int(x), int(sy - oh)), (int(x + ow), sy),
+                    float(rng.uniform(0.35, 0.8)), -1,
+                )
+                x += ow + rng.uniform(0.008, 0.03) * w
+
+        k_shelf = max(int(short * style.blur * style.shelf_focus) | 1, 3)
+        shelf_layer = cv2.GaussianBlur(shelf_layer, (k_shelf, k_shelf), 0)
+        room *= (1.0 - style.shelf_darkness * shelf_layer)[..., None]
 
     # -- bokeh: defocused fairy lights --------------------------------------
     glow = np.zeros((h, w, 3), np.float32)
