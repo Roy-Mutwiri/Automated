@@ -370,7 +370,7 @@ def main() -> int:
                 # with the portrait's settings mattes the man out of the room he
                 # was generated in and crops the shot away.
                 fresh = renderer.set_source(
-                    rig.path(key), framing="full", environment="source"
+                    rig.path(key), framing=cam.framing, environment="source"
                 )
             except Exception as exc:  # noqa: BLE001 - keep the stream alive
                 print(f"[app] cannot cut to {key}: {exc}", file=sys.stderr)
