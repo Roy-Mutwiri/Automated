@@ -1,7 +1,8 @@
 {
+  "_comment": "Emails deliberately use the non-routable .local domain so GitHub cannot bind these commits to a real account. Do NOT use name@users.noreply.github.com here - GitHub resolves those to whichever real user owns that login.",
   "folders": {
-    "Anon":    { "name": "Anon",    "email": "anon@users.noreply.github.com" },
-    "Dripper": { "name": "Dripper", "email": "dripper@users.noreply.github.com" }
+    "Anon":    { "name": "Anon",    "email": "anon@automated.local" },
+    "Dripper": { "name": "Dripper", "email": "dripper@automated.local" }
   },
   "shared":    { "name": "Roy-Mutwiri", "email": "mutwiriroy63@gmail.com" }
 }
