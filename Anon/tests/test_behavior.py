@@ -167,3 +167,84 @@ def test_long_stall_does_not_teleport_the_avatar():
     after = engine.update(5.0)  # a 5-second stall
     assert abs(after.yaw - before.yaw) < 3.0
     assert abs(after.gaze_x - before.gaze_x) < 0.5
+
+
+# -- blink visibility -------------------------------------------------------
+def sample_blink(fps: float, seed: int = 4) -> list[float]:
+    """Return eyelid closure sampled at one blink's rendered frames."""
+    engine = BehaviorEngine(seed=seed)
+    dt = 1.0 / fps
+    for _ in range(int(3 * fps)):      # let the frame-interval estimate settle
+        engine.update(dt)
+    frames: list[float] = []
+    capturing = False
+    for _ in range(int(120 * fps)):
+        pose = engine.update(dt)
+        closed = 1.0 - min(pose.eye_open_l, pose.eye_open_r)
+        if closed > 0.01:
+            capturing = True
+            frames.append(closed)
+        elif capturing:
+            if len(frames) >= 2:
+                return frames
+            frames, capturing = [], False
+    return frames
+
+
+@pytest.mark.parametrize("fps", [12.0, 15.0, 24.0, 30.0, 60.0])
+def test_blink_spans_enough_frames_to_read_as_motion(fps):
+    """Regression: at low frame rates a blink was a single-frame flash.
+
+    Frame-rate-independent *timing* is not sufficient. A 145 ms blink sampled
+    at 13 FPS produced closure 0.00 -> 0.88 -> 0.00: the lid appeared to
+    teleport shut, which is precisely what reads as synthetic. The blink now
+    stretches so it is sampled across several frames at any realistic rate.
+    """
+    frames = sample_blink(fps)
+    assert len(frames) >= 4, (
+        f"blink at {fps} FPS spans only {len(frames)} frames ({frames}) - "
+        "it will read as a flash, not a movement"
+    )
+    # And it must actually pass through intermediate closure, not jump.
+    assert any(0.15 < f < 0.85 for f in frames), (
+        f"blink at {fps} FPS has no partially-closed frame: {frames}"
+    )
+
+
+def test_blink_stays_physiological_at_every_frame_rate():
+    """The low-frame-rate stretch must not push blinks outside human range."""
+    for fps in (10.0, 13.0, 30.0, 60.0):
+        engine = BehaviorEngine(seed=8)
+        dt = 1.0 / fps
+        for _ in range(int(3 * fps)):
+            engine.update(dt)
+        durations = []
+        start = None
+        for _ in range(int(180 * fps)):
+            pose = engine.update(dt)
+            closed = 1.0 - min(pose.eye_open_l, pose.eye_open_r)
+            if closed > 0.01 and start is None:
+                start = engine.now
+            elif closed <= 0.01 and start is not None:
+                durations.append(engine.now - start)
+                start = None
+        assert durations, f"no blinks at {fps} FPS"
+        longest = max(durations)
+        assert longest <= 0.45, (
+            f"blink of {longest * 1000:.0f} ms at {fps} FPS exceeds the "
+            "100-400 ms physiological range"
+        )
+
+
+def test_blink_moves_the_brow():
+    """A blink that moves only the eyelid reads as a shutter, not a person."""
+    engine = BehaviorEngine(seed=21)
+    coupled = False
+    for _ in range(30 * 90):
+        pose = engine.update(1.0 / 30.0)
+        closure = 1.0 - min(pose.eye_open_l, pose.eye_open_r)
+        if closure > 0.5:
+            if pose.brow_l < -0.01 and pose.brow_r < -0.01:
+                coupled = True
+                break
+    assert coupled, "brow does not follow the eyelid during a blink"
