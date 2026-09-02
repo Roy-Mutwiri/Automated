@@ -59,6 +59,19 @@ class RoomStyle:
     bokeh_count: int = 44
     bokeh_radius: tuple[int, int] = (9, 42)
 
+    # Optical vignetting. Toward the frame edges the lens barrel clips the
+    # exit pupil, so a highlight that is a circle in the middle of the frame
+    # becomes a tangentially-oriented lens shape - "cat's eye" - at the
+    # corners. It is strongest wide open, which is exactly the aperture this
+    # room claims to have been shot at. Perfectly round discs everywhere is
+    # the clearest signature of *rendered* rather than photographed bokeh.
+    bokeh_cats_eye: float = 0.42
+
+    # Lateral chromatic aberration: the channels focus at slightly different
+    # scales, so out-of-focus highlights carry a colour fringe that grows
+    # toward the corners. Fast lenses always show some.
+    chromatic: float = 0.0022
+
     # RGB accent. Kept low - see the module docstring. Two hues on opposite
     # sides is the common LED-strip arrangement.
     led_left: tuple[int, int, int] = (168, 74, 196)    # magenta
