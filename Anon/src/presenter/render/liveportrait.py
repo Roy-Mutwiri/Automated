@@ -466,17 +466,16 @@ class LivePortraitRenderer:
             # Fit the plate to the face rather than to taste.
             #
             # Everything else about this background is a judgement call; this
-            # one is a number. The face is measured with a median over the
-            # landmark bounding box - robust to the specular highlights on
-            # forehead and nose, which are not what "how bright is the face"
-            # means - and the room is then scaled to sit the conventional 1-2
+            # one is a number. The key-lit skin is measured inside the landmark
+            # bounding box (see key_luminance for why that is a percentile and
+            # not a median) and the room is scaled to sit the conventional 1-2
             # stops beneath it. Tuning the wall colours by eye instead would
             # bake this source portrait's exposure into the constants and
             # silently mis-expose the room for any other one.
             fx0, fx1 = int(lmk[:, 0].min()), int(lmk[:, 0].max()) + 1
             fy0, fy1 = int(lmk[:, 1].min()), int(lmk[:, 1].max()) + 1
             face = img_bgr[max(fy0, 0):min(fy1, h), max(fx0, 0):min(fx1, w)]
-            self.face_luma = float(np.median(luminance(face))) if face.size else 128.0
+            self.face_luma = key_luminance(face) if face.size else 128.0
             fill, exposure_scale, self.background_stops = fit_exposure(
                 fill, self.face_luma, style.exposure_ratio, style.exposure_limits
             )
