@@ -175,6 +175,12 @@ def main() -> int:
 
     for i, key in enumerate(keys):
         cam = rig.cameras[key]
+        if cam.derive:
+            # Nothing to generate: this camera *is* the master frame at another
+            # framing, which is what keeps the man identical across the shots
+            # that actually show his face.
+            print(f"[cameras] {cam.key} derives from the master ({cam.framing})")
+            continue
         subject, room, neg, neg2 = texts(rig, cam, args.concept)
         print(f"[cameras] {cam.key} ({'live' if cam.animated else 'still'}) "
               f"{cam.label}")
