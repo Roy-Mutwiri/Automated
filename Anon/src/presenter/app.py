@@ -469,7 +469,14 @@ def main() -> int:
 
             render_start = time.perf_counter()
             try:
-                frame = renderer.render(pose)
+                if still_frame is not None:
+                    # A still camera has no drivable face, so the renderer is
+                    # not called at all. The frame is a photograph and holding
+                    # it costs nothing - which is also the honest description
+                    # of what the viewer sees.
+                    frame = still_frame
+                else:
+                    frame = renderer.render(pose)
                 last_good = frame
             except Exception as exc:  # noqa: BLE001 - a bad frame must not kill the loop
                 failures += 1
