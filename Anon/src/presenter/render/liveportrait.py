@@ -328,6 +328,24 @@ class LivePortraitRenderer:
             largest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
             matte = (labels == largest).astype(np.float32)
 
+        # Close notches enclosed by the subject before growing the matte.
+        #
+        # A seated pose leaves a gap between the arm and the torso. The
+        # segmentation is right to call that background - but what is visible
+        # *through* it is the presenter's own desk, a foot behind his arm, not
+        # the far wall. Replacing the background there punches a hard dark
+        # wedge through his chest, which is the most conspicuous thing in the
+        # frame.
+        #
+        # Closing the notch keeps the source pixels in that gap, so it shows the
+        # desk it actually showed. The kernel is deliberately large - the gap is
+        # substantial - but closing cannot bridge genuinely separate regions, so
+        # the silhouette outline is unaffected.
+        close = max(int(0.075 * min(h, w)) | 1, 9)
+        matte = cv2.morphologyEx(
+            matte, cv2.MORPH_CLOSE, np.ones((close, close), np.uint8)
+        )
+
         grow = max(int(0.005 * min(h, w)), 3)
         matte = cv2.dilate(matte, np.ones((grow, grow), np.uint8))
         feather = max(int(0.008 * min(h, w)) | 1, 5)
