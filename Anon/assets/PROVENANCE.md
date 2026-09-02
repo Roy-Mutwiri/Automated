@@ -1,66 +1,53 @@
 # Source identity provenance
 
-## `presenter_source.jpg`
+## `presenter_source.png`
 
 | | |
 |---|---|
 | Depicts | **A synthetic person. No real individual.** |
-| File | `SDXL_image_0001002.jpg` (renamed) |
+| Origin | **Generated locally**, not sampled from a dataset |
+| Model | `stabilityai/stable-diffusion-xl-base-1.0` (SDXL 1.0) |
+| Model / output licence | **CreativeML Open RAIL++-M** — permits commercial use |
+| Seed | 45 |
 | Resolution | 1024 × 1024 |
-| Dataset | [SFHQ-T2I](https://github.com/SelfishGene/SFHQ-T2I-dataset) — Synthetic Faces High Quality, Text2Image (122,726 curated synthetic faces) |
-| Dataset licence | **MIT** |
-| Generating model | **SDXL** (encoded in the filename prefix) |
-| Model output licence | **CreativeML Open RAIL++-M** — permits commercial use |
-| Obtained from | HF mirror `bitmind/SyntheticFacesHighQuality-T2I`, `small-sample.zip` |
-| Retrieved | 2026-09-02 |
+| Tool | `tools/generate_presenter.py` (prompt and negative prompt live in that file) |
+| Generated | 2026-09-02 |
 
-## Why this image specifically
+Reproduce with:
 
-**Licensing.** The SFHQ-T2I dataset is MIT, but that is not the whole story and
-the dataset's own claim that synthetic generation means "no license issues" is
-an over-simplification. The images come from five different generators with
-different downstream terms:
+```
+python tools/generate_presenter.py --count 8 --seed 40
+# the chosen frame is candidate_05_seed45
+```
 
-| Generator | Output licence | Commercial use |
-|---|---|---|
-| **SDXL** | CreativeML Open RAIL++-M | **Yes** |
-| Flux1.schnell | Apache-2.0 | Yes |
-| Flux1.dev | FLUX.1 [dev] Non-Commercial | **No** |
-| Flux1.pro | BFL API terms | Conditional |
-| DALL-E 3 | OpenAI terms | Conditional |
+## Why generated rather than sampled
 
-The sample obtained contained 133 Flux1.dev, 69 SDXL and 63 Flux1.pro images.
-**Only the SDXL subset is unambiguously safe for commercial use**, and since the
-commercial question is currently open, the choice was restricted to the SDXL
-subset (69 in the tiny sample, 550 in the small sample).
-The generating model is recorded in each filename, so this is verifiable rather
-than assumed.
+Earlier revisions used portraits from the [SFHQ-T2I](https://github.com/SelfishGene/SFHQ-T2I-dataset)
+dataset. That worked until the requested identity became specific: across 619
+licence-safe sample images, every Arab man present was light-to-medium
+complexioned. The full dataset is 21.8 GB to download on the chance it holds a
+closer match.
 
-**Suitability as a presenter.** Requested identity: an Arab man. Selected from
-the licence-safe SDXL subset against the visual requirements:
+**The licence did not change by generating.** SFHQ-T2I's own images were
+produced by SDXL among other models, and the SDXL subset was chosen precisely
+because CreativeML Open RAIL++-M permits commercial use. Running SDXL directly
+lands on the same terms - this is the same licence with control over the
+result, not a shortcut around one.
 
-- Gulf Arab man in white ghutra and black egal.
-- Direct camera gaze with genuine eye contact — the presenter read.
-- Front-facing, no glasses (specular reflections and occlusion complicate
-  eyelid animation; a rejected candidate wore them).
-- Natural skin: visible pores and beard detail, no beauty-filter smoothing.
-- Warm indoor lighting with a defocused background, which matches the
-  generated streaming room rather than fighting it.
-- Head-and-shoulders framing at approximately eye level.
-- The headdress is a stable, low-detail shape — it mattes cleanly and does not
-  flicker the way loose windswept hair would.
+## What the prompt optimises for
 
-**Known caveats for this source:**
+Not photographic quality in the abstract - a portrait the rest of the pipeline
+can actually animate. Every requirement below was learned from a portrait that
+failed on it:
 
-- An earlier pick (`SDXL_image_0000227.jpg`) was rejected after seeing it
-  animated: its resting expression carried a furrowed brow, so the neutral
-  state read as stern rather than open. Resting expression is baked into the
-  source - the behaviour engine can only move relative to it - so this is a
-  portrait-selection problem, not a tuning one. Worth checking on any
-  replacement.
-- Head pose in the source is yaw −10.2°, pitch +1.5°. The renderer neutralises 85 %
-  of that (`neutralize_pose`) so he addresses the lens; a little residual is
-  left deliberately, since a perfectly square head is itself unnatural.
+| Requirement | Why |
+|---|---|
+| Front-facing, direct gaze | A dataset pick sat at yaw -10 deg, permanently addressing a point off-camera. `neutralize_pose` can correct that, but driving far from the source pose makes LivePortrait hallucinate. This one starts at yaw +2.6 deg. |
+| Genuinely neutral expression | A dataset pick had a furrowed brow. Resting expression is baked into the source; the behaviour engine only moves *relative* to it, so no parameter fixes a stern face. |
+| Head **and shoulders** with room below | Tightly-cropped portraits clip the torso at the image boundary, which shows as a hard vertical line once the background is replaced. This framing removes the artefact rather than hiding it behind the desk. |
+| No glasses | Specular reflections and lens occlusion break eyelid animation. |
+| Plain, softly-lit background | Mattes far more cleanly than a busy one, and it is replaced anyway. |
+| Real skin texture, low CFG | The brief forbids the plastic beauty-filter look; high guidance bakes it in and it cannot be removed afterwards. |
 
 ## Disclosure obligation
 
@@ -70,7 +57,11 @@ depicts, imitates, or is derived from a real person.
 
 ## Replacing this image
 
-Drop a new file in `assets/`, point `avatar.source_image` in
-`config/avatar.yaml` at it, and update this file with its provenance. If the
-replacement is a real person's likeness, the permission record belongs here
-too.
+Either regenerate with a different `--subject`, or drop a file in `assets/` and
+point `avatar.source_image` in `config/avatar.yaml` at it, then update this
+file. If the replacement is a real person's likeness, the permission record
+belongs here too.
+
+**Never recolour a face to change apparent ethnicity.** Skin tone is not a
+colour shift - it changes subsurface scattering, shadow density and highlight
+response, so the result looks wrong. Generate or source a different person.
