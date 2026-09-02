@@ -150,3 +150,63 @@ Nothing in the scene may require the model to spell. No signage, no labels, no
 chart text, no book titles. Branding and monitor UI, if ever wanted, are
 overlaid programmatically afterwards - which is also why monitor regions are
 worth keeping maskable.
+
+## Framing math, exactly
+
+Asked for explicitly, because "1344x768 -> 1920x1080" hides a crop.
+
+```
+generation bucket   1344 x 768    aspect 1.7500   (SDXL's nearest 16:9 bucket)
+output              1920 x 1080   aspect 1.7778   (true 16:9)
+```
+
+The bucket is very slightly squarer than 16:9, so the two cannot map one to one.
+Two options existed and only one is acceptable:
+
+* **Fit** the whole 1344x768 inside 1920x1080 - preserves every source pixel but
+  pillarboxes by ~15 px per side, exposing the blurred fill as a visible border
+  on an image that must be full-bleed. Rejected.
+* **Crop** to the output aspect - loses a few rows, no border. Chosen.
+
+So `framing="full"` takes the largest centred rectangle of *output* aspect that
+fits the source:
+
+```
+frame_w = min(w, h * out_w/out_h) = min(1344, 768 * 1.7778) = min(1344, 1365) = 1344
+frame_h = frame_w * out_h/out_w   = 1344 / 1.7778                             =  756
+left    = (1344 - 1344)/2 = 0
+top     = ( 768 -  756)/2 = 6
+```
+
+**Result: 6 px trimmed from the top and 6 from the bottom, full width kept, then
+scaled 1344x756 -> 1920x1080 (a uniform 1.4286x on both axes).**
+
+Verified at runtime: `frame_rect (0, 6, 1344, 756)`, `content_rect (0, 0, 1920,
+1080)` - content fills the canvas exactly, so no pillarbox and no letterbox.
+Both axes scale by the same factor, so there is no aspect distortion.
+
+## Motion regions, and not painting ourselves into a corner
+
+The brief asks that we not lock permanently into a face-only crop. We have not,
+and the reason is structural rather than a promise.
+
+The per-frame write is confined by `mask_out`, which is
+`LivePortrait's crop mask x (subject alpha, when compositing)`. Nothing in the
+compositor assumes that region is a face - it is simply "the region the renderer
+is allowed to write this frame". Widening it later to include shoulders means
+producing a larger driven region and a correspondingly larger mask; the
+background-lock guarantee is unchanged, because it comes from *"everything
+outside the written region is copied from a fixed plate"*, not from the region
+being small.
+
+What would need to change for upper-body motion, when we get there:
+
+| Piece | Status |
+|---|---|
+| Write-region masking | Already general. No change. |
+| Background lock | Already general. No change. |
+| Driving signal | `AvatarPose` already carries `tx`/`ty`/`scale` and breathing |
+| Renderer | Needs a body warp; LivePortrait alone drives the head |
+
+No work is being done for this now, per the brief - this records only that the
+door is open.
