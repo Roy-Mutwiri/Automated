@@ -482,3 +482,69 @@ ceiling with utilisation at 88-96%. That rules out the easy explanation: there
 is no idle GPU waiting on kernel launches, so reaching 24-30 FPS needs less work
 per frame, not better scheduling. Roughly twenty other desktop applications hold
 GPU contexts during these measurements and none were closed.
+
+---
+
+## Human behaviour terminal — Milestone 1 (silent human)
+
+Scope moved from the room to the person. Full write-up in
+[human_behavior_architecture.md](human_behavior_architecture.md), model survey in
+[human_motion_research.md](human_motion_research.md).
+
+### The blocking defect, found first
+
+Every expression channel in `render/calibration.py` was marked `verified=False`
+with a deliberately tiny gain, and the calibration tool its own docstring told
+you to run **had never been written**. The gaze system was computing saccades,
+fixations and microsaccades into channels whose measured effect on the eye
+region was 0.74/255 with a selectivity of 1.4 — it moved the rest of the face
+almost as much as the eyes. The eyes did not really move.
+
+`tools/calibrate_expression.py` now drives all 21 latent keypoints on each axis
+and reports where the face actually moved. Results:
+
+| Channel | Was | Now | Effect | Selectivity |
+|---|---|---|---|---|
+| gaze_x | idx 11,13,15,16 | **idx 15 alone** | 0.74 → **7.42** | 1.4 → **6.2** |
+| gaze_y | idx 11,13,15,16 | idx 13 | — | — |
+| brow_l | idx 1,2 | idx 16 (measured subject-left) | — | — |
+| brow_r | **idx 9 — inert** | idx 10 + 0 | 1.31 → 12.4 | — |
+
+`brow_r` was mapped to a dimension that does nothing at all: the right brow
+channel had never worked.
+
+### New subsystems
+
+* `attention.py` — world-space streamer attention (LENS, MAIN_DISPLAY,
+  SECOND_DISPLAY, CHAT, DESK, MIDDLE_DISTANCE), eye/head division with the eyes
+  leading and counter-rolling. The camera is not an input, so a camera cut
+  cannot change the gaze.
+* `scheduler.py` — semi-Markov state machine (duration drawn once on entry,
+  cooldowns for hysteresis) and behavioural memory with an excess-based
+  repetition detector.
+* `constraints.py` — anatomical limits, applied last over everything.
+
+### Three bugs worth recording
+
+**The head ratcheted.** Giving the head a share of each *shift* meant no
+correction was ever computed once the gaze was on target; yaw reached 11.5° over
+a minute of ordinary glancing. Anchoring the head to the *target's* eccentricity
+makes the lens a zero-share target, so it comes home on its own.
+
+**Anti-repetition, pushed too hard, becomes a worse loop.** Strengthening the
+recency penalty turned a stochastic sampler into a deterministic
+least-recently-used round-robin and produced a locked five-target cycle.
+
+**The repetition detector was measuring its own instrumentation.** The engine
+re-recorded the last eight events into memory every frame at 30 Hz, so each
+event entered dozens of times in fixed order and the detector reported 125×
+n-gram excess on sequences the behaviour never produced. It survived turning the
+anti-repetition terms off entirely, which is what gave it away. After the fix:
+**zero excess n-grams over three hours of simulated behaviour.**
+
+### Tests
+
+50 passing (was 30). Two pre-existing tests were corrected rather than loosened:
+one pinned a state and then measured for fifteen minutes while the new scheduler
+transitioned away from it, and one asserted the *total* head yaw against the
+profile's *stylistic* fidget budget rather than against cervical range.

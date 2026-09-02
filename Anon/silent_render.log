@@ -25,3 +25,5 @@
            ching_retargeting_module.pth done.                                  
 [19:18:47] LandmarkRunner warmup time: 0.086s       human_landmark_runner.py:95
 [silent] 300/9000 frames  5.56 fps  eta 26.1 min
+[silent] 600/9000 frames  5.50 fps  eta 25.4 min
+[silent] 900/9000 frames  5.52 fps  eta 24.4 min
