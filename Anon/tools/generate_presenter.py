@@ -98,7 +98,7 @@ STYLES = {"studio": STYLE_STUDIO, "streaming": STYLE_STREAMING}
 NEGATIVE = (
     "glasses, sunglasses, eyewear, hat brim covering eyes, hands, fingers, "
     "multiple people, two faces, cropped head, top of head cut off, "
-    "looking away, profile view, three-quarter view, head turned, tilted head, "
+    "looking away, profile view, head turned far to the side, "
     "smiling widely, laughing, open mouth, teeth, frowning, angry, furrowed brow, "
     "exaggerated expression, closed eyes, squinting, "
     "plastic skin, airbrushed, beauty filter, oversmoothed skin, waxy, doll-like, "
@@ -122,6 +122,9 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--subject", default=DEFAULT_SUBJECT)
+    ap.add_argument("--style", default="streaming", choices=sorted(STYLES),
+                    help="streaming = leaning forward at a desk with headphones; "
+                         "studio = formal squared-off headshot")
     ap.add_argument("--count", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--steps", type=int, default=34)
@@ -137,7 +140,7 @@ def main() -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    prompt = build_prompt(args.subject)
+    prompt = build_prompt(args.subject, args.style)
     print(f"[gen] subject : {args.subject}")
     print(f"[gen] {args.count} candidates, {args.steps} steps, cfg {args.guidance}")
 
