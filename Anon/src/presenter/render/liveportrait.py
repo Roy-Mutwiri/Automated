@@ -1039,5 +1039,7 @@ class LivePortraitRenderer:
         return self._info
 
     def close(self) -> None:
+        self._seg = None
+        self._source_cache.clear()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
