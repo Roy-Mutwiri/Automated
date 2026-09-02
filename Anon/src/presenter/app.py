@@ -159,8 +159,16 @@ def main() -> int:
                     choices=["schematic", "liveportrait"],
                     help="schematic = behaviour-tuning rig preview; "
                          "liveportrait = photoreal")
-    ap.add_argument("--source", default="assets/presenter_source.png",
-                    help="source portrait for the photoreal renderer")
+    ap.add_argument("--source", default="",
+                    help="source portrait for the photoreal renderer; "
+                         "overrides the wardrobe's starting outfit")
+    ap.add_argument("--wardrobe", default="config/wardrobe.yaml",
+                    help="outfit definitions driving the clothing and headwear "
+                         "dropdowns; '' disables them")
+    ap.add_argument("--clothing", default="",
+                    help="starting clothing key (see config/wardrobe.yaml)")
+    ap.add_argument("--headwear", default="",
+                    help="starting headwear key (see config/wardrobe.yaml)")
     ap.add_argument("--liveportrait-root", default="third_party/LivePortrait")
     ap.add_argument("--framing", default="shoulders",
                     choices=["shoulders", "close", "full"],
