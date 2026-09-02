@@ -1,0 +1,130 @@
+# The seven cameras. ONE world, seven projections.
+#
+# These are physical cameras in the world described by `room_geometry.yaml`,
+# not seven images. Each has a position, an aim, a sensor and a lens, and the
+# renderer projects the same canonical scene through each of them. Switching
+# camera changes nothing except which projection is drawn.
+#
+# The previous, rejected model - seven separately generated pictures - is kept
+# at `config/cameras_2d_legacy.yaml` for reference. It is not loaded.
+#
+# ## One camera family
+#
+# Every camera has the same 36 x 24 mm full-frame sensor and the same exposure
+# and colour handling, as though the studio bought seven bodies from one family
+# and put different lenses on them. Only `focal_length_mm` varies, plus small
+# deliberate differences in position. That is what stops a cut reading as a cut
+# between two different renderers.
+#
+# ## Exposure
+#
+# Deliberately identical and manual across all seven. Auto-exposure would
+# "breathe" between cuts, which is one of the loudest ways a multicam show
+# announces that it is fake.
+#
+# ## Aim
+#
+# Cameras aim at a world-space `look_at` point, not at "the subject". If the
+# man moves his head, the camera does not follow - it is bolted to the room, as
+# a real one is.
+
+scene_version: SCENE_V1
+
+defaults:
+  sensor_width_mm: 36.0
+  sensor_height_mm: 24.0
+  exposure_ev: 0.0
+  white_balance_k: 5200
+  shutter: 0.5
+  resolution: [1920, 1080]
+
+cameras:
+  - id: cam1
+    name: Hero front
+    enabled: true
+    position: [0.10, 2.78, 1.24]
+    look_at: [0.10, 1.16, 1.20]
+    focal_length_mm: 50.0
+    f_stop: 2.8
+    focus_target: head
+    composition: head and shoulders, chair and mic visible
+    note: >-
+      The reference camera. Matches the approved plate: eye level, subject
+      slightly left of centre, display wall behind, desk edge across the
+      bottom of frame as the nearest and most defocused object.
+
+  - id: cam2
+    name: Left three-quarter
+    enabled: true
+    # 38 degrees around the head from cam1, camera-left, slightly closer.
+    position: [-0.95, 2.50, 1.22]
+    look_at: [0.10, 1.18, 1.18]
+    focal_length_mm: 65.0
+    f_stop: 2.8
+    focus_target: head
+    composition: head and upper torso
+
+  - id: cam3
+    name: Right three-quarter
+    enabled: true
+    # 44 degrees the other way and 18 cm further back. Deliberately NOT the
+    # mirror of cam2 - the room is not symmetric and neither is he, and a
+    # perfectly mirrored pair reads as a trick.
+    position: [1.41, 2.51, 1.18]
+    look_at: [0.10, 1.18, 1.18]
+    focal_length_mm: 65.0
+    f_stop: 2.8
+    focus_target: head
+    composition: head and upper torso
+
+  # ---------------------------------------------------------------------
+  # Cameras 4-7 are defined so the rig is complete and the floorplan can be
+  # validated, but they are DISABLED until Cameras 1-3 pass the same-man /
+  # same-room test. The specification is explicit about that gate and these
+  # exist as geometry, not as a promise that they look right yet.
+  # ---------------------------------------------------------------------
+
+  - id: cam4
+    name: Over shoulder
+    enabled: false
+    position: [1.02, 1.72, 1.46]
+    look_at: [-0.30, 0.30, 1.40]
+    focal_length_mm: 40.0
+    f_stop: 4.0
+    focus_target: monitor_main
+    composition: back of his head and shoulder, desk, display wall
+
+  - id: cam5
+    name: Rear wide
+    enabled: false
+    position: [0.20, 3.95, 1.35]
+    look_at: [0.05, 0.60, 1.20]
+    focal_length_mm: 32.0
+    f_stop: 4.0
+    focus_target: chair
+    note: >-
+      Behind the cameras looking back is not "rear". Rear means behind *him*,
+      so this sits on the far side of the room from the wall and looks at the
+      back of the chair and the monitor backs. It is the hardest consistency
+      test in the rig.
+    composition: rear of head, chair back, monitor rears, whole setup
+
+  - id: cam6
+    name: High diagonal
+    enabled: false
+    position: [1.15, 2.55, 2.35]
+    look_at: [0.05, 1.55, 0.80]
+    focal_length_mm: 28.0
+    f_stop: 4.0
+    focus_target: desk
+    composition: crown, shoulders, desk surface, keyboard, floor
+
+  - id: cam7
+    name: Room wide
+    enabled: false
+    position: [-1.62, 3.85, 1.55]
+    look_at: [0.10, 1.20, 1.15]
+    focal_length_mm: 32.0
+    f_stop: 5.6
+    focus_target: head
+    composition: the man and the whole room
