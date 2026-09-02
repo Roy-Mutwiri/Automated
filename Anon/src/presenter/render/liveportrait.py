@@ -107,6 +107,7 @@ class LivePortraitRenderer:
         self.room_seed = room_seed
         self.person_matte = None
         self.subject_alpha_out = None
+        self.desk_band = None
 
         weights = self.root / "pretrained_weights"
         cfg = InferenceConfig(
