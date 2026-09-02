@@ -320,11 +320,7 @@ def main() -> int:
             t0 = time.perf_counter()
             fresh = renderer.set_source(wardrobe.path(*want))
             outfit = want
-            menus = build_menus()
-            for menu, previous in zip(menus, bar.menus):
-                menu.open = previous.open
-            bar.menus = menus
-            bar.attach(WINDOW, (args.width, args.height))
+            bar.set_menus(build_menus())
             print(f"[app] outfit -> {outfit[0]}/{outfit[1]} "
                   f"({'prepared' if fresh else 'cached'} in "
                   f"{time.perf_counter() - t0:.2f}s)")
