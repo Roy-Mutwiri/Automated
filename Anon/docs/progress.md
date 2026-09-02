@@ -371,3 +371,20 @@ defensible when a matte happened once per process; it now happens twice per
 source prepare, and a source is prepared every time the presenter changes
 clothes. The segmenter is kept resident (~230 MB against 14.7 GB free) and
 released in `close()`.
+
+### One item is named for what it renders, not what was asked for
+
+The white thobe comes out mid-grey, consistently. It is genuinely grey rather
+than white under-exposed: in the very same frames the ghutra renders bright
+white under the same key light. The likely reason is that the garment mask is
+large and its entire border is the grey tee underneath, so the model follows the
+surrounding colour, while the ghutra's mask borders hair and background instead.
+
+Pushing the prompt harder made it worse rather than whiter — "bright pure white,
+brilliant white cotton" turned the garment into a grey waistcoat over a beige
+kurta, twice. (That experiment was initially run with a guidance change at the
+same time, which proved nothing; separating them showed the prompt was the
+cause.) The original wording produces a clean thobe with a correct collar and
+placket, so it stays and the entry is called `thobe_grey` / "Grey thobe".
+
+Same principle as the agal: the menu says what is in the picture.
