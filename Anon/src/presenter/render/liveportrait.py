@@ -316,7 +316,7 @@ class LivePortraitRenderer:
 
         grow = max(int(0.005 * min(h, w)), 3)
         matte = cv2.dilate(matte, np.ones((grow, grow), np.uint8))
-        feather = max(int(0.016 * min(h, w)) | 1, 5)
+        feather = max(int(0.008 * min(h, w)) | 1, 5)
         matte = cv2.GaussianBlur(matte, (feather, feather), 0)
         return np.clip(matte, 0.0, 1.0)
 
