@@ -287,22 +287,6 @@ def main() -> int:
     else:
         renderer = SchematicRenderer(args.width, args.height)
 
-    if not args.headless and (cam_row is not None or bar is not None):
-        # One callback per window is all OpenCV allows, so the widgets do not
-        # install their own - the dispatcher offers the click to each in turn
-        # and stops at the first that takes it. Camera buttons come first
-        # because an open dropdown list can overlap them, and the list should
-        # not be able to swallow a click on a button it is merely covering.
-        def _on_mouse(event, x, y, flags, param):  # noqa: ARG001
-            if cam_row is not None and cam_row.on_mouse(event, x, y):
-                if bar is not None:
-                    bar.close_all()
-                return
-            if bar is not None:
-                bar.on_mouse(event, x, y)
-
-        cv2.setMouseCallback(WINDOW, _on_mouse)
-
     timer = FrameTimer()
 
     save_dir = Path(args.save_frames) if args.save_frames else None
