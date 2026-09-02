@@ -162,8 +162,52 @@ SHOT = (
 )
 
 
-def build_prompt(concept: str) -> str:
-    return f"{SHOT}, {SUBJECT}, {CONCEPTS[concept]}, {LIGHT_AND_CAMERA}"
+CLIP_LIMIT = 77
+
+
+def check_length(text: str, label: str, tokenizer=None) -> int:
+    """Fail loudly if a prompt exceeds what CLIP will actually read.
+
+    **This guard exists because its absence cost two full generation rounds.**
+    The first prompt here was 390 tokens. CLIP's limit is 77. Diffusers
+    truncates silently - no error, no warning in normal use - so 313 tokens
+    were discarded and the model simply never saw most of the description.
+
+    That produced two opposite failures that looked like prompt-engineering
+    problems and were not: with the room first, the *subject* fell off the end
+    and eight empty rooms came back; with the subject first, the *room* fell off
+    and eight blank interiors came back. Both times the visible text ended
+    mid-sentence.
+
+    A silent truncation is the worst kind of failure - it looks like the model
+    disagreeing with you. Hence a hard check rather than a comment.
+    """
+    if tokenizer is None:
+        from transformers import CLIPTokenizer
+
+        tokenizer = CLIPTokenizer.from_pretrained(MODEL, subfolder="tokenizer")
+    n = len(tokenizer(text)["input_ids"])
+    if n > CLIP_LIMIT:
+        raise ValueError(
+            f"{label} is {n} tokens, over CLIP's {CLIP_LIMIT}. "
+            f"{n - CLIP_LIMIT} tokens would be silently discarded. "
+            f"Shorten it.\n  {text}"
+        )
+    return n
+
+
+def build_prompts(concept: str) -> tuple[str, str]:
+    """Return ``(prompt, prompt_2)`` - one per SDXL text encoder.
+
+    SDXL has two encoders (CLIP-L and OpenCLIP-G) and diffusers accepts a
+    separate prompt for each, giving two independent 77-token budgets whose
+    embeddings are concatenated. That is what makes it possible to describe both
+    a person and a room without either being truncated away.
+
+    Split by role: who he is and how he is framed in the first, where he is and
+    how it is lit in the second.
+    """
+    return SUBJECT_PROMPT, CONCEPTS[concept]
 
 
 def _person_coverage(img_bgr: np.ndarray) -> float:
