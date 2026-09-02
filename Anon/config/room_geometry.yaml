@@ -1,0 +1,199 @@
+# The canonical room. ONE world, in metres.
+#
+# This file is the source of truth for where everything physically is. Every
+# camera projects *this*; nothing is authored per-camera. If an object appears
+# in a different place in two cameras, this file is wrong, not the camera.
+#
+# ## Coordinate system
+#
+#   X  room left/right   (+X is to the viewer's right in Camera 1)
+#   Y  room depth        (Y = 0 is the slat wall; +Y comes toward the cameras)
+#   Z  height            (Z = 0 is the floor)
+#
+# Right-handed, Z up - Blender's convention, so no conversion is needed and
+# there is no axis-swap bug waiting to happen.
+#
+# ## Where the numbers come from
+#
+# Derived from `assets/reference/camera1_approved.png` plus real object sizes.
+# The plate fixes the *arrangement* - display wall behind him, him facing the
+# lens, desk between him and camera - and physical dimensions fix the scale.
+# Sizes are real: a 74 cm desk, a 46 cm seat, a 27" panel, a seated adult male
+# with ~1.22 m eye height. Nothing here is eyeballed per view.
+#
+# ## Hidden geometry
+#
+# Camera 1 cannot see the side walls, the ceiling, the floor behind the lens or
+# the back of anything. Per the Hidden Geometry Rule those are *designed once
+# here* and then locked, rather than invented differently by each camera.
+
+scene_version: SCENE_V1
+units: metres
+
+room:
+  # A real room this man could be sitting in. Wide enough that Camera 7 has
+  # somewhere to stand, not so wide that it reads as a hall.
+  width: 4.0          # X from -2.0 to +2.0
+  depth: 4.6          # Y from 0.0 (slat wall) to 4.6 (rear wall, behind cameras)
+  height: 2.7
+  floor_material: dark_engineered_oak
+  ceiling_material: charcoal_matte
+  side_wall_material: charcoal_felt      # designed, never seen in Camera 1
+
+# The wall the whole look rests on. Slat pitch and phase are global, exactly as
+# tools/wall_material.py established for the 2D plate: a batten exists at a
+# fixed X and every camera projects that same batten.
+wall_walnut:
+  id: walnut_wall_01
+  plane: y=0
+  x_from: -2.0
+  x_to: 2.0
+  z_from: 0.0
+  z_to: 2.7
+  slat_pitch: 0.055        # 55 mm centre-to-centre
+  slat_width: 0.038        # 38 mm batten face
+  slat_depth: 0.020        # stands 20 mm off the felt
+  slat_phase_x: -2.0       # first batten centre; fixes global phase forever
+  batten_material: dark_walnut
+  backing_material: charcoal_felt
+
+# Wall-mounted display wall BEHIND him, facing the cameras. This is what the
+# approved plate shows: he sits in front of it, so the panels read to camera and
+# their backs are what Camera 5 will see.
+monitors:
+  - id: monitor_left
+    role: secondary, powered off
+    centre: [-1.24, 0.075, 1.62]
+    size: [0.86, 0.05, 0.40]      # ~34" ultrawide, panel + shell depth
+    normal: +y
+    powered: false
+  - id: monitor_main
+    role: primary workstation display
+    centre: [-0.32, 0.075, 1.52]
+    size: [0.62, 0.05, 0.37]      # 27" 16:9
+    normal: +y
+    powered: true
+    content: assets/screens/default_streamer_ui.png
+  - id: monitor_right
+    role: charts
+    centre: [1.28, 0.075, 1.55]
+    size: [0.62, 0.05, 0.37]
+    normal: +y
+    powered: true
+    content: assets/screens/secondary_panel.png
+
+# Studio monitor speaker on a stand, right of frame in the plate.
+speakers:
+  - id: speaker_right
+    centre: [0.95, 0.30, 1.45]
+    size: [0.20, 0.24, 0.34]
+
+desk:
+  id: desk_main
+  # Between him and the cameras. Front edge is the nearest thing to Camera 1
+  # and is what the plate shows across the bottom of frame.
+  centre: [0.0, 2.00, 0.365]
+  top_size: [1.70, 0.72, 0.04]   # 170 x 72 cm, 40 mm top
+  top_z: 0.74
+  material: matte_black
+  cable_tray:                     # designed hidden geometry - locked
+    centre: [0.0, 2.00, 0.62]
+    size: [1.40, 0.16, 0.08]
+    material: black_steel
+
+chair:
+  id: chair_main
+  # A real high-back performance chair. He sits in it; it is not re-placed
+  # per camera.
+  base_centre: [0.10, 1.28, 0.0]
+  seat_height: 0.46
+  seat_size: [0.52, 0.50, 0.10]
+  back_size: [0.52, 0.09, 0.72]   # backrest, rising from the seat
+  headrest_size: [0.30, 0.09, 0.20]
+  facing: +y                      # he faces the cameras
+  material: black_leatherette
+
+microphone:
+  id: mic_main
+  # Clamped to the desk on his right (viewer's left in Camera 1), boom reaching
+  # in toward his mouth. The plate shows the arm crossing his shoulder.
+  clamp: [-0.72, 2.28, 0.74]
+  joints:
+    - [-0.72, 2.28, 0.74]
+    - [-0.70, 2.10, 1.24]
+    - [-0.44, 1.78, 1.16]
+  capsule_centre: [-0.34, 1.70, 1.13]
+  capsule_size: [0.055, 0.055, 0.16]
+  material: matte_black
+
+# Continuity anchors. Deliberately few, deliberately distinctive - a viewer
+# tracks these between views and concludes "same room". Adding more would be
+# decoration, which the specification warns against.
+landmarks:
+  - id: shelf_right
+    centre: [1.55, 0.22, 1.05]
+    size: [0.70, 0.26, 0.04]
+  - id: plant_shelf
+    centre: [1.42, 0.22, 1.18]
+    size: [0.18, 0.18, 0.26]
+  - id: pc_tower
+    centre: [1.60, 0.55, 0.24]
+    size: [0.22, 0.48, 0.48]
+  - id: headphone_stand
+    centre: [0.62, 2.10, 0.86]
+    size: [0.10, 0.10, 0.24]
+
+# The seated human, as a transform. Identity and shape live in the scene
+# manifest; this is only where he is.
+human:
+  id: streamer
+  # Hips at the seat, facing +y. Seated eye height 1.22 m is a real adult male
+  # figure in a chair with a 46 cm seat.
+  hip: [0.10, 1.24, 0.52]
+  eye_height: 1.22
+  facing: +y
+  # World-space gaze targets. The streamer looks at these, never at "the active
+  # camera" - see the No Camera-Aware Posing rule.
+  gaze_targets:
+    main_camera: [0.10, 3.15, 1.22]
+    main_monitor: [-0.32, 0.075, 1.52]
+    desk: [0.0, 2.0, 0.74]
+
+# One rig, observed by every camera. No per-camera relighting.
+lighting:
+  # Invisible virtual film lights - decided here per the specification's
+  # question, and documented rather than left implicit. Architectural
+  # practicals below are modelled and may appear in wide shots.
+  key:
+    kind: area
+    position: [-1.30, 3.10, 1.95]
+    target: [0.10, 1.24, 1.20]
+    size: [1.20, 1.20]
+    power_w: 220
+    colour_k: 4600
+  fill:
+    kind: area
+    position: [1.45, 2.95, 1.55]
+    target: [0.10, 1.24, 1.15]
+    size: [1.00, 1.00]
+    power_w: 60
+    colour_k: 5200
+  rim:
+    kind: area
+    position: [1.05, 0.55, 2.10]
+    target: [0.10, 1.30, 1.25]
+    size: [0.60, 0.60]
+    power_w: 90
+    colour_k: 3200
+  practicals:
+    - id: shelf_light_1
+      kind: strip
+      position: [1.55, 0.22, 1.02]
+      size: [0.66, 0.03]
+      power_w: 12
+      colour_k: 2700
+  monitor_emission:
+    # The panels light the room. This is why the plate has cool spill on his
+    # left shoulder, and it must come from the monitors, not from a fake gradient.
+    power_w_per_m2: 55
+    colour_k: 6500
