@@ -813,10 +813,11 @@ class LivePortraitRenderer:
             )
             box[self.feather_mask] = blended.astype(np.uint8)
 
-        # Light wrap over the freshly-copied silhouette edge.
-        if self.wrap_mask is not None:
-            box[self.wrap_mask] = np.clip(
-                box[self.wrap_mask].astype(np.float32) + self.wrap_add, 0, 255
+        # Light wrap over the silhouette edge the two blends above just rebuilt.
+        if self.wrap_idx is not None:
+            wr, wc = self.wrap_idx
+            box[wr, wc] = np.clip(
+                box[wr, wc].astype(np.float32) + self.wrap_add, 0, 255
             ).astype(np.uint8)
 
         # Foreground desk, composited last so it occludes the presenter. Only
