@@ -159,7 +159,7 @@ def main() -> int:
                     choices=["schematic", "liveportrait"],
                     help="schematic = behaviour-tuning rig preview; "
                          "liveportrait = photoreal")
-    ap.add_argument("--source", default="assets/presenter_source.jpg",
+    ap.add_argument("--source", default="assets/presenter_source.png",
                     help="source portrait for the photoreal renderer")
     ap.add_argument("--liveportrait-root", default="third_party/LivePortrait")
     ap.add_argument("--framing", default="shoulders",

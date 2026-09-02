@@ -51,7 +51,7 @@ avatar:
   # Path to the source portrait. REQUIRED before the photoreal renderer can
   # run, and must be either a synthetic identity created for this project or a
   # real person's likeness used with explicit documented permission.
-  source_image: assets/presenter_source.jpg
+  source_image: assets/presenter_source.png
   # Recorded alongside the image so provenance is not lost.
   identity_kind: synthetic          # SFHQ-T2I, SDXL subset (see assets/PROVENANCE.md)
   identity_note: "Synthetic person, not a real individual. Dataset MIT; SDXL output under CreativeML Open RAIL++-M (commercial use permitted). Full record in assets/PROVENANCE.md"
