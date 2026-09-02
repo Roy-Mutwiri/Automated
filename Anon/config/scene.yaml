@@ -1,0 +1,79 @@
+# Streaming scene configuration.
+#
+# Split deliberately into two sections, because the master-frame architecture
+# (see docs/environment_design.md) moves a lot of control from runtime to
+# generation time. Pretending otherwise would produce a config full of knobs
+# that silently do nothing.
+#
+#   generation:  baked into the master frame. Changing these means generating a
+#                new scene with tools/generate_scene.py. They are recorded here
+#                so the frame in use is reproducible.
+#   runtime:     applied every frame by the renderer. Genuinely live.
+#
+# That trade is the price of the architecture, and it buys the things that
+# actually matter: correct chair occlusion, one coherent light direction, real
+# materials, and a background that cannot warp because it is never regenerated.
+
+generation:
+  # Reproduces the current master frame.
+  tool: tools/generate_scene.py
+  concept: hybrid          # hybrid | executive | creator
+  seed: null               # set once a frame is chosen
+  width: 1344              # SDXL 16:9 aspect bucket
+  height: 768
+  steps: 40
+  guidance: 6.5
+
+  # These are prompt content, not runtime parameters. Listed so the intent of
+  # the chosen frame is recorded rather than living only in a prompt string.
+  room:
+    wall: vertical dark walnut acoustic slats over charcoal felt
+    shelving: floating, 40-60% empty
+    practicals: hidden warm LED under shelves, one tungsten lamp
+    desk: dark walnut, immaculate cable management
+    props: [microphone on boom, headphone stand, one plant, two books, one sculpture]
+  lighting:
+    key: soft, 40 degrees upper left, above eye level
+    fill: right, weaker
+    rim: subtle warm, hair and shoulder separation
+    ambient: overhead off
+  camera:
+    lens_mm_equiv: 40
+    height: eye level
+    distance_m: 2.0
+
+runtime:
+  source_image: assets/scene_master.png
+  framing: full            # full = use the master frame as shot
+  environment: source      # source = the frame's own room; do not composite
+  output:
+    width: 1920
+    height: 1080
+
+  # Head pose neutralisation. 0 keeps the frame's own head angle, 1 squares him
+  # to the lens. A little residual is left on purpose - a perfectly square head
+  # is itself unnatural, and driving far from the source pose makes LivePortrait
+  # hallucinate.
+  neutralize_pose: 0.6
+
+  behavior:
+    profile: PRESENTER_CALM
+    state: IDLE_ATTENTIVE
+    seed: null
+
+  # --- not implemented, and honest about it -------------------------------
+  # The following appear in the brief but are generation-time properties of the
+  # master frame, not runtime controls. They are listed so it is clear they were
+  # considered and where they actually live:
+  #
+  #   background_brightness / warmth  -> prompt + a post-grade could be added
+  #   practical_light_intensity       -> prompt
+  #   monitor_glow                    -> prompt; modular screens not yet built
+  #   room_accent_color               -> prompt
+  #   depth_of_field                  -> prompt (baked optical blur)
+  #   chair_position                  -> prompt
+  #   desk_visible / mic_visible      -> concept selection
+  #   branding                        -> not implemented; would be an overlay
+  #                                      layer composited after the face paste,
+  #                                      which is also the only way to get text
+  #                                      that is not gibberish
