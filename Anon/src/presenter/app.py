@@ -210,6 +210,7 @@ def main() -> int:
             framing=args.framing,
             environment=args.environment,
             room_seed=args.room_seed,
+            neutralize_pose=args.neutralize_pose,
         )
         if args.compile:
             print("[app] torch.compile - first frames will be slow")
