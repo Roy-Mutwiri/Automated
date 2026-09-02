@@ -112,50 +112,47 @@ HEADWEAR_NEGATIVE = (
 CLOTHING = {
     "tee": None,   # the base portrait, unedited
     "thobe_white": (
-        "wearing a crisp white thobe, traditional Gulf Arab kandura, "
-        "plain round collar with a narrow placket, long sleeves, "
-        "clean pressed white cotton with soft natural folds"
+        "wearing a crisp white thobe kandura, plain round collar, "
+        "narrow buttoned placket, long sleeves, pressed white cotton"
     ),
     "thobe_beige": (
-        "wearing a light beige thobe, traditional Gulf Arab kandura, "
-        "plain round collar, long sleeves, soft matte cotton fabric"
+        "wearing a light beige thobe kandura, plain round collar, "
+        "long sleeves, soft matte cotton"
     ),
     "polo_navy": (
         "wearing a navy blue cotton polo shirt, ribbed collar, "
-        "short sleeves, casual smart, soft knit texture"
+        "short sleeves, soft knit texture"
     ),
     "hoodie_charcoal": (
-        "wearing a charcoal grey hoodie, hood down resting behind the neck, "
-        "heavy cotton fleece, drawstrings, relaxed fit"
+        "wearing a charcoal grey hoodie, hood down behind the neck, "
+        "heavy cotton fleece, drawstrings"
     ),
     "shirt_linen": (
-        "wearing an oatmeal linen button-down shirt, collar open at the neck, "
-        "top button undone, rolled sleeves, natural linen slub texture"
+        "wearing an oatmeal linen button-down shirt, open collar, "
+        "rolled sleeves, natural linen slub texture"
     ),
 }
 
 HEADWEAR = {
     "none": None,  # bare head, keeps the headphones
     "ghutra_white": (
-        "wearing a crisp white ghutra headscarf draped over his head and "
-        "shoulders, held in place by a black agal cord ring resting on the "
-        "crown, traditional Gulf Arab headdress, clean starched cotton with "
-        "soft vertical folds falling past the ears onto the shoulders"
+        "a thick black agal rope ring resting on top of a white ghutra, "
+        "the white cloth laid over his head hanging loose past his ears "
+        "onto his shoulders, Gulf Arab headdress"
     ),
     "shemagh_red": (
-        "wearing a red and white checkered shemagh keffiyeh draped over his "
-        "head and shoulders, held by a black agal cord ring on the crown, "
-        "traditional Arab headdress, woven check pattern following the folds "
-        "of the cloth"
+        "a thick black agal rope ring resting on top of a red and white "
+        "checkered shemagh, the cloth laid over his head hanging loose "
+        "past his ears onto his shoulders, Arab headdress"
     ),
     "ghutra_loose": (
-        "wearing a white ghutra headscarf worn loosely without an agal, "
-        "one end thrown back over the shoulder, traditional Arab headdress, "
-        "soft cotton with natural drape"
+        "a plain white ghutra cloth laid over his head without any cord, "
+        "hanging loose past his ears onto his shoulders, one end thrown "
+        "back over the shoulder, Arab headdress"
     ),
     "taqiyah": (
-        "wearing a white embroidered taqiyah kufi skullcap fitted closely to "
-        "the crown of his head, fine tonal embroidery, cotton"
+        "a white embroidered taqiyah kufi skullcap fitted close to the "
+        "crown of his head, fine tonal embroidery, cotton"
     ),
 }
 
