@@ -210,7 +210,8 @@ def match_grain(result: np.ndarray, original: np.ndarray,
 
 
 def composite(master: np.ndarray, mask: np.ndarray, pitch: int,
-              gap_frac: float, grade: str) -> tuple[np.ndarray, list[str]]:
+              gap_frac: float, grade: str,
+              darkness: float = 1.0) -> tuple[np.ndarray, list[str]]:
     h, w = master.shape[:2]
     log = []
 
@@ -228,13 +229,33 @@ def composite(master: np.ndarray, mask: np.ndarray, pitch: int,
     detail = mat_lum / np.maximum(mat_lf, 1e-3)
 
     light = illumination_field(master, mask, sigma=42.0)
-    log.append(f"illumination: {light[mask > 0.5].mean():.1f} mean luma")
 
-    # Chroma from the material, luma from original light x material detail.
+    # Normalise the illumination to RELATIVE falloff.
+    #
+    # The first attempt transferred the field's absolute luminance, which was
+    # wrong in an obvious way once rendered: the plate is a pale grey wall at
+    # ~128 luma, so the walnut inherited that brightness and came back a pale
+    # peach. Dark walnut is a dark surface - what should carry over from the
+    # plate is *where* the light falls and how it decays, not how bright the old
+    # material happened to be.
+    #
+    # So divide the field by its own mean over the wall. What remains is a
+    # gradient around 1.0 that still contains the vignette, the monitor spill
+    # and the shadows cast by the chair and gear, applied on top of the
+    # material's own dark base luminance.
+    sel = mask > 0.5
+    ref = float(light[sel].mean()) if sel.any() else 128.0
+    rel = light / max(ref, 1e-3)
+    rel = np.clip(rel, 0.45, 1.9)
+    log.append(f"illumination: plate {ref:.1f} luma -> relative field "
+               f"{rel[sel].min():.2f}-{rel[sel].max():.2f}")
+
+    # Chroma and base level from the material; gradient from the plate.
     mat_chroma = material / np.maximum(mat_lum[..., None], 1e-3)
-    target_lum = light * detail
+    target_lum = mat_lum * detail * rel * darkness
     wall = mat_chroma * target_lum[..., None]
     wall = np.clip(wall, 0, 255)
+    log.append(f"wall luma {float(np.clip(target_lum,0,255)[sel].mean()):.1f}")
 
     m3 = mask[..., None]
     out = wall * m3 + master.astype(np.float32) * (1.0 - m3)
@@ -259,6 +280,8 @@ def main() -> int:
     ap.add_argument("--mask", default="02_wall_mask.png")
     ap.add_argument("--grade", default="DARK_NEUTRAL", choices=sorted(WALNUT_GRADES))
     ap.add_argument("--gap-frac", type=float, default=0.34)
+    ap.add_argument("--darkness", type=float, default=1.0,
+                    help="scales the walnut base luminance; <1 darker")
     ap.add_argument("--out-dir", default="wall_scales")
     args = ap.parse_args()
 
@@ -275,7 +298,8 @@ def main() -> int:
     scales = {"A": 22, "B": 16, "C": 11}
     results = {}
     for name, pitch in scales.items():
-        img, log = composite(master, mask, pitch, args.gap_frac, args.grade)
+        img, log = composite(master, mask, pitch, args.gap_frac,
+                             args.grade, args.darkness)
         p = out_dir / f"wall_scale_{name}.png"
         cv2.imwrite(str(p), img)
         results[name] = img
