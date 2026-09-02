@@ -97,6 +97,16 @@ class LivePortraitRenderer:
                 f"framing must be 'shoulders' or 'close', got {framing!r}"
             )
         self.framing = framing
+        if environment not in ("streaming_room", "source"):
+            raise ValueError(
+                f"environment must be 'streaming_room' or 'source', "
+                f"got {environment!r}"
+            )
+        self.environment = environment
+        self.room_style = room_style
+        self.room_seed = room_seed
+        self.person_matte = None
+        self.subject_alpha_out = None
 
         weights = self.root / "pretrained_weights"
         cfg = InferenceConfig(
