@@ -66,19 +66,23 @@ SUBJECT_PROMPT = (
     "medium shot photo, waist up, camera 2m back, "
     "a brown-skinned Arab man in his mid 30s, warm brown skin, "
     "short trimmed dark beard, dark charcoal shirt, "
-    "sitting relaxed in a premium black gaming chair with a high back, "
-    "looking into the camera, calm neutral expression, mouth closed, "
-    "eyes open, natural skin texture"
+    "sitting in a matte black high-back gaming chair with a headrest, "
+    "head straight facing the camera, symmetrical frontal face, "
+    "looking directly into the lens, calm neutral expression, "
+    "mouth closed, eyes open, natural skin texture"
 )
 
 # Encoder 2: where he is and how it is lit. Also under 77 tokens.
+# "dark walnut wood slat wall" appears twice on purpose. Diffusers has no
+# native (term:1.3) weighting, and the brief rules out simply making the prompt
+# longer, so repetition is the available emphasis mechanism - the previous
+# frame rendered this wall as curtains, which is the single biggest miss.
 ROOM = (
-    "luxury professional streaming studio at night, wall of vertical dark "
-    "walnut acoustic slats several feet behind him, floating shelves nearly "
-    "empty, hidden warm LED, one tungsten lamp, dark walnut desk, broadcast "
-    "microphone on a boom arm, moody dark charcoal and warm amber, soft key "
-    "light from upper left, warm rim light, 40mm, shallow depth of field, "
-    "photograph"
+    "dark walnut wood slat wall, narrow vertical wooden battens with real wood "
+    "grain over matte black acoustic felt, dark walnut wood slat wall behind "
+    "him, luxury streamer man cave at night, dark walnut desk, large monitor, "
+    "broadcast microphone on a boom arm, headphones, matte black and charcoal, "
+    "warm amber practical lights, faint cool monitor glow, 45mm, photograph"
 )
 
 CONCEPTS = {
@@ -95,19 +99,21 @@ CONCEPTS = {
 # tokens, so two thirds of it - every geometry and look term - was discarded
 # before the model saw it.
 NEGATIVE = (
-    "text, writing, letters, words, signage, labels, logo, watermark, "
-    "screen text, numbers, charts, "
-    "empty room, no people, unoccupied, "
-    "rgb lighting, rainbow, neon, purple lighting, cyberpunk, gamer bedroom, "
-    "cluttered, messy, funko pop, posters, foam pyramids"
+    "curtains, drapes, fabric wall, cloth wall, pleated textile, stage curtain, "
+    "velvet, folded material, textile panel, "
+    "piano, midi keyboard, synthesizer, musical instrument, mixing console, "
+    "recording studio, podcast studio, "
+    "office chair, mesh chair, executive chair, racing stripes, "
+    "text, letters, words, signage, logo, watermark, screen text, numbers"
 )
 
 NEGATIVE_2 = (
-    "cgi, 3d render, architectural rendering, showroom, video game, "
-    "illustration, cartoon, plastic skin, airbrushed, waxy, doll-like, "
-    "warped walls, crooked shelves, floating objects, distorted furniture, "
-    "extra limbs, deformed hands, duplicated person, two people, "
-    "fisheye, blurry face, overexposed, flat lighting"
+    "empty room, no people, unoccupied, "
+    "rgb lighting, rainbow, neon, purple, cyberpunk, gamer bedroom, cluttered, "
+    "cgi, 3d render, architectural render, showroom, illustration, cartoon, "
+    "plastic skin, airbrushed, waxy, warped walls, crooked shelves, "
+    "deformed hands, extra limbs, two people, fisheye, blurry face, "
+    "overexposed, flat lighting"
 )
 
 
