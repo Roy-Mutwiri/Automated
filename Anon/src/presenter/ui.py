@@ -194,18 +194,6 @@ class DropdownBar:
             if menu.open:
                 self._draw_list(frame, menu)
 
-    def _panel(self, frame, rect, colour, alpha=0.88) -> None:
-        x, y, w, h = rect
-        h_img, w_img = frame.shape[:2]
-        x0, y0 = max(x, 0), max(y, 0)
-        x1, y1 = min(x + w, w_img), min(y + h, h_img)
-        if x1 <= x0 or y1 <= y0:
-            return
-        region = frame[y0:y1, x0:x1].astype(np.float32)
-        frame[y0:y1, x0:x1] = (
-            region * (1 - alpha) + np.array(colour, np.float32) * alpha
-        ).astype(np.uint8)
-
     def _draw_head(self, frame, menu: Menu) -> None:
         x, y, w, h = menu.head_rect()
         self._panel(frame, (x, y, w, h), BG_OPEN if menu.open else BG)
