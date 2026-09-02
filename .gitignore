@@ -9,3 +9,54 @@
 
 # --- Auto-sync runtime ------------------------------------------------------
 /tools/sync.log
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- Model weights and checkpoints ------------------------------------------
+# NEVER commit these. GitHub rejects files over 100 MB and the auto-push
+# watcher would otherwise try to upload multi-GB checkpoints on every change.
+*.pth
+*.pt
+*.bin
+*.safetensors
+*.ckpt
+*.onnx
+*.engine
+*.plan
+*.trt
+*.tflite
+*.gguf
+*.npz
+models/
+checkpoints/
+weights/
+pretrained_weights/
+**/models--*/
+
+# --- Generated media --------------------------------------------------------
+# Source assets under Anon/assets/ are tracked explicitly (see the ! rules);
+# everything rendered at runtime is not.
+Anon/output/
+Anon/renders/
+Anon/captures/
+Anon/logs/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wav
+
+# --- Local machine state ----------------------------------------------------
+.env
+*.local.yaml
+.DS_Store
+Thumbs.db
