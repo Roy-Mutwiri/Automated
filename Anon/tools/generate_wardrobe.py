@@ -293,10 +293,16 @@ def main() -> int:
                     help="write the masks over the portrait and stop")
     ap.add_argument("--steps", type=int, default=40)
     ap.add_argument("--guidance", type=float, default=7.0)
-    ap.add_argument("--strength", type=float, default=0.97,
-                    help="SDXL base has a 4-channel UNet, so masked denoising "
-                         "needs to run nearly to full strength or the original "
-                         "garment bleeds through as a ghost")
+    ap.add_argument("--strength", type=float, default=0.95,
+                    help="garment denoising strength. SDXL base has a "
+                         "4-channel UNet, so masked denoising has to run near "
+                         "full strength or the original garment ghosts through")
+    ap.add_argument("--head-strength", type=float, default=0.85,
+                    help="headwear denoising strength, deliberately lower: at "
+                         "0.95+ the model stops treating the skull underneath "
+                         "as fixed and re-imagines the hairline and head "
+                         "shape, which is what turns a draped ghutra into a "
+                         "wound turban")
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--force", action="store_true",
                     help="regenerate variants that already exist")
