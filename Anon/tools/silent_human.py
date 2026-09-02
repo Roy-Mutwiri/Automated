@@ -63,6 +63,20 @@ def summarise(events, minutes: float, poses) -> dict:
             min_interval=min(gaps), max_interval=max(gaps),
         )
 
+    # Families, because the engine emits head_yaw / head_pitch / head_roll
+    # separately and "how often does he move his head" is one question, not
+    # three. Reported alongside the raw kinds rather than instead of them.
+    FAMILIES = {
+        "blink_all": ("blink", "blink_partial", "double_blink_second"),
+        "head_all": ("head_yaw", "head_pitch", "head_roll"),
+        "voluntary_all": ("attention", "head_yaw", "head_pitch", "head_roll",
+                          "posture_shift", "expression"),
+    }
+    for fam, kinds in FAMILIES.items():
+        times = sorted(t for k in kinds for t in by_kind.get(k, []))
+        if times:
+            by_kind[fam] = times
+
     out: dict = {"minutes": minutes, "events": {}}
     for kind, times in sorted(by_kind.items()):
         d = dist(times)
@@ -196,7 +210,8 @@ def main() -> int:
     print(f"[silent] metrics -> {args.metrics}")
 
     ev = metrics["events"]
-    for kind in ("blink", "attention", "head_move", "posture", "expression"):
+    for kind in ("blink_all", "attention", "head_all", "posture_shift",
+                 "expression", "state_change", "voluntary_all"):
         d = ev.get(kind)
         if d and "cv" in d:
             print(f"[silent] {kind:10} {d['per_minute']:6.2f}/min  "

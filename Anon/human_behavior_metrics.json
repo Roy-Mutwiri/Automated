@@ -21,6 +21,16 @@
       "min_interval": 0.23333333333332007,
       "max_interval": 24.766666666665273
     },
+    "blink_all": {
+      "count": 53,
+      "per_minute": 10.6,
+      "mean_interval": 5.4314102564104925,
+      "median_interval": 3.5333333333332266,
+      "sd_interval": 4.7968268244571215,
+      "cv": 0.8831641503779989,
+      "min_interval": 0.23333333333332007,
+      "max_interval": 22.09999999999875
+    },
     "blink_partial": {
       "count": 5,
       "per_minute": 1.0,
@@ -44,6 +54,16 @@
       "cv": 0.4456671205406734,
       "min_interval": 9.26666666666614,
       "max_interval": 45.99999999999739
+    },
+    "head_all": {
+      "count": 13,
+      "per_minute": 2.6,
+      "mean_interval": 22.50833333333385,
+      "median_interval": 17.333333333338174,
+      "sd_interval": 15.06703001651158,
+      "cv": 0.6693978533807287,
+      "min_interval": 5.999999999999659,
+      "max_interval": 45.366666666664656
     },
     "head_pitch": {
       "count": 2,
@@ -88,6 +108,16 @@
       "cv": 0.5812343554665645,
       "min_interval": 9.433333333332797,
       "max_interval": 65.5000000000156
+    },
+    "voluntary_all": {
+      "count": 123,
+      "per_minute": 24.6,
+      "mean_interval": 2.4587431693990958,
+      "median_interval": 2.066666666666549,
+      "sd_interval": 1.73621583189206,
+      "cv": 0.7061395649210415,
+      "min_interval": 0.0,
+      "max_interval": 9.6333333333328
     }
   },
   "attention_share": {
