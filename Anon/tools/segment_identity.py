@@ -185,8 +185,11 @@ def main() -> int:
         matte = cv2.GaussianBlur(matte, (0, 0), args.feather)
     matte = np.clip(matte, 0.0, 1.0)
 
+    clean, mic = remove_mic(img, matte)
+    print(f"[segment] mic removed: {int(mic.sum())} px inpainted")
+
     alpha = (matte * 255).astype(np.uint8)
-    rgba = np.dstack([img, alpha])
+    rgba = np.dstack([clean, alpha])
     cv2.imwrite(str(ROOT / args.out_rgba), rgba)
     cv2.imwrite(str(ROOT / args.out_mask), alpha)
 
