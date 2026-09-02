@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "HealthCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "measured_at": {
+          "format": "date-time",
+          "title": "Measured At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "ok"
+      ],
+      "title": "HealthCheck",
+      "type": "object"
+    },
+    "HealthState": {
+      "enum": [
+        "ok",
+        "degraded",
+        "failing",
+        "down"
+      ],
+      "title": "HealthState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "component": {
+      "title": "Component",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "state": {
+      "$ref": "#/$defs/HealthState",
+      "default": "ok"
+    },
+    "last_heartbeat": {
+      "format": "date-time",
+      "title": "Last Heartbeat",
+      "type": "string"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/HealthCheck"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "restart_count_1h": {
+      "default": 0,
+      "title": "Restart Count 1H",
+      "type": "integer"
+    },
+    "degraded_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Degraded Reason"
+    }
+  },
+  "required": [
+    "component"
+  ],
+  "title": "ServiceHealth",
+  "type": "object"
+}

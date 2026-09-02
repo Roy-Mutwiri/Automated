@@ -1,0 +1,21 @@
+# Ownership follows the split agreed in the architecture review.
+#
+# The shared directories require BOTH approvals. That is the point: they are
+# the interface between two people working independently, and a unilateral
+# change to them breaks the other person's work without warning.
+
+/Dripper/gold-live/shared/contracts.py   @Roy-Mutwiri @Sirdripper001
+/Dripper/gold-live/shared/schemas/       @Roy-Mutwiri @Sirdripper001
+/Dripper/gold-live/shared/mocks/         @Roy-Mutwiri @Sirdripper001
+/Dripper/gold-live/shared/events.py      @Roy-Mutwiri @Sirdripper001
+
+# Intelligence: director, memory, personas, generation, safety, comments
+/Dripper/gold-live/intelligence/         @Roy-Mutwiri
+
+# Platform: market data, adapters, TTS, audio, devices, LLM serving
+/Dripper/gold-live/platform_/            @Sirdripper001
+
+# Runtime and operations are shared ground
+/Dripper/gold-live/runtime/              @Roy-Mutwiri @Sirdripper001
+/Dripper/gold-live/build_tools/          @Roy-Mutwiri @Sirdripper001
+/Dripper/gold-live/.github/              @Roy-Mutwiri @Sirdripper001

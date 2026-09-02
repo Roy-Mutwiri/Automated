@@ -48,16 +48,17 @@ def test_staleness_is_derived_not_supplied():
 
 def test_may_quote_price_only_when_live():
     now = utcnow()
-    kw = dict(
-        as_of=now, computed_at=now, price=Price(bid=1.0, ask=2.0), session=TradingSession.ASIAN
-    )
+    kw = {
+        "as_of": now, "computed_at": now,
+        "price": Price(bid=1.0, ask=2.0), "session": TradingSession.ASIAN,
+    }
     assert MarketState(confidence=MarketConfidence.LIVE, **kw).may_quote_price()
     for c in (MarketConfidence.DELAYED, MarketConfidence.STALE, MarketConfidence.UNAVAILABLE):
         assert not MarketState(confidence=c, **kw).may_quote_price()
 
 
 def test_severity_is_bounded():
-    kw = dict(kind=MarketEventKind.BOS, timeframe="5m", occurred_at=utcnow())
+    kw = {"kind": MarketEventKind.BOS, "timeframe": "5m", "occurred_at": utcnow()}
     MarketEvent(severity=1, **kw)
     MarketEvent(severity=5, **kw)
     with pytest.raises(ValidationError):
@@ -103,3 +104,40 @@ def test_audio_request_expires():
     )
     assert not req.expired(req.created_at + timedelta(milliseconds=500))
     assert req.expired(req.created_at + timedelta(seconds=5))
+
+
+def test_every_contract_round_trips_through_json():
+    """Contracts are published to the bus as JSON and read back. Pydantic
+    writes computed fields into the output but treats them as extras on input,
+    so without handling that any contract with one could be published and never
+    received -- which is precisely what happened to the Redis bus.
+    """
+    from datetime import timedelta
+
+    from shared.contracts import (
+        Envelope,
+        MarketConfidence,
+        MarketState,
+        Price,
+        TradingSession,
+    )
+
+    now = utcnow()
+    samples = [
+        Price(bid=3652.22, ask=3652.58),
+        Envelope(event_type="x", occurred_at=now, trace_id="t", payload={"a": 1}),
+        MarketState(
+            as_of=now - timedelta(seconds=2), computed_at=now,
+            confidence=MarketConfidence.LIVE,
+            price=Price(bid=1.0, ask=2.0), session=TradingSession.LONDON,
+        ),
+    ]
+    for original in samples:
+        restored = type(original).model_validate_json(original.model_dump_json())
+        assert restored == original, f"{type(original).__name__} failed to round trip"
+
+
+def test_typos_are_still_rejected_after_the_computed_field_fix():
+    """The round-trip fix must not have quietly turned off extra='forbid'."""
+    with pytest.raises(ValidationError):
+        Price.model_validate({"bid": 1.0, "ask": 2.0, "bidd": 3.0})

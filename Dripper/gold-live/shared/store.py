@@ -203,7 +203,7 @@ class TraceStore:
                 await self._drain_once()
             except asyncio.CancelledError:
                 raise
-            except Exception:  # noqa: BLE001 - persistence must never kill the process
+            except Exception:
                 log.exception("trace flush loop error")
 
     # -- reads (dashboard) ------------------------------------------------

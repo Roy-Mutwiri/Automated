@@ -89,7 +89,7 @@ class PaddleOCREngine(OCREngine):
         assert self._ocr is not None
         try:
             raw = self._ocr.ocr(image, cls=False)
-        except Exception as exc:  # noqa: BLE001 - OCR must never kill the adapter
+        except Exception as exc:
             log.warning("OCR read failed: %s", exc)
             return []
 

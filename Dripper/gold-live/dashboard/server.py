@@ -40,7 +40,7 @@ def session_ports() -> dict[str, int]:
 
 def fetch_health(port: int, timeout: float = 2.0) -> dict:
     try:
-        with urllib.request.urlopen(  # noqa: S310 - fixed localhost URL
+        with urllib.request.urlopen(
             f"http://127.0.0.1:{port}/health", timeout=timeout
         ) as resp:
             return json.loads(resp.read())
@@ -142,7 +142,7 @@ class Dashboard:
 
         try:
             recent = self.store.recent_utterances(limit=25)
-        except Exception as exc:  # noqa: BLE001 - dashboard must still render
+        except Exception as exc:
             recent = []
             log.warning("trace read failed: %s", exc)
 
@@ -194,7 +194,7 @@ def make_handler(dash: Dashboard) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(body)
 
-        def do_GET(self) -> None:  # noqa: N802 - stdlib naming
+        def do_GET(self) -> None:
             path = self.path.split("?")[0]
             try:
                 if path in ("/", "/index.html"):
@@ -213,7 +213,7 @@ def make_handler(dash: Dashboard) -> type[BaseHTTPRequestHandler]:
                     )
                 else:
                     self._send(404, b"not found", "text/plain")
-            except Exception as exc:  # noqa: BLE001 - never 500 silently
+            except Exception as exc:
                 log.exception("dashboard request failed")
                 self._send(500, str(exc).encode(), "text/plain")
 

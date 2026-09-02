@@ -90,7 +90,7 @@ class AudioSink:
                     sd.stop()
                     return
                 await asyncio.sleep(0.02)
-        except Exception:  # noqa: BLE001 - stream may close under us
+        except Exception:
             pass
 
     def stop(self) -> None:
@@ -184,7 +184,7 @@ class AudioRouter:
                 self.stats.played += 1
             except asyncio.CancelledError:
                 raise
-            except Exception:  # noqa: BLE001 - one bad utterance must not stop audio
+            except Exception:
                 self.stats.tts_failures += 1
                 log.exception("[%s] playback failed", self.session_id)
             finally:

@@ -1,0 +1,266 @@
+{
+  "$defs": {
+    "MarketConfidence": {
+      "enum": [
+        "live",
+        "delayed",
+        "stale",
+        "unavailable"
+      ],
+      "title": "MarketConfidence",
+      "type": "string"
+    },
+    "Priority": {
+      "enum": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "title": "Priority",
+      "type": "integer"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "How we answer 'why did Session 4 say that?'",
+      "properties": {
+        "market_state_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Market State Id"
+        },
+        "market_confidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MarketConfidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "comment_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Comment Ids",
+          "type": "array"
+        },
+        "memory_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Memory Refs",
+          "type": "array"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effort"
+        },
+        "prompt_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Tokens"
+        },
+        "cache_read_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Read Tokens"
+        },
+        "first_token_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Token Ms"
+        },
+        "generation_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Generation Ms"
+        }
+      },
+      "title": "Provenance",
+      "type": "object"
+    },
+    "SafetyReport": {
+      "additionalProperties": false,
+      "properties": {
+        "passed": {
+          "default": true,
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "stated_price": {
+          "default": false,
+          "title": "Stated Price",
+          "type": "boolean"
+        },
+        "has_disclaimer": {
+          "default": false,
+          "title": "Has Disclaimer",
+          "type": "boolean"
+        },
+        "violations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Violations",
+          "type": "array"
+        }
+      },
+      "title": "SafetyReport",
+      "type": "object"
+    },
+    "TriggerRef": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/TriggerType"
+        },
+        "source_event_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Event Id"
+        },
+        "priority": {
+          "$ref": "#/$defs/Priority"
+        }
+      },
+      "required": [
+        "type",
+        "priority"
+      ],
+      "title": "TriggerRef",
+      "type": "object"
+    },
+    "TriggerType": {
+      "enum": [
+        "market_event",
+        "comment",
+        "silence",
+        "session_transition",
+        "education"
+      ],
+      "title": "TriggerType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "utterance_id": {
+      "format": "uuid",
+      "title": "Utterance Id",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    },
+    "segments": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Segments",
+      "type": "array"
+    },
+    "trigger": {
+      "$ref": "#/$defs/TriggerRef"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "safety": {
+      "$ref": "#/$defs/SafetyReport"
+    },
+    "interruptible": {
+      "default": true,
+      "title": "Interruptible",
+      "type": "boolean"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id",
+    "trace_id",
+    "text",
+    "trigger"
+  ],
+  "title": "AIResponse",
+  "type": "object"
+}

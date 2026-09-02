@@ -140,7 +140,7 @@ class CommentPipeline:
                 # Never let a model downgrade a code-detected risk flag.
                 if RISK_RE.search(c.text_norm) and not cls.is_risk_sensitive:
                     cls = cls.model_copy(update={"is_risk_sensitive": True})
-            except Exception as exc:  # noqa: BLE001 - classifier must never break ingest
+            except Exception as exc:
                 log.warning("classifier failed, using heuristic: %s", exc)
 
         if cls.source_confidence < self.min_ocr_confidence:

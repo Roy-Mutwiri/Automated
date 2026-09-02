@@ -1,0 +1,185 @@
+{
+  "$defs": {
+    "PlatformBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "enum": [
+            "tiktok",
+            "youtube",
+            "twitch",
+            "mock"
+          ],
+          "title": "Platform",
+          "type": "string"
+        },
+        "channel_id": {
+          "title": "Channel Id",
+          "type": "string"
+        },
+        "adapter_health": {
+          "default": "ok",
+          "enum": [
+            "ok",
+            "degraded",
+            "down"
+          ],
+          "title": "Adapter Health",
+          "type": "string"
+        }
+      },
+      "required": [
+        "platform",
+        "channel_id"
+      ],
+      "title": "PlatformBinding",
+      "type": "object"
+    },
+    "SessionStatus": {
+      "enum": [
+        "starting",
+        "live",
+        "degraded",
+        "paused",
+        "stopping",
+        "down"
+      ],
+      "title": "SessionStatus",
+      "type": "string"
+    },
+    "SpeakingState": {
+      "additionalProperties": false,
+      "properties": {
+        "is_speaking": {
+          "default": false,
+          "title": "Is Speaking",
+          "type": "boolean"
+        },
+        "utterance_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Utterance Id"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "est_end_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Est End At"
+        }
+      },
+      "title": "SpeakingState",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/SessionStatus",
+      "default": "starting"
+    },
+    "persona_id": {
+      "title": "Persona Id",
+      "type": "string"
+    },
+    "platform_binding": {
+      "$ref": "#/$defs/PlatformBinding"
+    },
+    "device_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Device Id"
+    },
+    "speaking": {
+      "$ref": "#/$defs/SpeakingState"
+    },
+    "topic_cooldowns": {
+      "additionalProperties": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "title": "Topic Cooldowns",
+      "type": "object"
+    },
+    "recent_topics": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Recent Topics",
+      "type": "array"
+    },
+    "viewers": {
+      "default": 0,
+      "title": "Viewers",
+      "type": "integer"
+    },
+    "comments_1m": {
+      "default": 0,
+      "title": "Comments 1M",
+      "type": "integer"
+    },
+    "utterances_1h": {
+      "default": 0,
+      "title": "Utterances 1H",
+      "type": "integer"
+    },
+    "last_spoke_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Spoke At"
+    }
+  },
+  "required": [
+    "session_id",
+    "persona_id",
+    "platform_binding"
+  ],
+  "title": "SessionState",
+  "type": "object"
+}

@@ -1,0 +1,365 @@
+{
+  "$defs": {
+    "Detection": {
+      "additionalProperties": false,
+      "description": "A deterministic rule fired. Carries its evidence so traces can explain it.",
+      "properties": {
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "timeframe": {
+          "title": "Timeframe",
+          "type": "string"
+        },
+        "price_level": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Price Level"
+        },
+        "evidence": {
+          "additionalProperties": true,
+          "title": "Evidence",
+          "type": "object"
+        }
+      },
+      "required": [
+        "rule_id",
+        "label",
+        "timeframe"
+      ],
+      "title": "Detection",
+      "type": "object"
+    },
+    "MarketConfidence": {
+      "enum": [
+        "live",
+        "delayed",
+        "stale",
+        "unavailable"
+      ],
+      "title": "MarketConfidence",
+      "type": "string"
+    },
+    "MarketContext": {
+      "additionalProperties": false,
+      "description": "External facts: trading session, calendar, news.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "session",
+            "calendar",
+            "news"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "At"
+        }
+      },
+      "required": [
+        "kind",
+        "label"
+      ],
+      "title": "MarketContext",
+      "type": "object"
+    },
+    "Observation": {
+      "additionalProperties": false,
+      "description": "Measured. No judgement. 'The 5m range is 4.20.'",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "timeframe": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeframe"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "title": "Observation",
+      "type": "object"
+    },
+    "Price": {
+      "additionalProperties": false,
+      "properties": {
+        "bid": {
+          "title": "Bid",
+          "type": "number"
+        },
+        "ask": {
+          "title": "Ask",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bid",
+        "ask"
+      ],
+      "title": "Price",
+      "type": "object"
+    },
+    "Structure": {
+      "enum": [
+        "higher_high",
+        "higher_low",
+        "lower_high",
+        "lower_low",
+        "consolidation"
+      ],
+      "title": "Structure",
+      "type": "string"
+    },
+    "TimeframeView": {
+      "additionalProperties": false,
+      "properties": {
+        "timeframe": {
+          "title": "Timeframe",
+          "type": "string"
+        },
+        "open": {
+          "title": "Open",
+          "type": "number"
+        },
+        "high": {
+          "title": "High",
+          "type": "number"
+        },
+        "low": {
+          "title": "Low",
+          "type": "number"
+        },
+        "close": {
+          "title": "Close",
+          "type": "number"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume"
+        },
+        "trend": {
+          "$ref": "#/$defs/Trend"
+        },
+        "structure": {
+          "$ref": "#/$defs/Structure"
+        },
+        "swing_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Swing High"
+        },
+        "swing_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Swing Low"
+        },
+        "atr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Atr"
+        }
+      },
+      "required": [
+        "timeframe",
+        "open",
+        "high",
+        "low",
+        "close",
+        "trend",
+        "structure"
+      ],
+      "title": "TimeframeView",
+      "type": "object"
+    },
+    "TradingSession": {
+      "enum": [
+        "asian",
+        "london",
+        "new_york",
+        "off_hours"
+      ],
+      "title": "TradingSession",
+      "type": "string"
+    },
+    "Trend": {
+      "enum": [
+        "bullish",
+        "bearish",
+        "ranging"
+      ],
+      "title": "Trend",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The shared snapshot. Computed once, fanned out to every session.\n\n`confidence` is a SAFETY CONTROL, not metadata. The generator must refuse\nto state a numeric price when confidence != LIVE. See intelligence.safety.",
+  "properties": {
+    "symbol": {
+      "default": "XAUUSD",
+      "title": "Symbol",
+      "type": "string"
+    },
+    "state_id": {
+      "format": "uuid",
+      "title": "State Id",
+      "type": "string"
+    },
+    "as_of": {
+      "format": "date-time",
+      "title": "As Of",
+      "type": "string"
+    },
+    "computed_at": {
+      "format": "date-time",
+      "title": "Computed At",
+      "type": "string"
+    },
+    "confidence": {
+      "$ref": "#/$defs/MarketConfidence"
+    },
+    "price": {
+      "$ref": "#/$defs/Price"
+    },
+    "session": {
+      "$ref": "#/$defs/TradingSession"
+    },
+    "timeframes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TimeframeView"
+      },
+      "title": "Timeframes",
+      "type": "object"
+    },
+    "observations": {
+      "items": {
+        "$ref": "#/$defs/Observation"
+      },
+      "title": "Observations",
+      "type": "array"
+    },
+    "detections": {
+      "items": {
+        "$ref": "#/$defs/Detection"
+      },
+      "title": "Detections",
+      "type": "array"
+    },
+    "context": {
+      "items": {
+        "$ref": "#/$defs/MarketContext"
+      },
+      "title": "Context",
+      "type": "array"
+    }
+  },
+  "required": [
+    "as_of",
+    "confidence",
+    "price",
+    "session"
+  ],
+  "title": "MarketState",
+  "type": "object"
+}

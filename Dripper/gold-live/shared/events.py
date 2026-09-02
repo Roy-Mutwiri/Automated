@@ -19,7 +19,6 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 

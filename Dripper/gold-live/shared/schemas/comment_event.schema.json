@@ -1,0 +1,122 @@
+{
+  "$defs": {
+    "CommentClassification": {
+      "additionalProperties": false,
+      "properties": {
+        "intent": {
+          "$ref": "#/$defs/CommentIntent"
+        },
+        "is_risk_sensitive": {
+          "default": false,
+          "title": "Is Risk Sensitive",
+          "type": "boolean"
+        },
+        "relevance": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Relevance",
+          "type": "number"
+        },
+        "dedupe_cluster_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dedupe Cluster Id"
+        },
+        "source_confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Source Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "title": "CommentClassification",
+      "type": "object"
+    },
+    "CommentIntent": {
+      "enum": [
+        "market_q",
+        "technical_q",
+        "education_q",
+        "greeting",
+        "joke",
+        "spam",
+        "provocation",
+        "off_topic",
+        "trade_advice_req"
+      ],
+      "title": "CommentIntent",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "platform": {
+      "enum": [
+        "tiktok",
+        "youtube",
+        "twitch",
+        "mock"
+      ],
+      "title": "Platform",
+      "type": "string"
+    },
+    "platform_msg_id": {
+      "title": "Platform Msg Id",
+      "type": "string"
+    },
+    "author_hash": {
+      "title": "Author Hash",
+      "type": "string"
+    },
+    "text_raw": {
+      "title": "Text Raw",
+      "type": "string"
+    },
+    "text_norm": {
+      "title": "Text Norm",
+      "type": "string"
+    },
+    "received_at": {
+      "format": "date-time",
+      "title": "Received At",
+      "type": "string"
+    },
+    "classification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CommentClassification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "session_id",
+    "platform",
+    "platform_msg_id",
+    "author_hash",
+    "text_raw",
+    "text_norm"
+  ],
+  "title": "CommentEvent",
+  "type": "object"
+}

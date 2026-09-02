@@ -92,7 +92,7 @@ class Metrics:
                 for q in (0.5, 0.95, 0.99):
                     idx = min(len(ordered) - 1, int(len(ordered) * q))
                     lines.append(
-                        self._fmt(name, labels + (("quantile", str(q)),), ordered[idx])
+                        self._fmt(name, (*labels, ("quantile", str(q))), ordered[idx])
                     )
                 lines.append(self._fmt(f"{name}_sum", labels, sum(ordered)))
                 lines.append(self._fmt(f"{name}_count", labels, len(ordered)))
@@ -138,7 +138,7 @@ class HealthServer:
     def _snapshot(self) -> tuple[dict, bool]:
         try:
             components = self.provider()
-        except Exception as exc:  # noqa: BLE001 - never fail the health endpoint
+        except Exception as exc:
             return {"error": str(exc), "state": "failing"}, False
 
         worst = HealthState.OK
@@ -183,7 +183,7 @@ class HealthServer:
                 self.end_headers()
                 self.wfile.write(body)
 
-            def do_GET(self) -> None:  # noqa: N802 - stdlib naming
+            def do_GET(self) -> None:
                 path = self.path.split("?")[0]
                 if path == "/health":
                     body, _ = server._snapshot()
@@ -233,5 +233,5 @@ async def heartbeat(
                 store.record_health(component)
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("heartbeat failed")

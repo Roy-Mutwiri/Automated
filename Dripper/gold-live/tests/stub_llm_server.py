@@ -47,13 +47,13 @@ def make_handler(cfg: StubConfig) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(body)
 
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             if self.path.endswith("/models"):
                 self._json(200, {"data": [{"id": "stub-model", "object": "model"}]})
             else:
                 self._json(404, {"error": "not found"})
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             length = int(self.headers.get("Content-Length", 0))
             request = json.loads(self.rfile.read(length) or b"{}")
             cfg.requests.append(request)

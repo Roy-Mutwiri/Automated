@@ -11,7 +11,7 @@ import pytest
 
 from intelligence.comments import CommentPipeline
 from intelligence.memory import SessionMemory
-from shared.contracts import CommentEvent, Envelope, utcnow
+from shared.contracts import CommentEvent, Envelope
 from shared.events import InMemoryBus, wrap
 
 
@@ -30,7 +30,7 @@ async def test_pipeline_rejects_foreign_session_comment():
     """Isolation layer 4: assert, don't trust."""
     pipe = CommentPipeline("SESSION_001")
     foreign = comment("SESSION_005", "where is resistance")
-    with pytest.raises(ValueError, match="SESSION_005.*SESSION_001"):
+    with pytest.raises(ValueError, match=r"SESSION_005.*SESSION_001"):
         await pipe.process(foreign)
 
 

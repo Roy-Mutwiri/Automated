@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -98,7 +97,7 @@ def check_llm() -> Check:
 
     for label, url in candidates:
         try:
-            with urllib.request.urlopen(f"{url}/models", timeout=2) as resp:  # noqa: S310
+            with urllib.request.urlopen(f"{url}/models", timeout=2) as resp:
                 body = json.loads(resp.read())
         except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
             continue
@@ -128,7 +127,7 @@ def check_tts(voices_dir: Path) -> Check:
 def check_audio() -> Check:
     try:
         from platform_.audio.devices import find_virtual_cable, list_output_devices
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return Check("audio output", False, f"could not enumerate devices: {exc}")
 
     devices = list_output_devices()
@@ -177,7 +176,7 @@ def check_config() -> Check:
         count = len(cfg.get("sessions", []))
         return Check("configuration", count > 0, f"{count} session(s) configured",
                      fatal=count == 0)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return Check("configuration", False, f"unreadable: {exc}", fatal=True)
 
 

@@ -1,0 +1,156 @@
+{
+  "$defs": {
+    "AudioDeviceState": {
+      "additionalProperties": false,
+      "properties": {
+        "output_device": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Device"
+        },
+        "sample_rate": {
+          "default": 24000,
+          "title": "Sample Rate",
+          "type": "integer"
+        },
+        "buffer_health": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Buffer Health",
+          "type": "number"
+        },
+        "underruns_1h": {
+          "default": 0,
+          "title": "Underruns 1H",
+          "type": "integer"
+        },
+        "virtual_cable_present": {
+          "default": false,
+          "title": "Virtual Cable Present",
+          "type": "boolean"
+        }
+      },
+      "title": "AudioDeviceState",
+      "type": "object"
+    },
+    "CaptureCalibration": {
+      "additionalProperties": false,
+      "description": "Where the comment panel sits on this device's screen.",
+      "properties": {
+        "monitor": {
+          "default": 0,
+          "title": "Monitor",
+          "type": "integer"
+        },
+        "crop_x": {
+          "default": 0,
+          "title": "Crop X",
+          "type": "integer"
+        },
+        "crop_y": {
+          "default": 0,
+          "title": "Crop Y",
+          "type": "integer"
+        },
+        "crop_w": {
+          "default": 0,
+          "title": "Crop W",
+          "type": "integer"
+        },
+        "crop_h": {
+          "default": 0,
+          "title": "Crop H",
+          "type": "integer"
+        },
+        "row_height_px": {
+          "default": 28,
+          "title": "Row Height Px",
+          "type": "integer"
+        },
+        "fps": {
+          "default": 5,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "min_ocr_confidence": {
+          "default": 0.55,
+          "title": "Min Ocr Confidence",
+          "type": "number"
+        }
+      },
+      "title": "CaptureCalibration",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "device_id": {
+      "title": "Device Id",
+      "type": "string"
+    },
+    "bound_session": {
+      "title": "Bound Session",
+      "type": "string"
+    },
+    "agent_version": {
+      "title": "Agent Version",
+      "type": "string"
+    },
+    "audio": {
+      "$ref": "#/$defs/AudioDeviceState"
+    },
+    "capture": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CaptureCalibration"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "last_seen": {
+      "format": "date-time",
+      "title": "Last Seen",
+      "type": "string"
+    },
+    "rtt_ms": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rtt Ms"
+    },
+    "platform_client_running": {
+      "default": false,
+      "title": "Platform Client Running",
+      "type": "boolean"
+    },
+    "stream_live": {
+      "default": false,
+      "title": "Stream Live",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "device_id",
+    "bound_session",
+    "agent_version"
+  ],
+  "title": "DeviceState",
+  "type": "object"
+}

@@ -196,7 +196,7 @@ class TopicProposer:
                 messages, max_tokens=500, temperature=1.0
             )
             self.failures = 0
-        except Exception as exc:  # noqa: BLE001 - proposal must never break the stream
+        except Exception as exc:
             self.failures += 1
             log.warning("topic proposal failed (%d consecutive): %s", self.failures, exc)
             return []

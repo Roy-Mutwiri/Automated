@@ -19,8 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from platform_.market.candles import Candle
-from platform_.market.indicators import Swing, atr, find_swings, last_swing
-from shared.contracts import MarketEvent, MarketEventKind, Trend, utcnow
+from platform_.market.indicators import Swing, last_swing
+from shared.contracts import MarketEvent, MarketEventKind, Trend
 
 
 @dataclass(slots=True)
@@ -234,7 +234,7 @@ def run_all(ctx: DetectorContext) -> list[MarketEvent]:
     for detector in ALL_DETECTORS:
         try:
             events.extend(detector(ctx))
-        except Exception:  # noqa: BLE001 - one bad rule must not blind the rest
+        except Exception:
             import logging
 
             logging.getLogger(__name__).exception("detector %s failed", detector.__name__)

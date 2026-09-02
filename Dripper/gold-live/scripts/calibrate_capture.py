@@ -158,7 +158,7 @@ def main() -> None:
     print(f"\n  Saved {device_id} -> {args.session}")
     print(f"  Region: {w}x{h} at ({x}, {y}) on monitor {args.monitor}")
     print(f"  Written to {DEVICES}")
-    print(f"\n  Verify it actually reads comments:")
+    print("\n  Verify it actually reads comments:")
     print(f"    python -m scripts.calibrate_capture --session {args.session} --verify\n")
 
 

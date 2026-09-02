@@ -261,7 +261,7 @@ class ScreenCaptureAdapter(PlatformAdapter):
             try:
                 for event in self.process_frame(self.frames.grab()):
                     yield event
-            except Exception as exc:  # noqa: BLE001 - capture must not die
+            except Exception as exc:
                 log.warning("[%s] capture frame failed: %s", self.session_id, exc)
                 await asyncio.sleep(1.0)
                 continue

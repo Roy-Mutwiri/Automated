@@ -21,7 +21,7 @@ from enum import Enum, IntEnum
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 SCHEMA_VERSION = "1.0.0"
 
@@ -31,9 +31,29 @@ def utcnow() -> datetime:
 
 
 class Contract(BaseModel):
-    """Base for every contract. Frozen so a message can't be mutated in flight."""
+    """Base for every contract. Frozen so a message can't be mutated in flight.
+
+    `extra="forbid"` is deliberate: a typo in a field name must fail loudly
+    rather than be silently dropped, which is exactly the kind of bug that
+    survives to production in a system with this many moving parts.
+
+    That interacts badly with computed fields, though. Pydantic WRITES computed
+    fields into `model_dump_json()` output but treats them as extras on the way
+    back in -- so any contract with a computed field could be published to the
+    bus and never read back. The validator below strips them before validation,
+    which keeps round-tripping working without giving up typo detection.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_computed_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict) and cls.model_computed_fields:
+            computed = set(cls.model_computed_fields)
+            if computed & data.keys():
+                return {k: v for k, v in data.items() if k not in computed}
+        return data
 
 
 # ---------------------------------------------------------------------------

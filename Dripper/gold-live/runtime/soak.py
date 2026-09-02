@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import itertools
 import statistics
 import time
 from collections import Counter
@@ -135,7 +136,7 @@ async def soak(hours: int, start: datetime, persona_id: str) -> dict:
 
     gaps = [
         (b - a).total_seconds() / 60
-        for a, b in zip(spoken_at, spoken_at[1:], strict=False)
+        for a, b in itertools.pairwise(spoken_at)
     ]
     first_half = sum(hourly_repeats[h] for h in range(hours // 2))
     second_half = sum(hourly_repeats[h] for h in range(hours // 2, hours))

@@ -102,7 +102,7 @@ async def test_state_returns_to_idle(tmp_path):
 
 async def test_router_rejects_another_sessions_audio(tmp_path):
     r, _ = await router(RecordingTTS(), tmp_path)
-    with pytest.raises(ValueError, match="SESSION_009.*SESSION_001"):
+    with pytest.raises(ValueError, match=r"SESSION_009.*SESSION_001"):
         await r.submit(request(session_id="SESSION_009"))
     await r.stop()
 

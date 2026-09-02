@@ -13,7 +13,7 @@ from intelligence.generation import LocalGenerator
 from intelligence.personas import Persona
 from platform_.llm.base import ChatMessage
 from platform_.llm.local import LocalLLM
-from tests.stub_llm_server import StubConfig, StubLLMServer
+from tests.stub_llm_server import StubLLMServer
 
 pytest.importorskip("httpx")
 

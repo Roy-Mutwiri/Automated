@@ -419,12 +419,12 @@ async def build_generator(mode: str = "auto") -> tuple[Generator, LLMBackend | N
 
 
 __all__ = [
-    "Generator",
     "ClaudeGenerator",
-    "OfflineGenerator",
-    "GenerationResult",
-    "build_generator",
-    "split_sentences",
-    "build_turn_context",
     "CommentIntent",
+    "GenerationResult",
+    "Generator",
+    "OfflineGenerator",
+    "build_generator",
+    "build_turn_context",
+    "split_sentences",
 ]

@@ -274,7 +274,7 @@ def test_atr_is_none_until_enough_history():
     """Detectors that need ATR must stay silent rather than guess."""
     e = MarketEngine(timeframes={"5m": 300})
     at = T0
-    for i in range(60):  # only ~6 candles
+    for _ in range(60):  # only ~6 candles
         at += timedelta(seconds=30)
         e.on_tick(3650.0, 3650.4, at)
     view = e.snapshot(at).timeframes.get("5m")

@@ -185,7 +185,7 @@ class WebSocketFeed(Feed):
                             yield tick
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # noqa: BLE001 - reconnect, never surface
+            except Exception as exc:
                 self.reconnects += 1
                 log.warning(
                     "market feed dropped (%s); reconnecting in %.1fs", exc, backoff

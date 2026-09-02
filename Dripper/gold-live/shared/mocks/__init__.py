@@ -9,4 +9,4 @@ from shared.mocks.comments import MockCommentSource
 from shared.mocks.market import MockMarketEngine
 from shared.mocks.tts import FileTTS, MockTTS
 
-__all__ = ["MockCommentSource", "MockMarketEngine", "MockTTS", "FileTTS"]
+__all__ = ["FileTTS", "MockCommentSource", "MockMarketEngine", "MockTTS"]

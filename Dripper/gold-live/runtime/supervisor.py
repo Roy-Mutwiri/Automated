@@ -91,7 +91,7 @@ class Supervisor:
         cmd = [sys.executable, "-m", "runtime.live", "--session", session.session_id,
                "--health-port", str(session.health_port), *session.args]
         log.info("starting %s: %s", session.session_id, " ".join(cmd[2:]))
-        session.process = subprocess.Popen(  # noqa: S603
+        session.process = subprocess.Popen(
             cmd, cwd=ROOT, stdout=None, stderr=None
         )
         session.started_at = time.time()
@@ -126,7 +126,7 @@ class Supervisor:
             async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.get(f"http://127.0.0.1:{session.health_port}/ready")
                 return resp.status_code == 200
-        except Exception:  # noqa: BLE001 - unreachable counts as not ready
+        except Exception:
             return False
 
     # -- the loop ---------------------------------------------------------

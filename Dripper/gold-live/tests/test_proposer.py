@@ -10,7 +10,6 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 
-import pytest
 
 from intelligence.personas import Persona
 from intelligence.proposer import CoverageMemory, TopicProposer

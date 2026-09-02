@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "Priority": {
+      "enum": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "title": "Priority",
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "utterance_id": {
+      "format": "uuid",
+      "title": "Utterance Id",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "segments": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Segments",
+      "type": "array"
+    },
+    "voice_id": {
+      "title": "Voice Id",
+      "type": "string"
+    },
+    "priority": {
+      "$ref": "#/$defs/Priority",
+      "default": 2
+    },
+    "preempts": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Preempts"
+    },
+    "deadline_ms": {
+      "default": 30000,
+      "title": "Deadline Ms",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "utterance_id",
+    "session_id",
+    "trace_id",
+    "segments",
+    "voice_id"
+  ],
+  "title": "AudioRequest",
+  "type": "object"
+}

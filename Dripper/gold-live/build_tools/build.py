@@ -25,7 +25,7 @@ VERSION = "0.4.0"
 
 def run(cmd: list[str], **kw) -> int:
     print(f"\n$ {' '.join(cmd)}\n")
-    return subprocess.call(cmd, cwd=ROOT, **kw)  # noqa: S603
+    return subprocess.call(cmd, cwd=ROOT, **kw)
 
 
 def purge(path: Path, attempts: int = 5) -> None:

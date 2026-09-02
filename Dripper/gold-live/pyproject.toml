@@ -30,3 +30,17 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
+# Rules that catch real defects. Style-only rules are deliberately off -- a
+# lint config that argues about datetime.UTC versus timezone.utc trains people
+# to run `--fix` without reading, which is how a real finding gets skipped.
+select = ["E", "F", "W", "B", "A", "C4", "PIE", "RUF"]
+ignore = [
+    "E501",    # line length: the formatter's job, not a review comment
+    "B008",    # function call in default arg: intentional for path defaults
+    "RUF012",  # mutable class attrs: used deliberately for shared registries
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "B017", "A002"]

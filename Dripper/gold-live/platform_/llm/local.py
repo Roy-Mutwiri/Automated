@@ -177,7 +177,7 @@ class LocalLLM(LLMBackend):
             client = await self._http()
             resp = await client.get("/models", timeout=3.0)
             return resp.status_code == 200
-        except Exception as exc:  # noqa: BLE001 - health must never raise
+        except Exception as exc:
             log.warning("local LLM health check failed: %s", exc)
             return False
 
@@ -192,7 +192,7 @@ class LocalLLM(LLMBackend):
             resp = await client.get("/models", timeout=3.0)
             data = resp.json().get("data") or []
             return data[0].get("id") if data else None
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
 
     async def close(self) -> None:

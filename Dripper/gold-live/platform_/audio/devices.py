@@ -56,7 +56,7 @@ def list_output_devices() -> list[AudioDevice]:
     devices: list[AudioDevice] = []
     try:
         default_out = sd.default.device[1]
-    except Exception:  # noqa: BLE001
+    except Exception:
         default_out = None
 
     for index, info in enumerate(sd.query_devices()):

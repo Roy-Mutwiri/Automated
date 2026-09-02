@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "MarketEventKind": {
+      "enum": [
+        "bos",
+        "choch",
+        "liquidity_sweep",
+        "vol_expansion",
+        "session_open",
+        "session_close",
+        "level_break",
+        "calendar_release",
+        "news"
+      ],
+      "title": "MarketEventKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/MarketEventKind"
+    },
+    "timeframe": {
+      "title": "Timeframe",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "severity": {
+      "maximum": 5,
+      "minimum": 1,
+      "title": "Severity",
+      "type": "integer"
+    },
+    "price_level": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Price Level"
+    },
+    "direction": {
+      "anyOf": [
+        {
+          "enum": [
+            "up",
+            "down"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Direction"
+    },
+    "evidence": {
+      "additionalProperties": true,
+      "title": "Evidence",
+      "type": "object"
+    },
+    "narrative_hint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Narrative Hint"
+    },
+    "market_state_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Market State Id"
+    }
+  },
+  "required": [
+    "kind",
+    "timeframe",
+    "occurred_at",
+    "severity"
+  ],
+  "title": "MarketEvent",
+  "type": "object"
+}
