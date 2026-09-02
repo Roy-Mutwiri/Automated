@@ -85,23 +85,61 @@ for side in ("l", "r"):
                 seg > 1,
             ))
 
-# Contact targets, in MakeHuman coordinates, derived from the body's own
-# proportions rather than typed in: a desk at seated elbow height, a mouse
-# under the right hand, the left hand resting further in.
+# Contact targets, in MakeHuman coordinates.
+#
+# Placed as a fraction of the arm's *actual* reach, measured from this body's
+# own joints, rather than as absolute offsets. The first version used fractions
+# of shoulder width and put the mouse 6.09 units from the shoulder against a
+# total arm reach of 5.20 - out of reach. The IK solved it correctly by
+# straightening the arm and pointing at the target, which is why the character
+# sat at his desk with both arms locked straight out to the sides.
+#
+# 0.72 of full reach gives a relaxed elbow around 100 degrees, which is what a
+# forearm resting on a desk actually does.
+COMFORT_REACH = 0.72
+
+
 def contact_points(j: dict) -> dict[str, tuple[float, float, float]]:
-    hip = j["joint-pelvis"][1]
-    elbow_y = 0.5 * (j["joint-l-elbow"][1] + j["joint-r-elbow"][1])
-    desk_y = elbow_y - 0.55
-    reach = abs(j["joint-r-hand"][0])
-    fwd = j["joint-r-hand"][2] + 2.4
-    return {
-        "mouse":        (-reach * 0.80, desk_y, fwd + 0.9),
-        "keyboard":     (-reach * 0.25, desk_y, fwd + 0.4),
-        "desk_rest_l":  (+reach * 0.72, desk_y, fwd + 0.5),
-        "lap_rest_l":   (+reach * 0.55, hip + 0.6, j["joint-l-hand"][2] + 0.2),
-        "armrest_l":    (+reach * 1.02, desk_y - 1.6, j["joint-l-hand"][2] - 0.6),
-        "armrest_r":    (-reach * 1.02, desk_y - 1.6, j["joint-r-hand"][2] - 0.6),
-    }
+    import math as _m
+
+    def dist(a, b):
+        return _m.dist(j[a], j[b])
+
+    out = {}
+    for side, sign in (("l", +1.0), ("r", -1.0)):
+        sh = j[f"joint-{side}-shoulder"]
+        reach = dist(f"joint-{side}-shoulder", f"joint-{side}-elbow") +             dist(f"joint-{side}-elbow", f"joint-{side}-hand")
+        d = reach * COMFORT_REACH
+
+        elbow_y = j[f"joint-{side}-elbow"][1]
+        desk_y = elbow_y - 0.35
+        dy = desk_y - sh[1]
+
+        # Whatever budget is left after dropping to desk height goes forward,
+        # with a little of it inward so the hands are nearer than the shoulders.
+        planar = max(d * d - dy * dy, 0.25) ** 0.5
+        dx = -sign * planar * 0.22          # inward, toward the midline
+        dz = max(planar * planar - dx * dx, 0.25) ** 0.5
+
+        hand = "desk_rest_l" if side == "l" else "mouse"
+        out[hand] = (sh[0] + dx, desk_y, sh[2] + dz)
+
+        # The lap is lower, closer and further inboard.
+        lap_d = reach * 0.52
+        out[f"lap_rest_{side}"] = (
+            sh[0] - sign * lap_d * 0.30,
+            j["joint-pelvis"][1] + 1.1,
+            sh[2] + lap_d * 0.62,
+        )
+        out[f"armrest_{side}"] = (
+            sh[0] + sign * 0.35,
+            desk_y - 1.5,
+            sh[2] + planar * 0.55,
+        )
+
+    mouse = out["mouse"]
+    out["keyboard"] = (mouse[0] * 0.35, mouse[1], mouse[2] - 0.3)
+    return out
 
 
 def mh_to_blender(p):
