@@ -463,7 +463,7 @@ def _bar():
 def click(bar, x, y):
     import cv2
 
-    bar._on_mouse(cv2.EVENT_LBUTTONDOWN, x, y, 0, None)
+    bar.on_mouse(cv2.EVENT_LBUTTONDOWN, x, y)
 
 
 def test_dropdown_opens_selects_and_dismisses():
