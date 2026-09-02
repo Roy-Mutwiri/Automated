@@ -312,6 +312,15 @@ class LiveSession:
 
             tts = FileTTS()
 
+        # Classification runs on the same local model as generation, and only
+        # for comments the heuristic is unsure about.
+        if llm is not None:
+            from intelligence.comments import build_classifier
+
+            classifier = build_classifier(llm)
+        else:
+            classifier = None
+
         self.runtime = SessionRuntime(
             state=SessionState(
                 session_id=self.session_id,
@@ -329,6 +338,8 @@ class LiveSession:
             planner=planner,
             proposer=proposer,
         )
+        if classifier is not None:
+            self.runtime.pipeline.classifier = classifier
 
         # Resume what this session had already covered. Without this a restart
         # -- crash, upgrade, reboot -- makes the host repeat an hour of

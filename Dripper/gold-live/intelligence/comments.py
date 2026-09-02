@@ -1,14 +1,14 @@
 """Comment pipeline: normalise -> classify -> dedupe -> prioritise.
 
 Not every comment reaches the generator. Most should not. This stage is
-deliberately cheap: classification runs on Haiku, dedup and prioritisation
-are plain code.
+deliberately cheap: the heuristic decides most cases in code, and the local
+model is consulted only where it is genuinely unsure.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-import os
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -156,29 +156,79 @@ class CommentPipeline:
         return ScoredComment(comment=scored, priority=priority, weight=weight)
 
 
-def build_classifier(model: str | None = None):
-    """Haiku-backed classifier. Returns None when no API key is configured."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return None
+CLASSIFIER_SYSTEM = """Classify one comment from a live Gold (XAUUSD) trading stream.
 
-    import anthropic
+Reply with JSON only, no other text:
+{"intent": "...", "is_risk_sensitive": true|false, "relevance": 0.0-1.0}
 
-    client = anthropic.AsyncAnthropic()
-    model = model or os.environ.get("GOLD_MODEL_CLASSIFY", "claude-haiku-4-5")
+intent is one of: market_q, technical_q, education_q, greeting, joke, spam,
+provocation, off_topic, trade_advice_req
 
-    async def classify(c: CommentEvent) -> CommentClassification:
-        msg = await client.messages.parse(
-            model=model,
-            max_tokens=256,
-            system=(
-                "Classify a single live-stream comment on a Gold/XAUUSD trading "
-                "stream. is_risk_sensitive must be true for any request for "
-                "personalised trading advice, entries, targets, or a prediction "
-                "of where price will go. Be strict about that field."
-            ),
-            messages=[{"role": "user", "content": c.text_raw}],
-            output_config={"format": CommentClassification},
+is_risk_sensitive is true for ANY request for personalised trading advice, an
+entry or exit, a target, a signal, or a prediction of where price will go. Be
+strict: a false negative here means the host gives financial advice.
+
+relevance is how much a Gold trading audience would benefit from this being
+answered on air."""
+
+# Which heuristic verdicts are worth a second opinion. Spam, greetings and
+# clear technical questions are already decided; asking a model to re-confirm
+# them is latency and GPU time spent on nothing.
+AMBIGUOUS_INTENTS = {
+    CommentIntent.MARKET_Q,
+    CommentIntent.OFF_TOPIC,
+    CommentIntent.JOKE,
+}
+
+
+def build_classifier(llm, escalate_only: bool = True):
+    """Classification backed by the locally hosted model.
+
+    Runs on the same server as generation. Two things keep the cost sane:
+
+    `escalate_only` -- the heuristic decides first, and the model is consulted
+    only where the heuristic is genuinely unsure. On a busy stream across seven
+    sessions, classifying every comment with a model is a large amount of GPU
+    time spent re-confirming that "gm" is a greeting.
+
+    Fail-safe -- a model verdict can UPGRADE a comment to risk-sensitive but
+    never downgrade one the regex already flagged. A classifier failure must
+    not be the reason the host starts giving trading advice.
+    """
+
+    async def classify(c: CommentEvent) -> CommentClassification | None:
+        baseline = heuristic_classify(c)
+        if escalate_only and baseline.intent not in AMBIGUOUS_INTENTS:
+            return baseline
+
+        from platform_.llm.base import ChatMessage
+
+        result = await llm.complete(
+            [
+                ChatMessage(role="system", content=CLASSIFIER_SYSTEM),
+                ChatMessage(role="user", content=c.text_raw[:400]),
+            ],
+            max_tokens=120,
+            temperature=0.0,  # a classifier that varies run to run is not one
         )
-        return msg.parsed_output
+
+        match = re.search(r"\{[^{}]*\}", result.text)
+        if not match:
+            log.debug("classifier returned no JSON; keeping heuristic verdict")
+            return baseline
+        try:
+            data = json.loads(match.group(0))
+            intent = CommentIntent(str(data.get("intent", baseline.intent.value)))
+        except (json.JSONDecodeError, ValueError):
+            return baseline
+
+        return CommentClassification(
+            intent=intent,
+            # Either source may raise the flag; neither may lower it.
+            is_risk_sensitive=bool(data.get("is_risk_sensitive"))
+            or baseline.is_risk_sensitive,
+            relevance=max(0.0, min(1.0, float(data.get("relevance", baseline.relevance)))),
+            source_confidence=baseline.source_confidence,
+        )
 
     return classify
