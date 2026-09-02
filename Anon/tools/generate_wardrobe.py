@@ -58,9 +58,24 @@ base portrait being replaced.
   to a line above the hands. Hands stay out of it deliberately: diffusion
   models are unreliable at hands and there is no reason to re-roll a pair that
   already came out correct.
-* **Headwear** - the crown, plus a panel down each side of the head, *minus*
-  the face. A ghutra is not a hat; it hangs past the ears onto the shoulders,
-  so a mask stopping at the hairline can only ever produce a cap.
+* **Headwear** - one contiguous bell from the crown out to the shoulders,
+  *minus* the face and the centre of the chest. A ghutra is not a hat; it hangs
+  past the ears, so a mask stopping at the hairline can only ever produce a cap.
+
+## What the prompts had to be
+
+Three prompt shapes were generated side by side for the ghutra. Naming the
+garment ("a white ghutra draped over his head, Gulf Arab headdress") returns
+**braided hair**. Describing it literally without naming the culture returns
+the same. Only establishing the wearer and then *defining* the object - "a
+Saudi man wearing a white ghutra and black agal, the ghutra is a large plain
+white cotton cloth covering his head..." - produces cloth at all.
+
+The **agal**, the black cord ring, does not come out and the menu labels do not
+claim it. It stays in the prompt because it steers the drape, but as one clause
+among many the model spends the whole mask on the cloth. A dedicated third pass
+over the crown was tried and was worse - it repainted the top of the head as
+bare scalp.
 
 Run `--preview` first. It writes the masks over the portrait and generates
 nothing, which costs seconds instead of minutes.
