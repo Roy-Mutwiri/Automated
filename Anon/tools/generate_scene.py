@@ -69,10 +69,12 @@ SUBJECT = (
     "calm friendly neutral expression, mouth closed, eyes open and clearly visible"
 )
 
-# The room leads. See module docstring.
+# Phrased as the space *around him*, and placed after the subject. See the SHOT
+# note below for why leading with this does not work.
 ROOM = (
-    "interior photograph of a luxury professional streaming studio at night, "
-    "back wall of vertical dark walnut acoustic slat panels over charcoal felt, "
+    "sitting in a luxury professional streaming studio at night, "
+    "on the wall several feet behind him vertical dark walnut acoustic slat "
+    "panels over charcoal felt, "
     "visible natural wood grain, semi-matte finish, "
     "dark charcoal painted wall on one side, "
     "premium floating shelves mostly empty with only a few objects, "
