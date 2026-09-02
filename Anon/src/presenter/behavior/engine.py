@@ -130,6 +130,7 @@ class BehaviorEngine:
         self._motion_budget = 0.0
         self._frame_interval = 1.0 / 30.0
         self._events: list[BehaviorEvent] = []
+        self._recorded = 0
         self._pose = AvatarPose()
 
     # -- external control ---------------------------------------------------
@@ -275,8 +276,19 @@ class BehaviorEngine:
             self._motion_budget += 0.6
         self._motion_budget = min(self._motion_budget, 2.5)
 
-        for ev in self._events[len(self._events) - 8:]:
-            self.memory.record(ev.time, ev.kind, ev.detail.split(" ")[0])
+        # Record only events not yet seen.
+        #
+        # The first version re-recorded the last eight events every frame, at
+        # 30 Hz. Every event therefore entered the memory dozens of times in a
+        # fixed order, and the repetition detector duly reported enormous
+        # n-gram excess - 125x on sequences that the behaviour never actually
+        # produced. The loop was in the instrumentation, and it was strong
+        # enough to survive turning the anti-repetition terms off entirely,
+        # which is what gave it away.
+        while self._recorded < len(self._events):
+            ev = self._events[self._recorded]
+            self.memory.record(ev.time, ev.kind, ev.detail)
+            self._recorded += 1
 
         self.stats.blinks = self.blink.blink_count
         self.stats.saccades = self.attention.shift_count
@@ -305,6 +317,7 @@ class BehaviorEngine:
     def drain_events(self) -> list[BehaviorEvent]:
         """Take and clear the accumulated events."""
         events, self._events = self._events, []
+        self._recorded = 0
         return events
 
     def peek_events(self) -> list[BehaviorEvent]:
