@@ -82,6 +82,7 @@ class Wardrobe:
                     label=str(spec.get("label", key)),
                     prompt=spec.get("prompt"),
                     drape=float(spec.get("drape", 0.9)),
+                    agal=spec.get("agal"),
                 )
             return out
 
