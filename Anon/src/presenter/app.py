@@ -224,9 +224,35 @@ def main() -> int:
             if missing:
                 print(f"[app] wardrobe: {missing} combination(s) not generated")
 
+    # Cameras are the other thing that decides which master frame is prepared.
+    # A camera and an outfit are both "a source portrait", so they cannot both
+    # be in force: the outfits were inpainted onto the head-and-shoulders
+    # portrait, not onto a room-scale master frame. Whichever was picked last
+    # wins, and the UI reflects that by clearing the other one's highlight.
+    rig = camera = None
+    if args.cameras and args.renderer == "liveportrait":
+        from presenter.render.cameras import CameraRig
+
+        try:
+            rig = CameraRig.load(args.cameras)
+        except FileNotFoundError:
+            print(f"[app] no camera rig at {args.cameras}; buttons disabled")
+        else:
+            camera = rig.default()
+            if camera is None:
+                print("[app] no camera has been generated yet - run "
+                      "tools/generate_cameras.py --all")
+            elif rig.missing():
+                print(f"[app] cameras: {len(rig.missing())} not generated "
+                      f"({', '.join(rig.missing())})")
+
     if not args.source:
-        args.source = str(wardrobe.path(*outfit)) if outfit \
-            else "assets/presenter_source.png"
+        if camera is not None:
+            args.source = str(rig.path(camera))
+        elif outfit:
+            args.source = str(wardrobe.path(*outfit))
+        else:
+            args.source = "assets/presenter_source.png"
 
     if args.renderer == "liveportrait":
         import torch
