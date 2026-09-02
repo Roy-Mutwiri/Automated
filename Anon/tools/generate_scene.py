@@ -100,11 +100,11 @@ SUBJECT_PROMPT = (
 # charcoal, with matte black and monitors carrying the rest, or the whole room
 # turns brown. Roughly charcoal 35 / walnut 25 / black tech 25 / light 15.
 ROOM = (
-    "photo of " + _ANCHOR + " in a modern luxury streaming room at night, "
-    "charcoal grey walls, dark walnut vertical acoustic slat panel accent "
-    "behind him, matte black desk, two modern monitors glowing, broadcast "
-    "microphone on a black boom arm, hidden warm LED strip lighting, "
-    "minimal contemporary, shallow depth of field, photograph"
+    "photo of " + _ANCHOR + ", his head and shoulders large in frame, "
+    "sitting in a black high-back gaming chair, in a modern luxury streaming "
+    "room at night, charcoal walls, dark walnut vertical slat panel accent, "
+    "matte black desk, two monitors glowing, broadcast mic on a boom arm, "
+    "hidden warm LED lighting, contemporary, photograph"
 )
 
 CONCEPTS = {
@@ -121,14 +121,15 @@ CONCEPTS = {
 # tokens, so two thirds of it - every geometry and look term - was discarded
 # before the model saw it.
 NEGATIVE = (
-    "rustic, cabin, log cabin, antique, vintage, traditional study, library, "
-    "country house, wooden room, all wood interior, brown room, farmhouse, "
-    "bare table lamp, old camera, antique furniture, ornate frames, "
-    "music studio, midi keyboard, piano, mixing console, podcast only"
+    "empty room, no people, unoccupied, tiny person, distant person, "
+    "wide room shot, interior only, "
+    "rustic, cabin, antique, vintage, traditional study, library, "
+    "wooden room, all wood interior, brown room, bare table lamp, "
+    "music studio, midi keyboard, piano, mixing console"
 )
 
 NEGATIVE_2 = (
-    "wide room shot, tiny person, distant person, empty room, no people, "
+    "empty room, no people, unoccupied, tiny person, distant person, "
     "office chair, mesh chair, executive chair, corporate office, bedroom, "
     "rgb lighting, rainbow, neon, purple, cyberpunk, "
     "text, letters, signage, logo, watermark, screen text, "
