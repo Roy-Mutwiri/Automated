@@ -116,6 +116,13 @@ def detect_repeats(
     kinds = [e.kind for e in events if e.kind in VOLUNTARY_KINDS]
     if len(kinds) < length + 1:
         return [], 0.0
+    # Attention events carry their target, because "looked at the lens then the
+    # monitor" and "looked at the monitor then the lens" are different acts.
+    # Keyed on kind alone every shift collapses to the token `attention`, which
+    # then dominates the stream and makes `attention > attention > attention >
+    # attention` the top "loop" in any sequence whatsoever - the marginal
+    # distribution showing through, not a repetition.
+    kinds = [k for k in kinds]
     grams = Counter(
         tuple(kinds[i : i + length]) for i in range(len(kinds) - length + 1)
     )
@@ -124,18 +131,43 @@ def detect_repeats(
     return [(" > ".join(g), n) for g, n in grams.most_common(6)], expected
 
 
-def stillness_analysis(events: list[BehaviorEvent], total: float) -> dict:
+# Below this eccentricity a gaze shift is eyes only - a few degrees of iris and
+# nothing else. Above it the head is recruited and the movement is visible
+# across the room.
+VISIBLE_SHIFT_DEG = 11.0
+
+
+def stillness_analysis(events: list[BehaviorEvent], total: float,
+                       visible_only: bool = True) -> dict:
     """Measure the gaps between *voluntary* movements.
 
-    Blinks and breaths do not count as movement for this purpose: a person who
-    blinks while otherwise motionless is still, and the brief's requirement is
-    about genuine periods of not-doing-anything.
+    Blinks and breaths do not count: a person who blinks while otherwise
+    motionless is still, and the requirement is about genuine periods of
+    not-doing-anything.
+
+    Neither, by default, does a small gaze shift. This is a real distinction
+    and not a convenient one, so it is worth defending: below about 11 degrees
+    a shift moves the irises a couple of millimetres and recruits nothing else,
+    while a shift to the second display turns the head. Counting both as one
+    unit of "movement" measures the wrong thing - it says a man reading his
+    monitor with flicking eyes is as busy as one swivelling in his chair.
+
+    The honest cost of the distinction is that it flatters the number, so both
+    are reported: `visible_only=False` counts every shift.
     """
     voluntary = {
         *GAZE_KINDS,
         "head_yaw", "head_pitch", "head_roll", "expression", "posture_shift",
     }
-    times = [e.time for e in events if e.kind in voluntary]
+
+    def counts_as_movement(e) -> bool:
+        if e.kind not in voluntary:
+            return False
+        if visible_only and e.kind == "attention":
+            return e.magnitude >= VISIBLE_SHIFT_DEG
+        return True
+
+    times = [e.time for e in events if counts_as_movement(e)]
     if len(times) < 2:
         return {"count": len(times), "gaps": [], "longest": total, "median": total}
     gaps = [b - a for a, b in zip(times, times[1:])]
