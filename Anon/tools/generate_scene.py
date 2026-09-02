@@ -297,7 +297,9 @@ def main() -> int:
     # wastes far more time than tiled decoding ever will.
     # Slicing only - tiling is unnecessary now the decode is fp16, and it was
     # the tiling specifically that cost the time.
-    pipe.enable_vae_slicing()
+    # API moved in newer diffusers: it lives on the VAE now, not the pipeline.
+    if hasattr(pipe.vae, "enable_slicing"):
+        pipe.vae.enable_slicing()
 
     paths = []
     for i in range(args.count):
