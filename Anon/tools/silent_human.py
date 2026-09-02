@@ -203,8 +203,8 @@ def main() -> int:
     metrics["seed"] = args.seed
     metrics["profile"] = args.profile
     metrics["repeated_ngrams"] = [
-        {"gram": list(g), "count": c}
-        for g, c in engine.memory.repeated_ngrams(n=3, min_repeats=3)
+        {"gram": list(g), "count": c, "expected": e}
+        for g, c, e in engine.memory.repeated_ngrams(n=4, min_count=4)
     ]
     Path(args.metrics).write_text(json.dumps(metrics, indent=2))
     print(f"[silent] metrics -> {args.metrics}")

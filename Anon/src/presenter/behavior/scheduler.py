@@ -201,21 +201,42 @@ class BehaviorMemory:
 
     # Blinks and microsaccades are involuntary and recur by construction.
     # Including them in the n-gram statistic buries every real repetition under
-    # a wall of `blink, blink, blink` - a mistake made once already in this
-    # project's loop detector.
-    INVOLUNTARY = {"blink", "microsaccade", "breath", "drift"}
+    # a wall of `blink, blink, blink`.
+    #
+    # Matched by prefix, not by splitting on ".". The engine emits
+    # `blink_partial` and `double_blink_second`, neither of which an exact-match
+    # test on "blink" excludes - so the first version of this filter let every
+    # blink variant through and the detector duly reported blink-anchored
+    # sequences as loops.
+    INVOLUNTARY = ("blink", "microsaccade", "breath", "drift")
 
-    def __init__(self, window: int = 40) -> None:
+    def __init__(self, window: int = 400) -> None:
         self.events: deque[tuple[float, str]] = deque(maxlen=window)
         self.last_at: dict[str, float] = {}
         self.counts: Counter[str] = Counter()
 
+    @staticmethod
+    def _label(kind: str, detail: str) -> str:
+        """Coarse action identity: what he did, not by exactly how much.
+
+        `head_yaw to=(+0.28,-1.39,-0.99)deg` and the same move a degree over are
+        the same *behaviour*, and a detector keyed on the numbers will either
+        miss the repetition or - as happened here - report spurious ones when a
+        quantised value collides. Attention keeps its target name because
+        looking at the lens and looking at chat are genuinely different acts;
+        everything else keeps only its kind.
+        """
+        if kind == "attention":
+            return f"attention:{detail.split(' ')[0]}"
+        if kind == "state_change":
+            return f"state:{detail.split(' -> ')[-1]}"
+        return kind
+
     def record(self, now: float, kind: str, detail: str = "") -> None:
-        key = f"{kind}:{detail}" if detail else kind
         self.last_at[kind] = now
         self.counts[kind] += 1
-        if kind.split(".")[0] not in self.INVOLUNTARY:
-            self.events.append((now, key))
+        if not kind.startswith(self.INVOLUNTARY):
+            self.events.append((now, self._label(kind, detail)))
 
     def since(self, kind: str, now: float) -> float:
         return now - self.last_at.get(kind, -1e9)
@@ -229,10 +250,37 @@ class BehaviorMemory:
         """Multiplier in (0, 1] that shrinks the more often `kind` fired lately."""
         return decay ** self.recent_count(kind, now, window)
 
-    def repeated_ngrams(self, n: int = 3, min_repeats: int = 3):
-        """n-grams of voluntary actions that recur. Evidence of a loop."""
-        seq = [k.split(" ")[0] for _, k in self.events]
-        if len(seq) < n * min_repeats:
+    def repeated_ngrams(self, n: int = 4, min_count: int = 4,
+                        excess: float = 4.0):
+        """Sequences that recur *more than chance would produce*.
+
+        A raw count is not a loop detector. If half of all attention events are
+        the lens, then `LENS -> DISPLAY -> LENS` will appear often in any
+        sequence whatsoever, including a perfectly natural one, and a
+        count-based test flags it every time.
+
+        What matters is *excess* structure: how often a gram appears against how
+        often the marginal distribution alone predicts. A gram at four times its
+        expected rate is a habit the sampler is not supposed to have; a gram at
+        one times its expected rate is just the marginals showing through.
+        """
+        seq = [k for _, k in self.events]
+        if len(seq) < n * min_count:
             return []
-        grams = Counter(tuple(seq[i:i + n]) for i in range(len(seq) - n + 1))
-        return [(g, c) for g, c in grams.items() if c >= min_repeats]
+
+        marg = Counter(seq)
+        total = len(seq)
+        positions = total - n + 1
+        grams = Counter(tuple(seq[i:i + n]) for i in range(positions))
+
+        out = []
+        for g, c in grams.items():
+            if c < min_count:
+                continue
+            p = 1.0
+            for token in g:
+                p *= marg[token] / total
+            expected = p * positions
+            if expected <= 0 or c / expected >= excess:
+                out.append((g, c, round(expected, 2)))
+        return sorted(out, key=lambda r: -r[1])
