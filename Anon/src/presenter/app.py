@@ -525,6 +525,21 @@ def main() -> int:
                     engine.set_state(_STATE_KEYS[key])
                     print(f"[app] state -> {_STATE_KEYS[key].value}")
 
+                if cam_row is not None:
+                    # Cameras cannot use 1-9: those are behaviour states and
+                    # were there first. Bracket keys step through the rig.
+                    if key == ord("["):
+                        nxt = cam_row.step(-1)
+                        if nxt:
+                            cut_to(nxt)
+                    elif key == ord("]"):
+                        nxt = cam_row.step(1)
+                        if nxt:
+                            cut_to(nxt)
+                    pressed = cam_row.take_selection()
+                    if pressed is not None:
+                        cut_to(pressed)
+
                 if bar is not None:
                     # Keyboard shortcuts alongside the menus. The window is
                     # usually driven from the keyboard already, and cycling is
