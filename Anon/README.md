@@ -28,7 +28,10 @@ uv pip install --python .venv/Scripts/python.exe torch torchvision \
     --index-url https://download.pytorch.org/whl/cu128
 uv pip install --python .venv/Scripts/python.exe -e .
 
-# behaviour preview (schematic rig)
+# photoreal avatar
+.venv/Scripts/python.exe -m presenter.app --renderer liveportrait --debug --compile
+
+# behaviour preview (schematic rig, no GPU needed)
 .venv/Scripts/python.exe -m presenter.app --debug
 
 # 30-minute behavioural audit, ~1 second to run
