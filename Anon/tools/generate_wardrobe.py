@@ -178,60 +178,75 @@ class Geometry:
         self.eye_y = float(np.mean(lmk[:48, 1]))
 
 
+def _protect_head(m: np.ndarray, g: Geometry, grow: float = 1.0) -> None:
+    """Punch the face back out of a mask.
+
+    Everything the identity is carried by - eyes, nose, mouth, beard - has to
+    be copied through untouched rather than re-denoised, so it is removed from
+    every mask as the last step.
+    """
+    cv2.ellipse(
+        m,
+        (int(g.cx), int(g.eye_y + g.face_h * 0.30 * grow)),
+        (int(g.face_w * 0.50 * grow), int(g.face_h * 0.70 * grow)),
+        0, 0, 360, 0, -1,
+    )
+
+
 def garment_mask(g: Geometry, hands_at: float = 0.86, feather: int = 41) -> np.ndarray:
-    """Everything below the chin, above the hands."""
+    """The body: shoulders, chest and arms, above the hands.
+
+    Not "everything below the chin". The shoulders sit *higher* than the chin,
+    so a horizontal cut at the jaw draws its seam straight across the chest and
+    leaves the collar - the part of a garment that most says what it is -
+    untouched. The mask starts above the shoulder line instead and has the head
+    punched back out of it, which puts the boundary along the jaw and neck
+    where a real collar line would fall anyway.
+    """
     m = np.zeros((g.h, g.w), np.uint8)
-    top = int(g.chin_y + g.face_h * 0.10)
-    bottom = int(g.h * hands_at)
-    cv2.rectangle(m, (0, top), (g.w, bottom), 255, -1)
-    # Round the top corners in toward the neck. A straight horizontal cut
-    # across the shoulders leaves the seam exactly where the eye is looking.
-    cv2.ellipse(m, (int(g.cx), top), (int(g.face_w * 1.6), int(g.face_h * 0.45)),
-                0, 180, 360, 0, -1)
+    top = int(g.brow_y + g.face_h * 0.50)          # just above the shoulders
+    cv2.rectangle(m, (0, top), (g.w, int(g.h * hands_at)), 255, -1)
+    # Slightly tighter than the headwear protection: the collar has to be
+    # reachable, so the neck is left in the editable region.
+    _protect_head(m, g, grow=0.92)
     return cv2.GaussianBlur(m, (feather | 1, feather | 1), 0)
 
 
-def headwear_mask(g: Geometry, drape: float = 1.5, feather: int = 31) -> np.ndarray:
-    """Crown, ears and the drape onto the shoulders, minus the face.
+def headwear_mask(g: Geometry, drape: float = 0.9, feather: int = 31) -> np.ndarray:
+    """Crown and ears, plus the cloth falling past them, minus the face.
 
-    ``drape`` is how far below the chin the cloth is allowed to fall, in face
-    heights. Reduce it toward 0 for a skullcap.
+    A ghutra is not a hat. It is a square of cloth over the crown whose sides
+    hang past the ears and onto the shoulders, so the mask is a cap *plus two
+    side panels* rather than one large blob - a single big ellipse reaches
+    across the chest, where no part of the headdress actually goes, and hands
+    the model a bib to fill in.
+
+    ``drape`` is how far the side panels fall below the chin, in face heights;
+    at 0 the panels vanish and the mask is a skullcap.
     """
     m = np.zeros((g.h, g.w), np.uint8)
 
-    # The head, generously: the landmark set covers the face, and the crown
-    # sits roughly half a face-height above the brow line.
+    # The crown. The landmark set covers the face only, and the top of the
+    # head sits roughly half a face-height above the brow line.
     cv2.ellipse(
         m,
-        (int(g.cx), int(g.brow_y + g.face_h * 0.12)),
-        (int(g.face_w * 1.05), int(g.face_h * 0.92)),
+        (int(g.cx), int(g.brow_y + g.face_h * 0.05)),
+        (int(g.face_w * 0.92), int(g.face_h * 0.80)),
         0, 0, 360, 255, -1,
     )
-    # The drape: down the sides of the head onto the shoulders.
-    if drape > 0:
-        cv2.ellipse(
-            m,
-            (int(g.cx), int(g.chin_y)),
-            (int(g.face_w * 1.15), int(g.face_h * drape)),
-            0, 0, 360, 255, -1,
-        )
-        # Keep the drape off the front of the chest - the cloth hangs beside
-        # the neck, it does not cover it like a bib.
-        cv2.ellipse(
-            m,
-            (int(g.cx), int(g.chin_y + g.face_h * 0.35)),
-            (int(g.face_w * 0.52), int(g.face_h * 1.05)),
-            0, 0, 360, 0, -1,
-        )
 
-    # Protect the face. Everything the identity is carried by - eyes, nose,
-    # mouth, beard - has to be copied through untouched, not re-denoised.
-    cv2.ellipse(
-        m,
-        (int(g.cx), int(g.eye_y + g.face_h * 0.34)),
-        (int(g.face_w * 0.47), int(g.face_h * 0.66)),
-        0, 0, 360, 0, -1,
-    )
+    # The two side panels, outboard of the face so they cannot creep across it.
+    if drape > 0:
+        for side in (-1, 1):
+            cv2.ellipse(
+                m,
+                (int(g.cx + side * g.face_w * 0.68),
+                 int(g.chin_y - g.face_h * 0.15)),
+                (int(g.face_w * 0.40), int(g.face_h * (0.55 + drape * 0.55))),
+                0, 0, 360, 255, -1,
+            )
+
+    _protect_head(m, g)
     return cv2.GaussianBlur(m, (feather | 1, feather | 1), 0)
 
 
