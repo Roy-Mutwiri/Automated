@@ -195,18 +195,32 @@ def identity_weights(ratios: dict) -> dict[str, float]:
     return {k: v for k, v in w.items() if abs(v) > 1e-6}
 
 
-def write_obj(path, verts, source_lines):
-    """Rewrite base.obj with new vertex positions, everything else verbatim."""
-    vi = 0
+def write_obj(path, verts, source_lines, keep_face):
+    """Write the fitted BODY only, with vertices replaced.
+
+    Vertex indices stay as they are. OBJ indices are global, so dropping faces
+    needs no renumbering, and keeping the original numbering means the morph
+    targets and any future vertex-index mapping remain valid.
+    """
+    vi = fi = written = 0
     with open(path, "w", encoding="utf-8") as fh:
+        fh.write("# MakeHuman base mesh (CC0), body group only, "
+                 "morph-fitted to the approved identity.\n")
         for line in source_lines:
             if line.startswith("v "):
                 x, y, z = verts[vi]
                 fh.write(f"v {x:.6f} {y:.6f} {z:.6f}\n")
                 vi += 1
+            elif line.startswith("f "):
+                if keep_face[fi]:
+                    fh.write(line)
+                    written += 1
+                fi += 1
+            elif line[:2] in ("g ", "o "):
+                continue          # one object; group names are not needed
             else:
                 fh.write(line)
-    return vi
+    return vi, written
 
 
 def main() -> int:
