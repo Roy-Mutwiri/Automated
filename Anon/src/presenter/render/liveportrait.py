@@ -400,8 +400,35 @@ class LivePortraitRenderer:
 
         self._prepare_compositing(img_bgr, lmk, crop)
 
+    def _segmenter(self):
+        """DeepLabV3, kept resident once loaded.
+
+        This used to be constructed and thrown away inside every matte, which
+        was defensible while a matte happened once per process. It does not
+        happen once any more: preparing a source calls it twice - once to find
+        the head, once to composite - and the wardrobe prepares a source every
+        time the presenter changes into something new. Building a ResNet-101
+        and loading its weights four times to change a shirt is most of what
+        made the first switch take six seconds.
+
+        The cost of keeping it is ~230 MB of VRAM against 14.7 GB free, and
+        `close()` releases it.
+        """
+        if getattr(self, "_seg", None) is None:
+            import torchvision
+
+            weights = (torchvision.models.segmentation
+                       .DeepLabV3_ResNet101_Weights.DEFAULT)
+            self._seg = (
+                torchvision.models.segmentation
+                .deeplabv3_resnet101(weights=weights)
+                .eval().to(self.device),
+                weights,
+            )
+        return self._seg
+
     def _person_matte(self, img_bgr: np.ndarray) -> np.ndarray:
-        """Segment the presenter from the source portrait. Runs once.
+        """Segment the presenter from the source portrait.
 
         Uses torchvision's DeepLabV3 (BSD-licensed weights, already available
         with torch) rather than adding a matting dependency. Its output is
