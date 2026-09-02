@@ -96,8 +96,11 @@ cameras:
   - id: cam4
     name: Over shoulder
     enabled: false
-    position: [1.02, 1.72, 1.46]
-    look_at: [-0.30, 0.30, 1.40]
+    # BEHIND his right shoulder. He faces +Y, so behind him is *low* Y - the
+    # first version placed this at y=1.72, in front of him, and the floorplan
+    # caught it. Mounted high on the display wall looking back out at the room.
+    position: [0.78, 0.72, 1.56]
+    look_at: [-0.10, 2.30, 1.00]
     focal_length_mm: 40.0
     f_stop: 4.0
     focus_target: monitor_main
@@ -106,16 +109,19 @@ cameras:
   - id: cam5
     name: Rear wide
     enabled: false
-    position: [0.20, 3.95, 1.35]
-    look_at: [0.05, 0.60, 1.20]
+    # Directly behind him, between his chair and the display wall, looking out
+    # across the desk. Same correction as cam4: low Y is behind him.
+    position: [0.12, 0.42, 1.48]
+    look_at: [0.10, 2.60, 1.00]
     focal_length_mm: 32.0
     f_stop: 4.0
     focus_target: chair
     note: >-
-      Behind the cameras looking back is not "rear". Rear means behind *him*,
-      so this sits on the far side of the room from the wall and looks at the
-      back of the chair and the monitor backs. It is the hardest consistency
-      test in the rig.
+      Rear means behind *him*. He faces +Y with the slat wall at y=0, so the
+      only place a rear camera can physically stand is the 1.24 m between his
+      chair and that wall. It sees the back of his head and the back of the
+      chair, with the desk and the room beyond. Hardest consistency test in
+      the rig.
     composition: rear of head, chair back, monitor rears, whole setup
 
   - id: cam6
