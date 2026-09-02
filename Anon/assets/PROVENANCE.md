@@ -85,3 +85,60 @@ his head so it swung whenever he turned. It is a static foreground layer
 Trade-off worth knowing: streaming framing pulls back, which shrinks the face
 and costs animation resolution. Candidates were compared on face size as well
 as pose for exactly this reason.
+
+## `wardrobe/` — outfit variants
+
+| | |
+|---|---|
+| Depicts | **The same synthetic person** as `presenter_source.png`, in different clothes |
+| Origin | SDXL **inpainting** of the base portrait, generated locally |
+| Model | `diffusers/stable-diffusion-xl-1.0-inpainting-0.1` |
+| Model / output licence | **CreativeML Open RAIL++-M** — same terms as SDXL base, commercial use permitted |
+| Tool | `tools/generate_wardrobe.py` (definitions in `config/wardrobe.yaml`) |
+| Naming | `<clothing>__<headwear>.png`; `tee__none` is the base portrait itself |
+
+Reproduce with:
+
+```
+python tools/generate_wardrobe.py --preview     # check the masks first
+python tools/generate_wardrobe.py --all --sheet
+```
+
+### Why inpainting rather than a fresh generation per outfit
+
+Regenerating with `generate_presenter.py --subject "...in a thobe"` produces a
+different person every time, and the wardrobe has to be one man changing
+clothes. Inpainting masks the face out of the edit entirely, so the identity,
+the beard, the skin texture and the key light are copied through byte-for-byte
+and only the garment region is denoised. **No variant contains a re-generated
+face.**
+
+### Why a second model was downloaded
+
+SDXL base cannot insert a headdress. Its UNet takes 4 channels and was never
+trained on mask conditioning, so a masked region is denoised blind: at high
+strength it re-imagines the skull into a wound turban, at low strength it only
+restyles the hair, and given the drape mask it puts the cloth on the neck as a
+scarf. Garments worked throughout — a shirt is a plausible continuation of a
+torso — but a ghutra is not a plausible continuation of a scalp. The
+inpainting checkpoint's 9-channel UNet is trained for exactly this and does it.
+
+The licence is unchanged: that checkpoint is SDXL 1.0 fine-tuned for
+inpainting and ships under the same CreativeML Open RAIL++-M terms, which is
+why it was the acceptable choice rather than a better-known alternative.
+
+### Cultural accuracy
+
+The headwear prompts name real garments — **ghutra** and **shemagh** (the
+cloth), **agal** (the black cord ring that holds it), **taqiyah**/**kufi** (the
+skullcap), **thobe**/**kandura** (the robe). This is not decoration: prompting
+"Arabic headscarf" returns a costume-shop approximation, and the negative
+prompt has to name *turban*, *bandana* and *hijab* explicitly to stop the model
+substituting them. A ghutra is laid over the crown and hangs free past the
+ears; it is not wound around the head. Variants that come back wound are wrong
+and should be regenerated with a different `--seed`, not accepted.
+
+### Disclosure obligation
+
+Unchanged and applies to every variant: this is a synthetic identity, and the
+product must retain a clear indication that it is an AI/virtual presenter.
