@@ -86,13 +86,17 @@ def main() -> int:
     print("\n=== no workstation-local paths ===")
     # A path from this machine is the single most likely thing to survive into
     # a script and break only once it is somewhere else.
-    local = re.compile(r"[A-Za-z]:[\\/]|/mnt/[a-z]/|Users[\\/]mutwi|Documents[\\/]Automated",
-                       re.IGNORECASE)
+    # A drive letter is a SINGLE letter before the colon, so the lookbehind
+    # keeps "https://" and "bin:$PATH" out. Without it every URL in the package
+    # is a hit and the real ones are invisible among them.
+    url = re.compile(r"https?://\S+")
+    local = re.compile(r"(?<![A-Za-z])[A-Za-z]:[\\/]|/mnt/[a-z]/|"
+                       r"Users[\\/]mutwi|Documents[\\/]Automated", re.IGNORECASE)
     for p in sorted(HERE.glob("*.sh")) + sorted(HERE.glob("*.py")) + \
             [HERE / "README.md", HERE / "RUNBOOK.md"]:
         hits = [f"line {i}" for i, line in
                 enumerate(p.read_text(encoding="utf-8", errors="ignore").splitlines(), 1)
-                if local.search(line)]
+                if local.search(url.sub("", line))]
         check(f"{p.name} has no local paths", not hits, "; ".join(hits[:3]))
 
     print("\n=== failures exit nonzero ===")
