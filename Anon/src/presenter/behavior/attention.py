@@ -131,6 +131,19 @@ STATE_BIAS: dict[str, dict[str, float]] = {
 }
 
 
+# How much more (or less) head a state recruits at the same angle. Reading and
+# focusing turn the head; idle glancing does not.
+STATE_HEAD_RECRUITMENT = {
+    "READING": 1.35,
+    "FOCUSED": 1.25,
+    "LISTENING": 1.15,
+    "IDLE_ATTENTIVE": 1.0,
+    "SPEAKING": 0.95,
+    "IDLE_RELAXED": 0.85,
+    "THINKING": 0.70,
+}
+
+
 @dataclass
 class _Shift:
     """A gaze shift in flight, divided between eyes and head."""
@@ -177,7 +190,10 @@ class AttentionSystem:
 
         self._shift: _Shift | None = None
         self._recent: list[str] = []
+        self._planned_dwell = 3.0
+        self._state_at_shift = "IDLE_ATTENTIVE"
         self.shift_count = 0
+        self.torso_yaw = 0.0
 
     # -- selection ----------------------------------------------------------
     def _weights(self, drives) -> dict[str, float]:
@@ -224,27 +240,67 @@ class AttentionSystem:
         return "LENS"
 
     # -- the shift ----------------------------------------------------------
-    def _hold_share(self, az: float) -> float:
-        """How much of a *held* eccentricity the head carries.
+    def _hold_share(self, az: float, dwell: float = 3.0,
+                    state: str = "IDLE_ATTENTIVE") -> float:
+        """How much of a held eccentricity the head carries.
+
+        Not `head = eye_angle * k`. Human recruitment depends on more than
+        geometry, and the review was right that a fixed ratio produced
+        side-eye: a 19 degree glance recruited 3 degrees of head, so the eyes
+        carried it alone and the presenter looked shifty rather than
+        interested.
+
+        Three inputs:
+
+        **Eccentricity.** Below `eye_only_deg` the eyes do it alone. Above, the
+        head's share grows and is capped below 1 - the eyes always keep some
+        eccentricity at the end of a turn.
+
+        **How long he means to look.** This is the one that fixes the side-eye,
+        and it is the difference between a glance and an interest. Nobody turns
+        their head to check something for half a second; everybody turns it to
+        read for five. Scaled by the target's own dwell, so a quick chat check
+        stays eye-heavy and a sustained second-display read brings the head
+        round properly.
+
+        **What he is doing.** Reading and focusing recruit more head than idle
+        glancing at the same angle, because the head follows what matters.
 
         Defined on the target's own angle rather than on the size of the shift
-        that reached it, and that difference is the whole point. An earlier
-        version gave the head a share of each shift and then left it there: with
-        the gaze already on target no correction was ever computed, so the head
-        never came back and yaw ratcheted to 11.5 degrees over a minute of
-        ordinary glancing. Anchoring the head to where he is *looking* makes it
-        self-correcting - look back at the lens and the hold share is zero, so
-        the head returns on its own with no separate recentring rule.
+        that reached it, which is what makes it self-correcting: the lens is a
+        zero-share target, so looking back at the audience brings the head home
+        with no separate recentring rule.
         """
         p = self.profile
         eye_only = getattr(p, "eye_only_deg", 11.0)
         mag = abs(az)
         if mag <= eye_only:
             return 0.0
+
         span = max(getattr(p, "head_share_full_deg", 42.0) - eye_only, 1e-3)
         share = min((mag - eye_only) / span, 1.0)
         share *= getattr(p, "head_share_max", 0.62)
-        return share * getattr(p, "head_motion_level", 1.0)
+
+        # Intent. A 0.6 s glance keeps ~55% of the geometric share; a 5 s read
+        # gets ~1.35x it. The curve is gentle either side of a ~2.5 s pivot.
+        intent = 0.55 + 0.80 * (1.0 - math.exp(-max(dwell, 0.05) / 2.5))
+        share *= intent
+
+        share *= STATE_HEAD_RECRUITMENT.get(state, 1.0)
+        share *= getattr(p, "head_motion_level", 1.0)
+        return min(share, 0.88)
+
+    def _torso_share(self, az: float) -> float:
+        """Upper torso participation, for large turns only.
+
+        Below about 28 degrees the neck does the whole job and the chest should
+        not move at all; a torso that rotates for every glance reads as
+        swivelling.
+        """
+        mag = abs(az)
+        if mag <= 28.0:
+            return 0.0
+        return min((mag - 28.0) / 40.0, 1.0) * 0.35
 
     def _begin_shift(self, drives, name: str) -> None:
         t = self.targets[name]
@@ -259,9 +315,12 @@ class AttentionSystem:
         d_el = to_el - (self.eye_el + self.head_pitch)
         magnitude = math.hypot(d_az, d_el)
 
-        share = self._hold_share(to_az)
+        planned = t.dwell_median
+        share = self._hold_share(to_az, planned, drives.state.value)
         head_to_yaw = to_az * share
         head_to_pitch = to_el * share * 0.6
+        self._planned_dwell = planned
+        self._state_at_shift = drives.state.value
 
         # Saccade main sequence: duration rises with amplitude, ~20 ms for the
         # smallest to >100 ms for the largest. The eyes are ballistic, so this
@@ -352,12 +411,26 @@ class AttentionSystem:
         # Holding. The head eases toward its share of the current target and
         # the eyes take whatever is left, so gaze stays locked while the neck
         # settles.
-        share = self._hold_share(self.point_az)
+        # The head goes on following after the eyes have arrived, and the
+        # share itself ramps in over roughly two seconds. That ramp is what
+        # produces the sequence the brief describes: the eyes reach the target
+        # first, the head catches up over the next second or two, and the eyes
+        # *recenter in their sockets* as it does - because the eye angle here
+        # is always the residual `target - head`, so it shrinks as the head
+        # grows. Nothing has to animate the recentring; it falls out.
+        on_target = max(drives.now - self.last_change, 0.0)
+        ramp = 1.0 - math.exp(-on_target / 1.8)
+        share = self._hold_share(self.point_az, self._planned_dwell,
+                                 self._state_at_shift) * ramp
         want_yaw = self.point_az * share
         want_pitch = self.point_el * share * 0.6
         k = 1.0 - math.exp(-drives.dt / 1.4)
         self.head_yaw += (want_yaw - self.head_yaw) * k
         self.head_pitch += (want_pitch - self.head_pitch) * k
+        want_torso = self.point_az * self._torso_share(self.point_az)
+        self.torso_yaw += (want_torso - self.torso_yaw) * (
+            1.0 - math.exp(-drives.dt / 2.6))
+
         self.eye_az = self.point_az - self.head_yaw
         self.eye_el = self.point_el - self.head_pitch
 
