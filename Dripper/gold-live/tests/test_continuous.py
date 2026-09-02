@@ -76,7 +76,7 @@ def test_silence_is_still_allowed_when_disabled():
 
 def test_never_talks_over_itself_even_when_overdue():
     """Filling silence is good; interrupting yourself to do it is not."""
-    director, memory = build(max_silence_s=5.0)
+    director, _memory = build(max_silence_s=5.0)
     now = utcnow()
     speaking = intent(Priority.HIGH, topic="mkt:live")
     director.mark_speaking(speaking, duration_ms=30_000, now=now)
@@ -86,7 +86,7 @@ def test_never_talks_over_itself_even_when_overdue():
 
 
 def test_critical_still_preempts_when_overdue():
-    director, memory = build(max_silence_s=5.0)
+    director, _memory = build(max_silence_s=5.0)
     now = utcnow()
     director.mark_speaking(intent(Priority.MEDIUM), duration_ms=30_000, now=now)
     director.offer(

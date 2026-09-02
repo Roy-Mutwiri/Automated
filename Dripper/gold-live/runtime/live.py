@@ -40,7 +40,6 @@ from platform_.market.feeds import Feed, ReplayFeed, SyntheticFeed
 from runtime.health import METRICS, HealthServer, heartbeat
 from runtime.session import SessionRuntime
 from shared.contracts import (
-    AudioRequest,
     Priority,
     HealthCheck,
     HealthState,
