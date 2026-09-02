@@ -279,3 +279,75 @@ def test_desk_foreground_covers_only_the_bottom():
     assert covered.any(), "desk covers nothing"
     assert not covered[: int(180 * 0.6)].any(), "desk reaches into the face area"
     assert covered[-1], "desk does not reach the bottom of frame"
+
+
+def test_bokeh_is_clipped_tangentially_off_axis():
+    """Optical vignetting turns edge-of-frame highlights into cat's eyes, and
+    the long axis is *tangential*. Getting the orientation backwards is the
+    sort of thing that looks fine in a thumbnail and wrong at full size."""
+    from presenter.render.environment import _radial_sprite
+
+    round_ = _radial_sprite(64)
+    clipped = _radial_sprite(64, cats_eye=0.42, angle=0.0)   # offset along +x
+
+    rm = round_ > 0.1
+    assert abs(int(rm.any(0).sum()) - int(rm.any(1).sum())) <= 1, (
+        "an unvignetted highlight must be circular"
+    )
+
+    cm = clipped > 0.1
+    across = int(cm.any(0).sum())     # extent along the radial direction
+    along = int(cm.any(1).sum())      # extent tangential to it
+    assert along > across * 1.2, (
+        f"cat's eye is not elongated tangentially ({along} vs {across})"
+    )
+    assert clipped.sum() < round_.sum(), "clipping did not remove any light"
+
+
+def test_key_luminance_reads_the_lit_skin_not_the_beard():
+    """A landmark box is half skin and half hair, beard and shadow. The median
+    lands in the shadow, and a background fitted to it comes out most of a stop
+    too dark - worst on exactly the faces where it matters."""
+    import numpy as np
+
+    from presenter.render.environment import key_luminance, luminance
+
+    face = np.zeros((100, 100, 3), np.uint8)
+    face[:55] = 160          # lit skin
+    face[55:] = 30           # beard and shadow side
+    median = float(np.median(luminance(face)))
+    assert median < 100, "fixture is not actually split"
+    assert key_luminance(face) > 150, (
+        "key_luminance is being dragged into the shadow like a median would be"
+    )
+
+
+def test_background_sits_one_to_two_stops_under_the_face():
+    """The one measured property of the background. If the room and the face
+    are the same brightness the image is flat no matter how good the key is."""
+    from presenter.render.environment import fit_exposure, render_streaming_room
+
+    room = render_streaming_room(320, 180, seed=7)
+    for face_luma in (80.0, 120.0, 160.0, 200.0):
+        _, scale, stops = fit_exposure(room, face_luma)
+        assert 1.0 <= stops <= 2.0, (
+            f"face={face_luma}: background is {stops:.2f} stops down, "
+            f"outside the 1-2 stop band (scale {scale:.2f})"
+        )
+
+
+def test_light_wrap_stays_inside_the_silhouette():
+    """The wrap softens the subject's edge. Spilling *outward* would put a
+    halo on the background, which is the failure mode it exists to avoid."""
+    import numpy as np
+
+    from presenter.render.environment import light_wrap
+
+    plate = np.full((120, 120, 3), 200, np.uint8)
+    alpha = np.zeros((120, 120), np.float32)
+    alpha[:, 60:] = 1.0                      # hard edge at x = 60
+
+    wrap = light_wrap(plate, alpha, width=0.15)
+    assert wrap[:, :60].max() == 0.0, "wrap leaked outside the subject"
+    assert wrap[:, 60:72].max() > 1.0, "no wrap just inside the edge"
+    assert wrap[:, 90:].max() == 0.0, "wrap reaches deep into the subject"
