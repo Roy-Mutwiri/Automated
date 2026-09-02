@@ -631,6 +631,31 @@ class LivePortraitRenderer:
         )
         self._opaque_frac = float(self.opaque_mask.mean())
 
+        # Restore the light wrap where the per-frame path destroys it.
+        #
+        # The wrap is already baked into the static background, which is
+        # correct everywhere except the opaque interior of the mask - and that
+        # is exactly where the wrap band lives, because the band is *inside*
+        # the silhouette. The opaque zone is an integer copy of the generated
+        # crop, so it overwrites the wrap every frame and the edge snaps back
+        # to a hard cut.
+        #
+        # Re-adding it per frame therefore has to happen, but only on the band
+        # (a few thousand pixels around the perimeter, not the whole box), and
+        # only where the copy actually landed. The feather band is left to the
+        # blend above: there the background already carries the wrap, weighted
+        # by (1 - alpha), and it is two or three pixels wide.
+        self.wrap_mask = None
+        wrap = getattr(self, "wrap_layer", None)
+        if wrap is not None:
+            wl = wrap[y0:y1, x0:x1]
+            # Below ~0.75/255 the wrap cannot change the output byte, so those
+            # pixels are pure cost.
+            band = (wl.max(axis=2) > 0.75) & self.opaque_mask
+            if band.any():
+                self.wrap_mask = band
+                self.wrap_add = wl[band]
+
     # -- per-frame ----------------------------------------------------------
     def _build_driving_keypoints(self, pose: AvatarPose) -> torch.Tensor:
         """Synthesise x_d from the behaviour pose. No driving video involved."""
