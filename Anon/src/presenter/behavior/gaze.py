@@ -216,7 +216,35 @@ class GazeSystem:
         self._micro_y *= decay
 
     # -- per-frame ----------------------------------------------------------
-    def update(self, drives: Drives, pose: AvatarPose) -> None:
+    def update(self, drives: Drives, pose: AvatarPose, attention=None) -> None:
+        """Write gaze into the pose.
+
+        With an `attention` system supplied, *where* the eyes point is not this
+        system's decision any more - the presenter is looking at a thing in the
+        room and the attention model owns which thing and when it changes. What
+        stays here is everything involuntary: microsaccades and slow drift.
+        That split matters because those two are the difference between eyes
+        that hold a target and eyes that are dead, and they must keep running
+        regardless of what attention is doing.
+
+        Without one, the original self-directed behaviour is used unchanged, so
+        the subsystem stays independently testable.
+        """
+        if attention is not None:
+            self._fixation_x = attention.gaze_x
+            self._fixation_y = attention.gaze_y
+            self.last_shift_time = attention.last_change
+            self.saccade_count = attention.shift_count
+
+            self._update_microsaccades(drives)
+            self._drift_x.step(drives.dt, drives.rng)
+            self._drift_y.step(drives.dt, drives.rng)
+            pose.gaze_x = clamp(
+                self._fixation_x + self._micro_x + self._drift_x.value, -0.55, 0.55)
+            pose.gaze_y = clamp(
+                self._fixation_y + self._micro_y + self._drift_y.value, -0.45, 0.45)
+            return
+
         if self._next_saccade_at is None and self._saccade is None:
             self._schedule_next_saccade(drives)
 

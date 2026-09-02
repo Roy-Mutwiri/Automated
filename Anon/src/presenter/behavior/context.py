@@ -67,6 +67,18 @@ class Drives:
     # moments get deferred.
     suppression: float = 1.0
 
+    # 0..1, how much the current attention target taxes vision. Written by the
+    # scheduler from the attention model.
+    #
+    # This is the coupling that makes blink rate a consequence rather than a
+    # constant. The literature is unambiguous that it must be one: spontaneous
+    # blink rate runs 1.4-14.4/min while reading and 10.5-32.5/min in
+    # conversation, a factor of three driven entirely by what the eyes are
+    # doing. A single blink interval in a profile cannot represent that, and an
+    # avatar that blinks at its personality rate while staring at a display is
+    # wrong in a way viewers feel without being able to name.
+    visual_demand: float = 0.3
+
     events: list = field(default_factory=list)
 
     def allow_voluntary(self) -> bool:
