@@ -272,6 +272,63 @@ def main() -> int:
         cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(WINDOW, args.width, args.height)
 
+    bar = None
+    if wardrobe is not None and not args.headless:
+        from presenter.ui import DropdownBar, Menu, Option, draw_busy
+
+        def build_menus():
+            """Options, with the ones that have no portrait greyed out.
+
+            Availability is judged against the *other* dropdown's current
+            selection, not globally: with a white ghutra selected, the clothing
+            list should offer the garments generated with a white ghutra. So
+            the menus are rebuilt after every change rather than once."""
+            clothing, headwear = outfit
+            return [
+                Menu("clothing", "Clothing",
+                     [Option(k, i.label, wardrobe.exists(k, headwear))
+                      for k, i in wardrobe.clothing.items()], clothing),
+                Menu("headwear", "Head attire",
+                     [Option(k, i.label, wardrobe.exists(clothing, k))
+                      for k, i in wardrobe.headwear.items()], headwear),
+            ]
+
+        # Top right: the debug overlay owns the top left, and a menu drawn over
+        # the readouts would make both unreadable.
+        bar_w = 2 * 230 + 10
+        bar = DropdownBar(build_menus(), origin=(args.width - bar_w - 14, 14))
+        bar.attach(WINDOW, (args.width, args.height))
+
+        def wear(ident: str, key: str) -> None:
+            """Apply a dropdown choice. Blocks while the portrait is prepared."""
+            nonlocal outfit, bar
+            want = ((key, outfit[1]) if ident == "clothing"
+                    else (outfit[0], key))
+            if want == outfit or not wardrobe.exists(*want):
+                return
+
+            # Preparing a source runs a segmentation pass and recomposites the
+            # whole frame; the first visit to an outfit takes seconds. Show
+            # that before blocking, or the window simply stops responding.
+            busy = (last_good if last_good is not None
+                    else np.zeros((args.height, args.width, 3), np.uint8)).copy()
+            draw_busy(busy, f"changing into {wardrobe.clothing[want[0]].label}"
+                            f" / {wardrobe.headwear[want[1]].label}...")
+            cv2.imshow(WINDOW, busy)
+            cv2.waitKey(1)
+
+            t0 = time.perf_counter()
+            fresh = renderer.set_source(wardrobe.path(*want))
+            outfit = want
+            menus = build_menus()
+            for menu, previous in zip(menus, bar.menus):
+                menu.open = previous.open
+            bar.menus = menus
+            bar.attach(WINDOW, (args.width, args.height))
+            print(f"[app] outfit -> {outfit[0]}/{outfit[1]} "
+                  f"({'prepared' if fresh else 'cached'} in "
+                  f"{time.perf_counter() - t0:.2f}s)")
+
     # Warm up before the clock starts. The first render is dramatically slower
     # than steady state - measured at 31.5 s with the LivePortrait backend,
     # because cudnn.benchmark autotunes every 3D convolution shape on its first
