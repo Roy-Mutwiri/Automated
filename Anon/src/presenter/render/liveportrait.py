@@ -319,13 +319,30 @@ class LivePortraitRenderer:
         M_src2out_h = np.vstack([M_src2out, [0.0, 0.0, 1.0]]).astype(np.float32)
         self.M_crop2out = (M_src2out_h @ M_c2o_h)[:2, :].astype(np.float32)
 
-        # Static background, composed once: the fill underneath, then the
-        # correctly-scaled source on top of it.
-        self.background = self._build_fill(img_bgr, out_w, out_h)
-        cv2.warpAffine(
-            img_bgr, M_src2out, (out_w, out_h), dst=self.background,
-            flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT,
+        # Static background, composed once: the blurred fill underneath, the
+        # correctly-scaled source over it, with a feathered join.
+        fill = self._build_fill(img_bgr, out_w, out_h).astype(np.float32)
+        content = cv2.warpAffine(
+            img_bgr, M_src2out, (out_w, out_h),
+            flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+        ).astype(np.float32)
+
+        # A hard edge between sharp content and blurred fill announces itself as
+        # a composite. Feathering the join over a couple of dozen pixels reads
+        # as depth of field instead.
+        coverage = np.zeros((out_h, out_w), np.float32)
+        cx0, cy0, cw, ch = self.content_rect
+        cv2.rectangle(
+            coverage,
+            (int(round(cx0)), int(round(cy0))),
+            (int(round(cx0 + cw)) - 1, int(round(cy0 + ch)) - 1),
+            1.0, -1,
         )
+        feather = max(9, (min(out_w, out_h) // 40) | 1)
+        coverage = cv2.GaussianBlur(coverage, (feather, feather), 0)[..., None]
+        self.background = np.clip(
+            content * coverage + fill * (1.0 - coverage), 0, 255
+        ).astype(np.uint8)
 
         # Feather mask in output space, also once.
         mask = prepare_paste_back(
