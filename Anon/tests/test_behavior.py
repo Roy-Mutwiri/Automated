@@ -444,3 +444,77 @@ def test_wardrobe_prompts_fit_the_clip_token_limit():
     for headwear in (False, True):
         words = len(w.negative_for(headwear=headwear).split())
         assert words <= 60, f"negative prompt is {words} words, too long"
+
+
+# -- dropdown menus ---------------------------------------------------------
+def _bar():
+    from presenter.ui import DropdownBar, Menu, Option
+
+    return DropdownBar([
+        Menu("clothing", "Clothing",
+             [Option("tee", "Grey tee"), Option("thobe", "Thobe", enabled=False)],
+             "tee"),
+        Menu("headwear", "Head attire",
+             [Option("none", "Bare head"), Option("ghutra", "Ghutra")],
+             "none"),
+    ], origin=(100, 10))
+
+
+def click(bar, x, y):
+    import cv2
+
+    bar._on_mouse(cv2.EVENT_LBUTTONDOWN, x, y, 0, None)
+
+
+def test_dropdown_opens_selects_and_dismisses():
+    bar = _bar()
+    clothing, headwear = bar.menus
+
+    click(bar, clothing.x + 20, clothing.y + 10)
+    assert clothing.open and not headwear.open
+
+    # Opening the other menu closes this one; two open lists would overlap.
+    click(bar, headwear.x + 20, headwear.y + 10)
+    assert headwear.open and not clothing.open
+
+    x, y, w, h = headwear.row_rect(1)
+    click(bar, x + 20, y + h // 2)
+    assert bar.take_selection() == ("headwear", "ghutra")
+    assert bar.take_selection() is None, "a selection was reported twice"
+    assert not headwear.open
+
+    click(bar, clothing.x + 20, clothing.y + 10)
+    click(bar, 5, 700)                      # anywhere else
+    assert not bar.is_open, "clicking away did not dismiss the menu"
+
+
+def test_dropdown_ignores_options_with_no_portrait():
+    """A greyed row means that combination was never generated. Selecting it
+    would hand the renderer a path that does not exist."""
+    bar = _bar()
+    clothing = bar.menus[0]
+    click(bar, clothing.x + 20, clothing.y + 10)
+
+    x, y, w, h = clothing.row_rect(1)        # the disabled entry
+    click(bar, x + 20, y + h // 2)
+    assert bar.take_selection() is None
+    assert clothing.open, "a dead click closed the menu"
+
+    assert bar.cycle("clothing") == "tee", "cycle offered a disabled option"
+
+
+def test_replacing_menus_keeps_layout_and_open_state():
+    """Rebuilt menus that skip layout draw at the origin of the frame, on top
+    of the presenter."""
+    from presenter.ui import Menu, Option
+
+    bar = _bar()
+    bar.menus[0].open = True
+    before = [(m.x, m.y) for m in bar.menus]
+
+    bar.set_menus([
+        Menu("clothing", "Clothing", [Option("tee", "Grey tee")], "tee"),
+        Menu("headwear", "Head attire", [Option("none", "Bare head")], "none"),
+    ])
+    assert [(m.x, m.y) for m in bar.menus] == before
+    assert bar.menus[0].open and not bar.menus[1].open
