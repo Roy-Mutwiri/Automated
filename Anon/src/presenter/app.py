@@ -174,7 +174,36 @@ def main() -> int:
 
     engine = BehaviorEngine(profile=args.profile,
                             state=BehaviorState(args.state), seed=args.seed)
-    renderer = SchematicRenderer(args.width, args.height)
+
+    if args.renderer == "liveportrait":
+        import torch
+
+        from presenter.render.calibration import calibration_report
+        from presenter.render.liveportrait import LivePortraitRenderer
+
+        # The workload is launch-bound, not compute-bound (measured: 14-18% GPU
+        # utilisation at 30 W). cudnn.benchmark picks fixed-shape algorithms
+        # once instead of re-selecting every call.
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
+        print(f"[app] loading LivePortrait, source={args.source}")
+        renderer = LivePortraitRenderer(
+            source_image=args.source,
+            liveportrait_root=args.liveportrait_root,
+            output_size=(args.width, args.height),
+        )
+        if args.compile:
+            print("[app] torch.compile - first frames will be slow")
+            renderer.wrapper.warping_module = torch.compile(
+                renderer.wrapper.warping_module)
+            renderer.wrapper.spade_generator = torch.compile(
+                renderer.wrapper.spade_generator)
+        print(calibration_report())
+    else:
+        renderer = SchematicRenderer(args.width, args.height)
+
     timer = FrameTimer()
 
     save_dir = Path(args.save_frames) if args.save_frames else None
