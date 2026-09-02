@@ -565,7 +565,8 @@ class World:
 
 
 def build_world(pose, geometry_path="config/room_geometry.yaml",
-                cameras_path="config/cameras.yaml") -> World:
+                cameras_path="config/cameras.yaml",
+                human_mesh: str | None = None) -> World:
     """Build the entire canonical scene for one frozen simulation state."""
     geometry = yaml.safe_load((ROOT / geometry_path).read_text(encoding="utf-8"))
     cameras = yaml.safe_load((ROOT / cameras_path).read_text(encoding="utf-8"))
@@ -576,7 +577,10 @@ def build_world(pose, geometry_path="config/room_geometry.yaml",
     world.build_walnut_wall()
     world.build_monitors()
     world.build_desk_and_props()
-    world.build_human(pose)
+    # The fitted CC0 mesh if one has been built, otherwise the debug proxy.
+    # The proxy proved the camera system and is explicitly not the product.
+    if not (human_mesh and world.build_fitted_human(pose, human_mesh)):
+        world.build_human(pose)
     world.build_lighting()
     world.cameras = world.build_cameras()
     return world

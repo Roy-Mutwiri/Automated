@@ -111,6 +111,9 @@ def main() -> int:
     ap.add_argument("--width", type=int, default=960)
     ap.add_argument("--height", type=int, default=540)
     ap.add_argument("--samples", type=int, default=32)
+    ap.add_argument("--human-mesh", default=None,
+                    help="path to a fitted human OBJ; without it the debug "
+                         "proxy is used")
     ap.add_argument("--turntable", action="store_true",
                     help="render the human from seven yaw angles instead, to "
                          "check identity holds around the head")
@@ -124,7 +127,7 @@ def main() -> int:
 
     from presenter.scene3d.world import build_world
 
-    world = build_world(pose)
+    world = build_world(pose, human_mesh=args.human_mesh)
     problems = world.validate_cameras()
     for p in problems:
         print(f"[multicam] CAMERA PROBLEM: {p}")
