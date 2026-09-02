@@ -126,11 +126,17 @@ class HealthServer:
         port: int = 9101,
         host: str = "127.0.0.1",
         metrics: Metrics | None = None,
+        controls: dict[str, Callable[[dict], dict]] | None = None,
     ) -> None:
         self.provider = provider
         self.port = port
         self.host = host
         self.metrics = metrics or METRICS
+        # Operator controls, POSTed to /control/<name>. Bound to localhost and
+        # unauthenticated -- reach them over an SSH tunnel, never expose the
+        # port. Anything that can pause a broadcast should not be open to the
+        # internet on a machine that is, by design, always on.
+        self.controls = controls or {}
         self._server: HTTPServer | None = None
         self._thread: threading.Thread | None = None
         self.started_at = time.time()
@@ -199,8 +205,55 @@ class HealthServer:
                     self._send(
                         200, server.metrics.render().encode(), "text/plain; version=0.0.4"
                     )
+                elif path == "/controls":
+                    self._send(
+                        200,
+                        json.dumps({"available": sorted(server.controls)}).encode(),
+                        "application/json",
+                    )
                 else:
                     self._send(404, b"not found", "text/plain")
+
+            def do_POST(self) -> None:
+                path = self.path.split("?")[0]
+                if not path.startswith("/control/"):
+                    self._send(404, b"not found", "text/plain")
+                    return
+
+                name = path[len("/control/") :]
+                action = server.controls.get(name)
+                if action is None:
+                    self._send(
+                        404,
+                        json.dumps(
+                            {"error": f"unknown control {name!r}",
+                             "available": sorted(server.controls)}
+                        ).encode(),
+                        "application/json",
+                    )
+                    return
+
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                    payload = json.loads(self.rfile.read(length) or b"{}")
+                    if not isinstance(payload, dict):
+                        raise ValueError("body must be a JSON object")
+                except (ValueError, json.JSONDecodeError) as exc:
+                    self._send(400, json.dumps({"error": str(exc)}).encode(),
+                               "application/json")
+                    return
+
+                try:
+                    result = action(payload)
+                except Exception as exc:
+                    # take down the session it is meant to be controlling.
+                    log.exception("control %r failed", name)
+                    self._send(500, json.dumps({"error": str(exc)}).encode(),
+                               "application/json")
+                    return
+
+                self._send(200, json.dumps(result or {"ok": True}).encode(),
+                           "application/json")
 
             def log_message(self, *args) -> None:
                 pass  # health probes must not fill the journal

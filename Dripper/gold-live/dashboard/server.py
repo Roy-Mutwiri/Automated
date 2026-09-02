@@ -85,13 +85,72 @@ padding:11px 13px;margin-bottom:7px}
 .meta{color:var(--muted);font-size:11px;margin-bottom:4px;
 display:flex;gap:12px;flex-wrap:wrap}
 .empty{color:var(--muted);padding:20px 0}
+.ctl{display:flex;gap:5px;flex-wrap:wrap;margin-top:11px;
+padding-top:10px;border-top:1px solid var(--rule)}
+.ctl button{font:inherit;font-size:11px;padding:4px 9px;cursor:pointer;
+background:var(--bg);color:var(--fg);border:1px solid var(--rule);border-radius:3px}
+.ctl button:hover{border-color:var(--muted)}
+.ctl button:focus-visible{outline:2px solid var(--warn);outline-offset:1px}
+.warnbar{background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--warn);
+border-radius:4px;padding:9px 12px;margin-bottom:16px;font-size:12px;color:var(--muted)}
 </style>
 <h1>Gold Live</h1>
-<div class="sub">%(when)s &middot; refreshes every 10s</div>
-<div class="grid">%(cards)s</div>
+<div class="sub">__WHEN__ &middot; refreshes every 10s</div>
+<div class="warnbar">Controls act on live broadcasts immediately. No authentication &mdash; localhost only, reach it over SSH.</div>
+<script>__JS__</script>
+<div class="grid">__CARDS__</div>
 <h2>Recent utterances</h2>
-%(utterances)s
+__UTTERANCES__
 """
+
+
+def post_control(port: int, action: str, payload: dict | None = None, timeout: float = 4.0) -> dict:
+    body = json.dumps(payload or {}).encode()
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/control/{action}",
+        data=body, method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        return {"error": exc.read().decode(errors="replace")[:200]}
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return {"error": str(exc)}
+
+
+CONTROLS_JS = """
+async function ctl(port, action, body) {
+  const r = await fetch('/api/control/' + port + '/' + action, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body || {})
+  });
+  const out = await r.json();
+  if (out.error) { alert(action + ' failed: ' + out.error); }
+  location.reload();
+}
+async function say(port) {
+  const text = prompt('What should it say? It still goes through the safety gate.');
+  if (text) { await ctl(port, 'say', {text: text}); }
+}
+"""
+
+
+def render_controls(port: int, paused: bool) -> str:
+    toggle = (
+        f"<button onclick=\"ctl({port},'resume')\">Resume</button>"
+        if paused
+        else f"<button onclick=\"ctl({port},'pause')\">Pause</button>"
+    )
+    return (
+        f'<div class="ctl">{toggle}'
+        f"<button onclick=\"ctl({port},'mute')\">Mute</button>"
+        f"<button onclick=\"ctl({port},'unmute')\">Unmute</button>"
+        f"<button onclick=\"ctl({port},'skip')\">Skip</button>"
+        f"<button onclick=\"say({port})\">Say&hellip;</button></div>"
+    )
 
 
 def render_card(session_id: str, port: int, health: dict) -> str:
@@ -108,6 +167,9 @@ def render_card(session_id: str, port: int, health: dict) -> str:
         c["degraded_reason"] for c in health.get("components", []) if c.get("degraded_reason")
     ]
     reason_html = f'<div class="reason">{"; ".join(reasons)}</div>' if reasons else ""
+    paused = any(
+        c.get("degraded_reason") == "paused" for c in health.get("components", [])
+    )
     uptime = health.get("uptime_s")
     uptime_html = f"{uptime / 60:.0f}m" if isinstance(uptime, (int, float)) else "-"
 
@@ -116,7 +178,7 @@ def render_card(session_id: str, port: int, health: dict) -> str:
         f'<div class="name">{session_id}<span class="pill {state}">{state}</span></div>'
         f'<table><tr><td>uptime</td><td>{uptime_html}</td></tr>'
         f'<tr><td>health port</td><td>{port}</td></tr>{"".join(rows)}</table>'
-        f"{reason_html}</div>"
+        f"{reason_html}{render_controls(port, paused)}</div>"
     )
 
 
@@ -166,11 +228,15 @@ class Dashboard:
         else:
             utterances = '<div class="empty">Nothing recorded yet.</div>'
 
-        return PAGE % {
-            "when": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-            "cards": cards,
-            "utterances": utterances,
-        }
+        return (
+            PAGE.replace("__JS__", CONTROLS_JS)
+            .replace(
+                "__WHEN__",
+                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            )
+            .replace("__CARDS__", cards)
+            .replace("__UTTERANCES__", utterances)
+        )
 
     def api(self) -> dict:
         return {
@@ -213,9 +279,35 @@ def make_handler(dash: Dashboard) -> type[BaseHTTPRequestHandler]:
                     )
                 else:
                     self._send(404, b"not found", "text/plain")
+
             except Exception as exc:
                 log.exception("dashboard request failed")
                 self._send(500, str(exc).encode(), "text/plain")
+
+        def do_POST(self) -> None:
+            path = self.path.split("?")[0]
+            parts = path.strip("/").split("/")
+            # /api/control/<port>/<action>
+            if len(parts) != 4 or parts[0] != "api" or parts[1] != "control":
+                self._send(404, b"not found", "text/plain")
+                return
+            try:
+                port = int(parts[2])
+            except ValueError:
+                self._send(400, b'{"error":"bad port"}', "application/json")
+                return
+            # Only proxy to ports this dashboard actually manages, so the
+            # endpoint cannot be used to POST at arbitrary local services.
+            if port not in set(dash.ports.values()):
+                self._send(403, b'{"error":"unknown session port"}', "application/json")
+                return
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, json.JSONDecodeError):
+                payload = {}
+            result = post_control(port, parts[3], payload)
+            self._send(200, json.dumps(result).encode(), "application/json")
 
         def log_message(self, *args) -> None:
             pass

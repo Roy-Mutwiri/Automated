@@ -30,6 +30,7 @@ from pathlib import Path
 import yaml
 
 from intelligence.content import ContentPlanner, classify_phase, load_content
+from intelligence.director import SpeechIntent
 from intelligence.generation import build_generator
 from intelligence.personas import load_personas
 from intelligence.proposer import CoverageMemory, TopicProposer
@@ -40,12 +41,14 @@ from runtime.health import METRICS, HealthServer, heartbeat
 from runtime.session import SessionRuntime
 from shared.contracts import (
     AudioRequest,
+    Priority,
     HealthCheck,
     HealthState,
     PlatformBinding,
     ServiceHealth,
     SessionState,
     SessionStatus,
+    TriggerType,
 )
 from shared.store import TraceStore
 
@@ -125,6 +128,9 @@ class LiveSession:
         self.health_server: HealthServer | None = None
         self._tasks: list[asyncio.Task] = []
         self.started_at = datetime.now(timezone.utc)
+        self.paused = False
+        self.muted = False
+        self.state_status = SessionStatus.LIVE
 
     # -- health -----------------------------------------------------------
 
@@ -186,6 +192,90 @@ class LiveSession:
             )
         return out
 
+    # -- operator controls ------------------------------------------------
+
+    def build_controls(self) -> dict:
+        """What an operator can do to a running session without restarting it.
+
+        Restarting to change something loses the session's memory of what it
+        has covered, so every one of these is a live adjustment instead.
+        """
+
+        def pause(_payload: dict) -> dict:
+            self.paused = True
+            self.state_status = SessionStatus.PAUSED
+            log.warning("[%s] PAUSED by operator", self.session_id)
+            return {"paused": True}
+
+        def resume(_payload: dict) -> dict:
+            self.paused = False
+            self.state_status = SessionStatus.LIVE
+            log.warning("[%s] resumed by operator", self.session_id)
+            return {"paused": False}
+
+        def mute(_payload: dict) -> dict:
+            """Keep thinking, stop speaking.
+
+            Distinct from pause: the host carries on tracking the market and
+            reading comments, so when it is unmuted it is current rather than
+            an hour behind.
+            """
+            self.muted = True
+            log.warning("[%s] MUTED by operator", self.session_id)
+            return {"muted": True}
+
+        def unmute(_payload: dict) -> dict:
+            self.muted = False
+            log.warning("[%s] unmuted by operator", self.session_id)
+            return {"muted": False}
+
+        def skip(_payload: dict) -> dict:
+            """Cut off whatever is being said right now."""
+            if self.router is not None:
+                self.router.sink.stop()
+            return {"skipped": True}
+
+        def say(payload: dict) -> dict:
+            """Force a specific line, bypassing the Director's scoring.
+
+            Still goes through the safety gate. An operator overriding WHEN the
+            host speaks is reasonable; an operator bypassing the check on
+            whether it may quote a price is not.
+            """
+            text = str(payload.get("text", "")).strip()
+            if not text:
+                raise ValueError("say requires a non-empty 'text'")
+            if self.runtime is None:
+                raise RuntimeError("session is not running yet")
+
+            self.runtime.director.offer(
+                SpeechIntent(
+                    trigger=TriggerType.MARKET_EVENT,
+                    priority=Priority.CRITICAL,
+                    topic="operator:forced",
+                    seed_text=text,
+                    ttl_s=60.0,
+                    created_at=datetime.now(timezone.utc),
+                    payload={"hint": text, "operator_forced": True},
+                )
+            )
+            return {"queued": text}
+
+        def status(_payload: dict) -> dict:
+            return {
+                "session_id": self.session_id,
+                "paused": self.paused,
+                "muted": self.muted,
+                "utterances": len(self.runtime.transcript) if self.runtime else 0,
+                "director_queue": self.runtime.director.queue_depth if self.runtime else 0,
+            }
+
+        return {
+            "pause": pause, "resume": resume,
+            "mute": mute, "unmute": unmute,
+            "skip": skip, "say": say, "status": status,
+        }
+
     # -- loops ------------------------------------------------------------
 
     async def _market_loop(self, feed: Feed) -> None:
@@ -212,6 +302,8 @@ class LiveSession:
         assert self.runtime is not None
         while not self.stopping.is_set():
             await asyncio.sleep(self.args.tick_s)
+            if self.paused:
+                continue
             now = datetime.now(timezone.utc)
             state = self.engine.snapshot(now)
 
@@ -258,7 +350,10 @@ class LiveSession:
                 )
             self.store.record_utterance(response)
 
-            if self.router is not None:
+            # Muted still generates and records -- only audio is withheld,
+            # so the transcript stays complete and unmuting resumes a host
+            # that is current rather than an hour behind.
+            if self.router is not None and not self.muted:
                 await self.router.submit(
                     AudioRequest(
                         utterance_id=response.utterance_id,
@@ -363,7 +458,9 @@ class LiveSession:
             self.args.adapter, self.session_id, os.environ.get("AUTHOR_SALT", "change-me")
         )
 
-        self.health_server = HealthServer(self.health, port=self.args.health_port)
+        self.health_server = HealthServer(
+            self.health, port=self.args.health_port, controls=self.build_controls()
+        )
         self.health_server.start()
         METRICS.gauge("goldlive_session_up", 1, {"session": self.session_id})
 
