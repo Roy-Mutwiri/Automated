@@ -114,9 +114,6 @@ def check_prompts(w: Wardrobe, model: str) -> list[str]:
         for item in section.values():
             if item.edits:
                 combos.append((f"{kind}/{item.key}", w.prompt_for(item)))
-            if item.agal:
-                combos.append((f"{kind}/{item.key} agal",
-                               f"{item.agal}, {w.look}"))
 
     over = []
     for name, text in combos:
@@ -244,26 +241,6 @@ def headwear_mask(g: Geometry, drape: float = 0.9, feather: int = 31,
     return cv2.GaussianBlur(m, (feather | 1, feather | 1), 0)
 
 
-def agal_mask(g: Geometry, feather: int = 21) -> np.ndarray:
-    """The band on the crown where the cord ring sits.
-
-    A third pass, over a deliberately tiny region, because the agal never
-    appeared when it was one clause inside the ghutra prompt - the model spent
-    the whole mask on the cloth and the cord is a small dark detail on top of
-    it. The taqiyah is the clue: it came out immediately, and the only thing
-    that made it different was a small mask with the whole prompt pointed at
-    one object. So the agal gets the same treatment.
-    """
-    m = np.zeros((g.h, g.w), np.uint8)
-    cy = int(g.brow_y - g.face_h * 0.34)
-    cv2.ellipse(m, (int(g.cx), cy),
-                (int(g.face_w * 0.86), int(g.face_h * 0.30)),
-                0, 0, 360, 255, -1)
-    # Nothing below the brow: the cord sits on the crown, not on the face.
-    cv2.rectangle(m, (0, int(g.brow_y)), (g.w, g.h), 0, -1)
-    return cv2.GaussianBlur(m, (feather | 1, feather | 1), 0)
-
-
 def preview(img: np.ndarray, masks: dict[str, np.ndarray], out: Path) -> None:
     tint = {"garment": (0, 200, 255), "headwear": (255, 120, 0)}
     tiles = []
@@ -380,10 +357,9 @@ def main() -> int:
     print(f"[wardrobe] UNet takes {pipe.unet.config.in_channels} channels "
           f"({'mask-conditioned' if pipe.unet.config.in_channels > 4 else 'NOT mask-conditioned'})")
 
-    def inpaint(bgr, mask, item: Item, seed: int, *, head: bool,
-                prompt: str | None = None):
+    def inpaint(bgr, mask, item: Item, seed: int, *, head: bool):
         result = pipe(
-            prompt=prompt if prompt is not None else w.prompt_for(item),
+            prompt=w.prompt_for(item),
             negative_prompt=w.negative_for(headwear=head),
             image=Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)),
             mask_image=Image.fromarray(mask),
@@ -415,15 +391,8 @@ def main() -> int:
             out = body
             head_item = w.headwear[head]
             if head_item.edits:
-                seed = args.seed + ci * 17 + hi * 3
                 out = inpaint(body, headwear_mask(g, drape=head_item.drape),
-                              head_item, seed, head=True)
-                if head_item.agal:
-                    # A third pass, over the crown only, once the cloth is
-                    # there for the cord to sit on.
-                    out = inpaint(out, agal_mask(g), head_item, seed + 1,
-                                  head=True,
-                                  prompt=f"{head_item.agal}, {w.look}")
+                              head_item, args.seed + ci * 17 + hi * 3, head=True)
             cv2.imwrite(str(path), out)
             written.append(path)
             print(f"[wardrobe] {path.name}")
