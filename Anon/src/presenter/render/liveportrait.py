@@ -562,13 +562,20 @@ class LivePortraitRenderer:
             # the silhouette is an algebraic cut: a hard boundary between two
             # images that a photograph would never produce, because in a real
             # room the background's light spills around the edge of the head.
-            # Kept as its own layer because the per-frame path overwrites the
-            # interior of the silhouette - see _finish_blend_setup.
+            #
+            # It is kept as its own layer and deliberately *not* folded in
+            # here. The per-frame path rebuilds every pixel of the mask - an
+            # integer copy over the opaque interior, an alpha blend over the
+            # feather band - and both land squarely on the wrap band, which by
+            # construction sits just inside the silhouette. Baking it in now
+            # would mean the copy erases it and the blend delivers it at
+            # (1 - alpha) strength, which is near zero precisely at the edge
+            # it exists to soften. _finish_blend_setup adds it back afterwards.
             self.wrap_layer = light_wrap(
                 fill, alpha_out[..., 0], style.wrap_width, style.wrap_strength
             )
             self.background = np.clip(
-                content + fill * (1.0 - alpha_out) + self.wrap_layer, 0, 255
+                content + fill * (1.0 - alpha_out), 0, 255
             ).astype(np.uint8)
             # Per-frame, the generated crop must be confined to the subject:
             # LivePortrait regenerates the whole crop including the portrait's
