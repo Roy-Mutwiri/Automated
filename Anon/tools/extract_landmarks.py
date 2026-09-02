@@ -97,18 +97,30 @@ def main() -> int:
         return 2
     h, w = img.shape[:2]
 
+    # MediaPipe 1.x is tasks-only; the legacy `solutions.face_mesh` module is
+    # gone, so this uses FaceLandmarker with a downloaded model bundle
+    # (Apache-2.0, recorded in docs/avatar_dependency_licenses.md).
     import mediapipe as mp
+    from mediapipe.tasks.python import vision
+    from mediapipe.tasks.python.core.base_options import BaseOptions
 
-    with mp.solutions.face_mesh.FaceMesh(
-        static_image_mode=True, max_num_faces=1, refine_landmarks=True,
-        min_detection_confidence=0.4,
-    ) as mesh:
-        res = mesh.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    model = ROOT / "assets/models/face_landmarker.task"
+    options = vision.FaceLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=str(model)),
+        running_mode=vision.RunningMode.IMAGE,
+        num_faces=1,
+        output_face_blendshapes=True,
+        output_facial_transformation_matrixes=True,
+    )
+    with vision.FaceLandmarker.create_from_options(options) as landmarker:
+        mp_img = mp.Image(image_format=mp.ImageFormat.SRGB,
+                          data=cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        res = landmarker.detect(mp_img)
 
-    if not res.multi_face_landmarks:
+    if not res.face_landmarks:
         print("[landmarks] no face found")
         return 2
-    lm = res.multi_face_landmarks[0].landmark
+    lm = res.face_landmarks[0]
     print(f"[landmarks] {len(lm)} raw landmarks on a {w}x{h} plate")
 
     image_pts, canon_pts = {}, {}
