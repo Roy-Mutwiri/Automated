@@ -100,7 +100,7 @@ def test_piper_reports_absence_rather_than_crashing(tmp_path):
 def test_piper_names_the_fix_when_no_voice_exists(tmp_path):
     from platform_.tts.piper import PiperTTS
 
-    with pytest.raises(FileNotFoundError, match=r"VOICES.md"):
+    with pytest.raises(FileNotFoundError, match=r"get_voices"):
         PiperTTS(voices_dir=tmp_path)._model_path("en_GB-alba-medium")
 
 
@@ -128,3 +128,39 @@ def test_sink_survives_a_missing_backend(tmp_path: Path):
     sink = AudioSink(device_index=999_999)
     with pytest.raises(Exception):
         asyncio.run(sink.play(missing))
+
+
+# -- piper latency ---------------------------------------------------------
+
+
+def test_piper_holds_loaded_voices():
+    """The whole latency fix. A subprocess per segment reloaded a 60-114MB
+    model every utterance: 4.5s of wall time for 2s of audio, with no
+    improvement across calls. Loading once took it to ~225ms."""
+    from platform_.tts.piper import PiperTTS
+
+    tts = PiperTTS(voices_dir=Path("voices"))
+    assert hasattr(tts, "_voices"), "loaded voices must be cached"
+    assert hasattr(tts, "warmup"), "voices must be loadable before going live"
+
+
+def test_piper_default_voice_is_public_domain():
+    """The shipped default must be redistributable. Several Piper English
+    voices are CC BY-NC-SA; two of the first three picked here were."""
+    from platform_.tts.piper import PiperTTS
+
+    assert PiperTTS().default_voice == "en_US-ljspeech-high"
+
+
+def test_shipped_personas_use_audited_voices():
+    """Persona voice ids must name real, licence-checked models rather than
+    placeholder labels like 'voice_warm'."""
+    from intelligence.personas import load_personas
+    from scripts.get_voices import CATALOGUE
+    from shared.paths import config_dir
+
+    for persona in load_personas(config_dir("personas")).values():
+        assert persona.voice_id in CATALOGUE, (
+            f"{persona.persona_id} uses {persona.voice_id!r}, which is not a "
+            "known voice model"
+        )

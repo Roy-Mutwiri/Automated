@@ -10,7 +10,7 @@ focus:
 avoid:
   - long-term macro forecasting
   - beginner definitions
-voice_id: voice_fast
+voice_id: en_US-john-medium
 style: >
   Quick and observational. Short sentences. You are narrating what is happening
   on the chart in front of you, not delivering analysis you prepared earlier.

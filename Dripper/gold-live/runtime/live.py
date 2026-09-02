@@ -431,6 +431,11 @@ class LiveSession:
             from platform_.tts.piper import PiperTTS
 
             tts = PiperTTS(voices_dir=self.args.voices)
+            if tts.available():
+                # Load the voice before going live. The first utterance
+                # otherwise pays a ~4s model load, and that is the one an
+                # audience is most likely to be waiting on.
+                tts.warmup([persona.voice_id])
             if not tts.available():
                 log.warning("piper binary not found; falling back to file TTS")
                 from shared.mocks.tts import FileTTS
