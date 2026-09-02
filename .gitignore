@@ -85,3 +85,9 @@ Anon/candidates_stream/
 # needs and what a diff can show.
 Anon/*.mp4
 Anon/silent_render.log
+
+# LHM remote reconstruction sandbox — licence-restricted and large artefacts
+Anon/research/lhm_remote/private_models/
+Anon/research/lhm_remote/outputs/
+Anon/research/lhm_remote/LHM/
+Anon/research/avatar_reconstruction/env/
