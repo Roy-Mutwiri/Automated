@@ -79,6 +79,20 @@ def _inside(rect, x, y) -> bool:
     return rx <= x < rx + rw and ry <= y < ry + rh
 
 
+def _panel(frame, rect, colour, alpha: float = 0.88) -> None:
+    """Alpha-fill a rectangle, clipped to the frame."""
+    x, y, w, h = rect
+    h_img, w_img = frame.shape[:2]
+    x0, y0 = max(x, 0), max(y, 0)
+    x1, y1 = min(x + w, w_img), min(y + h, h_img)
+    if x1 <= x0 or y1 <= y0:
+        return
+    region = frame[y0:y1, x0:x1].astype(np.float32)
+    frame[y0:y1, x0:x1] = (
+        region * (1 - alpha) + np.array(colour, np.float32) * alpha
+    ).astype(np.uint8)
+
+
 class DropdownBar:
     """A row of dropdowns drawn into the frame."""
 
