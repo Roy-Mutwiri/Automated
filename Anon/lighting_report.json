@@ -3,57 +3,57 @@
     "params": {
       "scale": 0.55,
       "warm": 0.48,
-      "haze": 0.1
+      "haze": 0.06
     },
     "peak_irradiance": {
-      "left_wall_wash": 0.06154313310980797,
-      "under_shelf_led": 0.0786435529589653,
-      "mid_wall_bounce": 0.005043535027652979
+      "left_wall_wash": 0.16054731607437134,
+      "under_shelf_led": 0.23864251375198364,
+      "mid_wall_bounce": 0.013829047791659832
     },
     "byte_lock": 0,
     "wall_before": 47.969085693359375,
-    "wall_after": 60.63594436645508,
+    "wall_after": 51.2552375793457,
     "batten_before": 67.85655212402344,
-    "batten_after": 79.28099822998047,
+    "batten_after": 69.97329711914062,
     "felt_before": 27.717737197875977,
-    "felt_after": 41.64973449707031
+    "felt_after": 32.1946907043457
   },
   "B": {
     "params": {
       "scale": 1.0,
       "warm": 0.6,
-      "haze": 0.16
+      "haze": 0.1
     },
     "peak_irradiance": {
-      "left_wall_wash": 0.11189660429954529,
-      "under_shelf_led": 0.14298827946186066,
-      "mid_wall_bounce": 0.009170063771307468
+      "left_wall_wash": 0.2919042110443115,
+      "under_shelf_led": 0.433895468711853,
+      "mid_wall_bounce": 0.02514372207224369
     },
     "byte_lock": 0,
     "wall_before": 47.969085693359375,
-    "wall_after": 68.29894256591797,
+    "wall_after": 53.69778823852539,
     "batten_before": 67.85655212402344,
-    "batten_after": 86.85665893554688,
+    "batten_after": 71.82669067382812,
     "felt_before": 27.717737197875977,
-    "felt_after": 49.401668548583984
+    "felt_after": 35.2371826171875
   },
   "C": {
     "params": {
       "scale": 1.55,
       "warm": 0.68,
-      "haze": 0.24
+      "haze": 0.15
     },
     "peak_irradiance": {
-      "left_wall_wash": 0.17343972623348236,
-      "under_shelf_led": 0.22163182497024536,
-      "mid_wall_bounce": 0.01421359833329916
+      "left_wall_wash": 0.45245152711868286,
+      "under_shelf_led": 0.6725379824638367,
+      "mid_wall_bounce": 0.03897276893258095
     },
     "byte_lock": 0,
     "wall_before": 47.969085693359375,
-    "wall_after": 76.69359588623047,
+    "wall_after": 56.491214752197266,
     "batten_before": 67.85655212402344,
-    "batten_after": 95.35685729980469,
+    "batten_after": 74.06119537353516,
     "felt_before": 27.717737197875977,
-    "felt_after": 57.688846588134766
+    "felt_after": 38.59974670410156
   }
 }
