@@ -349,15 +349,17 @@ def main() -> int:
     def to_pil(bgr):
         return Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
 
-    def inpaint(bgr, mask, prompt, seed):
+    def inpaint(bgr, mask, prompt, seed, *, head=False):
         result = pipe(
             prompt=f"{prompt}, {LOOK}",
-            negative_prompt=NEGATIVE,
+            negative_prompt=(
+                f"{NEGATIVE}, {HEADWEAR_NEGATIVE}" if head else NEGATIVE
+            ),
             image=to_pil(bgr),
             mask_image=Image.fromarray(mask),
             num_inference_steps=args.steps,
             guidance_scale=args.guidance,
-            strength=args.strength,
+            strength=args.head_strength if head else args.strength,
             width=1024, height=1024,
             generator=torch.Generator("cuda").manual_seed(seed),
         ).images[0]
@@ -381,7 +383,8 @@ def main() -> int:
                 # shoulders. Same mask function, different drape.
                 drape = 0.0 if head == "taqiyah" else 0.9
                 out = inpaint(body, headwear_mask(g, drape=drape),
-                              HEADWEAR[head], args.seed + ci * 17 + hi * 3)
+                              HEADWEAR[head], args.seed + ci * 17 + hi * 3,
+                              head=True)
             cv2.imwrite(str(path), out)
             made += 1
             print(f"[wardrobe] {name}")

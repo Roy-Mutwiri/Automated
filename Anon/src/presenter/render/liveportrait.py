@@ -170,25 +170,97 @@ class LivePortraitRenderer:
         non-commercial-only, and with this two-pass approach nothing in the
         runtime depends on them.
         """
-        coarse = self.landmark_runner.run(img_rgb)
-        refined = self.landmark_runner.run(img_rgb, coarse)
-
         h, w = img_rgb.shape[:2]
+
+        # Master-frame sources break the two-pass bootstrap. In a room-scale
+        # 1344x768 photograph the face is ~150 px, and the coarse pass resizes
+        # the *whole frame* to 224x224 - shrinking that face to roughly 25 px,
+        # which is precisely the situation upstream marks as unreliable.
+        #
+        # So find the person first, and give the coarse pass a crop in which
+        # the head actually fills a useful fraction of the image. Person
+        # segmentation is already needed elsewhere, costs one startup call, and
+        # is far more robust at this scale than face landmarks are.
+        search_rgb, offset, scale = img_rgb, (0.0, 0.0), 1.0
+        if self.framing == "full":
+            search_rgb, offset, scale = self._head_region(img_rgb)
+
+        coarse = self.landmark_runner.run(search_rgb)
+        refined = self.landmark_runner.run(search_rgb, coarse)
+
+        # Map back into full-frame coordinates.
+        refined = refined.astype(np.float32) / scale
+        refined[:, 0] += offset[0]
+        refined[:, 1] += offset[1]
+
         xs, ys = refined[:, 0], refined[:, 1]
         if not (0 <= xs.mean() <= w and 0 <= ys.mean() <= h):
             raise RuntimeError(
                 "Landmark detection did not converge on a face. The source "
-                "portrait must contain one clearly visible, roughly "
-                "front-facing face filling a reasonable part of the frame."
+                "image must contain one clearly visible, roughly front-facing "
+                "face."
             )
         span = max(xs.max() - xs.min(), ys.max() - ys.min())
-        if span < 0.12 * min(h, w):
+        # The floor is relative to the *head region* for master frames, since a
+        # face is legitimately a small fraction of a room-scale photograph.
+        floor = 60.0 if self.framing == "full" else 0.12 * min(h, w)
+        if span < floor:
             raise RuntimeError(
-                f"Detected face spans only {span:.0f}px in a {w}x{h} image - too "
-                "small for the coarse pass to be reliable. Crop the source "
-                "portrait closer to the head before using it."
+                f"Detected face spans only {span:.0f}px in a {w}x{h} image, "
+                f"below the {floor:.0f}px floor. There is not enough face to "
+                "animate; use a source framed closer to the subject."
             )
         return refined
+
+    def _head_region(self, img_rgb: np.ndarray):
+        """Crop a head-sized search window around the person's head.
+
+        Returns ``(rgb_crop, (offset_x, offset_y), scale)`` so landmarks found
+        in the crop can be mapped back to full-frame coordinates.
+
+        Uses person segmentation to locate the subject, then takes the upper
+        portion of that silhouette - where a seated person's head is - and
+        upsamples it so the landmark model sees a face at a scale it was
+        trained for.
+        """
+        h, w = img_rgb.shape[:2]
+        img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+        matte = self._person_matte(img_bgr)
+
+        ys, xs = np.where(matte > 0.5)
+        if len(xs) < 500:
+            # Segmentation found nothing usable; fall back to the whole frame
+            # and let the span check decide.
+            return img_rgb, (0.0, 0.0), 1.0
+
+        x0, x1 = int(xs.min()), int(xs.max())
+        y0, y1 = int(ys.min()), int(ys.max())
+        person_h = y1 - y0
+        person_w = x1 - x0
+
+        # Head occupies roughly the top quarter of a seated silhouette. Take a
+        # generous square around it rather than a tight box - the landmark
+        # model wants context.
+        head_cy = y0 + person_h * 0.16
+        head_cx = x0 + person_w * 0.5
+        half = max(person_w * 0.42, person_h * 0.24, 96.0)
+
+        cx0 = int(np.clip(head_cx - half, 0, w - 1))
+        cx1 = int(np.clip(head_cx + half, cx0 + 32, w))
+        cy0 = int(np.clip(head_cy - half, 0, h - 1))
+        cy1 = int(np.clip(head_cy + half, cy0 + 32, h))
+
+        crop = img_rgb[cy0:cy1, cx0:cx1]
+        # Upsample small crops so the face reaches a size the model handles.
+        scale = 1.0
+        if max(crop.shape[:2]) < 512:
+            scale = 512.0 / max(crop.shape[:2])
+            crop = cv2.resize(
+                crop, (int(crop.shape[1] * scale), int(crop.shape[0] * scale)),
+                interpolation=cv2.INTER_CUBIC,
+            )
+        self._cached_matte = matte
+        return crop, (float(cx0), float(cy0)), scale
 
     def _prepare_source(self, path: Path) -> None:
         img_bgr = cv2.imread(str(path))
