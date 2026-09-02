@@ -93,16 +93,26 @@ class CameraRig:
             )
 
         directory = Path(data.get("directory", "assets/cameras"))
+        master = Path(data.get("master", "assets/cameras/cam1.png"))
         return cls(
             cameras=cameras,
             directory=directory if directory.is_absolute() else root / directory,
+            master=master if master.is_absolute() else root / master,
             room=(data.get("room") or "").strip(),
         )
 
     # -- resolution ---------------------------------------------------------
     def path(self, key: str) -> Path:
+        """The image this camera shows.
+
+        A derived camera returns the *master* - it is the same photograph at a
+        different framing, which is the entire point: identity cannot drift
+        between two views of one file.
+        """
         if key not in self.cameras:
             raise KeyError(f"unknown camera {key!r}; have {sorted(self.cameras)}")
+        if self.cameras[key].derive:
+            return self.master
         return self.directory / f"{key}.png"
 
     def exists(self, key: str) -> bool:
