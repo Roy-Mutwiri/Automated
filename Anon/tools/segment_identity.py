@@ -200,13 +200,15 @@ def main() -> int:
               f"{float((matte > 0.5).mean()) * 100:.1f}% of frame")
 
     # Debug: original | matte | cut-out on neutral grey, for visual inspection.
-    cut = (img.astype(np.float32) * matte[..., None]
+    cut = (clean.astype(np.float32) * matte[..., None]
            + 128.0 * (1.0 - matte[..., None])).astype(np.uint8)
     edge = img.copy()
     cont, _ = cv2.findContours((matte > 0.5).astype(np.uint8),
                                cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(edge, cont, -1, (0, 255, 255), 2)
-    debug = np.hstack([cv2.resize(x, (560, 320)) for x in (edge, cut)])
+    micview = img.copy()
+    micview[mic > 0] = (0, 0, 255)
+    debug = np.hstack([cv2.resize(x, (450, 257)) for x in (edge, micview, cut)])
     (ROOT / "renders").mkdir(exist_ok=True)
     cv2.imwrite(str(ROOT / "renders/segmentation_debug.png"), debug)
     print(f"[segment] -> {args.out_rgba}, {args.out_mask}, "
