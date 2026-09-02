@@ -31,6 +31,11 @@
 scene_version: SCENE_V1
 
 defaults:
+  # 2 cm near clip: the desk front edge is ~14 cm from Camera 1's lens, which
+  # is what puts a heavily defocused foreground across the bottom of the plate.
+  # Blender's 10 cm default would clip it away.
+  clip_start: 0.02
+  clip_end: 40.0
   sensor_width_mm: 36.0
   sensor_height_mm: 24.0
   exposure_ev: 0.0
@@ -42,8 +47,8 @@ cameras:
   - id: cam1
     name: Hero front
     enabled: true
-    position: [0.10, 2.78, 1.24]
-    look_at: [0.10, 1.16, 1.20]
+    position: [0.10, 2.50, 1.26]
+    look_at: [0.10, 1.16, 1.22]
     focal_length_mm: 50.0
     f_stop: 2.8
     focus_target: head
@@ -57,8 +62,12 @@ cameras:
     name: Left three-quarter
     enabled: true
     # 38 degrees around the head from cam1, camera-left, slightly closer.
-    position: [-0.95, 2.50, 1.22]
-    look_at: [0.10, 1.18, 1.18]
+    # Raised 20 cm above the boom arm. The mic is physically between the
+    # subject and a camera placed at eye level on this side, and a 14 mm tube
+    # 15 cm from the lens fills a third of the frame. Clearing it is a camera
+    # placement decision, not a reason to move the microphone.
+    position: [-1.05, 2.45, 1.42]
+    look_at: [0.10, 1.18, 1.22]
     focal_length_mm: 65.0
     f_stop: 2.8
     focus_target: head
@@ -70,8 +79,8 @@ cameras:
     # 44 degrees the other way and 18 cm further back. Deliberately NOT the
     # mirror of cam2 - the room is not symmetric and neither is he, and a
     # perfectly mirrored pair reads as a trick.
-    position: [1.41, 2.51, 1.18]
-    look_at: [0.10, 1.18, 1.18]
+    position: [1.35, 2.42, 1.20]
+    look_at: [0.10, 1.18, 1.22]
     focal_length_mm: 65.0
     f_stop: 2.8
     focus_target: head

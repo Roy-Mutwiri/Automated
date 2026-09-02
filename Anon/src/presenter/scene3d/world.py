@@ -436,6 +436,8 @@ class World:
         for spec in self.c["cameras"]:
             data = bpy.data.cameras.new(spec["id"])
             data.sensor_fit = "HORIZONTAL"
+            data.clip_start = d.get("clip_start", 0.1)
+            data.clip_end = d.get("clip_end", 100.0)
             data.sensor_width = d["sensor_width_mm"]
             data.lens = spec["focal_length_mm"]
             data.dof.use_dof = True
