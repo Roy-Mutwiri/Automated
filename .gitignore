@@ -75,3 +75,13 @@ Anon/candidates/
 # recorded seed; only the chosen master frame (Anon/assets/) is tracked.
 Anon/scenes/
 Anon/candidates_stream/
+
+# --- Rendered clips ---------------------------------------------------------
+# A 5-minute 1080p30 render is hundreds of MB, over GitHub's 100 MB per-file
+# hard limit, and it is fully reproducible: the behaviour engine is
+# deterministic, so `tools/silent_human.py --seed N` reproduces the exact same
+# performance frame for frame. The evidence derived from it - timeline, metrics,
+# screenshots, inspection sheets - IS tracked, because that is what a reviewer
+# needs and what a diff can show.
+Anon/*.mp4
+Anon/silent_render.log
