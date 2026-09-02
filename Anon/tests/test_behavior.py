@@ -21,8 +21,19 @@ VOLUNTARY = {
 
 
 def run(minutes=10.0, profile="PRESENTER_CALM", seed=0, fps=30.0,
-        state=BehaviorState.IDLE_ATTENTIVE):
-    engine = BehaviorEngine(profile=profile, state=state, seed=seed)
+        state=BehaviorState.IDLE_ATTENTIVE, autonomous=None):
+    """Run the engine headless.
+
+    `autonomous` defaults to False whenever a state is pinned. Since the engine
+    gained a semi-Markov scheduler it changes state on its own, so a test that
+    asks for FOCUSED and then measures for fifteen minutes was measuring a
+    mixture of every idle state - which is why the focused blink rate came out
+    *above* the attentive one. Pinning a state now means pinning it.
+    """
+    if autonomous is None:
+        autonomous = state == BehaviorState.IDLE_ATTENTIVE
+    engine = BehaviorEngine(profile=profile, state=state, seed=seed,
+                            autonomous=autonomous)
     dt = 1.0 / fps
     for _ in range(int(minutes * 60.0 * fps)):
         engine.update(dt)
@@ -129,7 +140,7 @@ def test_face_is_never_perfectly_symmetric_during_a_blink():
 # -- states and profiles ----------------------------------------------------
 def test_focus_suppresses_and_speech_raises_blink_rate():
     """Matches the reported halving under focus / doubling in conversation."""
-    idle = run(minutes=15.0, seed=5).stats.blinks / 15.0
+    idle = run(minutes=15.0, seed=5, autonomous=False).stats.blinks / 15.0
     focused = run(minutes=15.0, seed=5, state=BehaviorState.FOCUSED).stats.blinks / 15.0
     speaking = run(minutes=15.0, seed=5, state=BehaviorState.SPEAKING).stats.blinks / 15.0
     assert focused < idle < speaking
@@ -137,13 +148,34 @@ def test_focus_suppresses_and_speech_raises_blink_rate():
 
 @pytest.mark.parametrize("profile", sorted(PROFILES))
 def test_every_profile_stays_within_anatomical_limits(profile):
+    """Two limits, and they are not the same limit.
+
+    `head_max_*` on the profile is *stylistic* - how much this persona fidgets
+    while sitting still - and it bounds the idle head contribution only. The
+    total also carries gaze-driven head turns, which are a man looking at his
+    monitor rather than a fidget over budget, and those are bounded by real
+    cervical range in `constraints.py`.
+
+    Asserting the total against the stylistic figure is what this test used to
+    do, and it failed at 5.6 degrees against 5.4 the moment attention started
+    turning the head for a reason. The failure was right and the assertion was
+    wrong.
+    """
+    from presenter.behavior.constraints import SEATED_PRESENTER as LIM
+
     engine = BehaviorEngine(profile=profile, seed=2)
     p = PROFILES[profile]
     for _ in range(30 * 60 * 5):  # 5 minutes
         pose = engine.update(1.0 / 30.0)
-        assert abs(pose.yaw) <= p.head_max_yaw * 1.35
-        assert abs(pose.pitch) <= p.head_max_pitch * 1.35
-        assert abs(pose.roll) <= p.head_max_roll * 1.35
+
+        iy, ip, ir = engine.idle_head
+        assert abs(iy) <= p.head_max_yaw * 1.35
+        assert abs(ip) <= p.head_max_pitch * 1.35
+        assert abs(ir) <= p.head_max_roll * 1.35
+
+        assert abs(pose.yaw) <= LIM.yaw
+        assert -LIM.pitch_down <= pose.pitch <= LIM.pitch_up
+        assert abs(pose.roll) <= LIM.roll
         assert 0.0 <= pose.eye_open_l <= 1.0
         assert 0.0 <= pose.eye_open_r <= 1.0
         assert abs(pose.gaze_x) <= 0.56
