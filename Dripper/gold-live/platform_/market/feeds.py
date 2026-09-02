@@ -173,25 +173,45 @@ class WebSocketFeed(Feed):
 
         backoff = 1.0
         while self._running:
+            reason: str | None = None
             try:
                 async with websockets.connect(self.url) as ws:
                     log.info("market feed connected: %s", self.url)
-                    backoff = 1.0
                     if self.subscribe:
                         await ws.send(json.dumps(self.subscribe))
+
+                    received = 0
                     async for raw in ws:
                         tick = self._parse(raw if isinstance(raw, str) else raw.decode())
                         if tick is not None:
+                            received += 1
+                            # Only treat the connection as healthy once it has
+                            # actually delivered data. A provider that accepts
+                            # the socket then closes -- auth rejection, rate
+                            # limiting -- must not reset the backoff, or we
+                            # reconnect to it in a hot loop.
+                            if received == 1:
+                                backoff = 1.0
                             yield tick
+
+                # The stream ended without raising. A clean server-side close is
+                # still a disconnect: it has to be counted, logged and backed
+                # off from, or a provider that closes politely gets reconnected
+                # to as fast as this loop can spin.
+                reason = "server closed the stream"
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self.reconnects += 1
-                log.warning(
-                    "market feed dropped (%s); reconnecting in %.1fs", exc, backoff
-                )
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, self.max_backoff_s)
+                reason = str(exc) or exc.__class__.__name__
+
+            if not self._running:
+                return
+            self.reconnects += 1
+            log.warning(
+                "market feed dropped (%s); reconnecting in %.1fs", reason, backoff
+            )
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, self.max_backoff_s)
 
     async def close(self) -> None:
         self._running = False
