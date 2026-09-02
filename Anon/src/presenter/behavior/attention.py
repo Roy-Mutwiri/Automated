@@ -188,6 +188,28 @@ class AttentionSystem:
         return "LENS"
 
     # -- the shift ----------------------------------------------------------
+    def _hold_share(self, az: float) -> float:
+        """How much of a *held* eccentricity the head carries.
+
+        Defined on the target's own angle rather than on the size of the shift
+        that reached it, and that difference is the whole point. An earlier
+        version gave the head a share of each shift and then left it there: with
+        the gaze already on target no correction was ever computed, so the head
+        never came back and yaw ratcheted to 11.5 degrees over a minute of
+        ordinary glancing. Anchoring the head to where he is *looking* makes it
+        self-correcting - look back at the lens and the hold share is zero, so
+        the head returns on its own with no separate recentring rule.
+        """
+        p = self.profile
+        eye_only = getattr(p, "eye_only_deg", 11.0)
+        mag = abs(az)
+        if mag <= eye_only:
+            return 0.0
+        span = max(getattr(p, "head_share_full_deg", 42.0) - eye_only, 1e-3)
+        share = min((mag - eye_only) / span, 1.0)
+        share *= getattr(p, "head_share_max", 0.62)
+        return share * getattr(p, "head_motion_level", 1.0)
+
     def _begin_shift(self, drives, name: str) -> None:
         t = self.targets[name]
         rng = drives.rng
@@ -197,25 +219,13 @@ class AttentionSystem:
         to_az = t.azimuth + rng.gauss(0.0, t.spread * 0.5)
         to_el = t.elevation + rng.gauss(0.0, t.spread * 0.35)
 
-        d_az = to_az - self.eye_az - self.head_yaw
-        d_el = to_el - self.eye_el - self.head_pitch
+        d_az = to_az - (self.eye_az + self.head_yaw)
+        d_el = to_el - (self.eye_el + self.head_pitch)
         magnitude = math.hypot(d_az, d_el)
 
-        # How much of this the head takes. Small shifts are eyes-only; the head
-        # share grows with amplitude and never reaches 1 - the eyes always keep
-        # some eccentricity at the end of a large shift.
-        p = self.profile
-        eye_only = getattr(p, "eye_only_deg", 11.0)
-        if magnitude <= eye_only:
-            head_share = 0.0
-        else:
-            span = max(getattr(p, "head_share_full_deg", 42.0) - eye_only, 1e-3)
-            head_share = min((magnitude - eye_only) / span, 1.0)
-            head_share *= getattr(p, "head_share_max", 0.62)
-        head_share *= getattr(p, "head_motion_level", 1.0)
-
-        head_to_yaw = self.head_yaw + d_az * head_share
-        head_to_pitch = self.head_pitch + d_el * head_share * 0.6
+        share = self._hold_share(to_az)
+        head_to_yaw = to_az * share
+        head_to_pitch = to_el * share * 0.6
 
         # Saccade main sequence: duration rises with amplitude, ~20 ms for the
         # smallest to >100 ms for the largest. The eyes are ballistic, so this
@@ -228,11 +238,10 @@ class AttentionSystem:
 
         head_duration = 0.0
         head_delay = 0.0
-        if head_share > 0.0:
+        if abs(head_to_yaw - self.head_yaw) > 0.15:
             # The head is heavy. It starts after the eyes and takes far longer.
             head_delay = rng.uniform(0.02, 0.06)
-            head_duration = 0.26 + 0.010 * magnitude + rng.gauss(0.0, 0.04)
-            head_duration = max(head_duration, 0.18)
+            head_duration = max(0.26 + 0.010 * magnitude + rng.gauss(0.0, 0.04), 0.18)
 
         self._shift = _Shift(
             start=drives.now,
@@ -240,7 +249,7 @@ class AttentionSystem:
             head_duration=head_duration,
             head_delay=head_delay,
             from_az=self.eye_az, from_el=self.eye_el,
-            to_az=to_az - head_to_yaw, to_el=to_el - head_to_pitch,
+            to_az=to_az, to_el=to_el,
             head_from_yaw=self.head_yaw, head_from_pitch=self.head_pitch,
             head_to_yaw=head_to_yaw, head_to_pitch=head_to_pitch,
         )
@@ -268,11 +277,10 @@ class AttentionSystem:
         drives.emit(BehaviorEvent(
             time=drives.now,
             kind="attention",
-            detail=f"{name} az={to_az:+.1f} el={to_el:+.1f} "
-                   f"head_share={head_share:.2f}",
+            detail=f"{name} az={to_az:+.1f} el={to_el:+.1f} share={share:.2f}",
             magnitude=magnitude,
             metadata={"target": name, "azimuth": to_az, "elevation": to_el,
-                      "magnitude": magnitude, "head_share": head_share,
+                      "magnitude": magnitude, "head_share": share,
                       "dwell": dwell},
         ))
 
@@ -281,8 +289,6 @@ class AttentionSystem:
         if self._shift is not None:
             s = self._shift
             te = (drives.now - s.start) / max(s.eye_duration, 1e-4)
-            self.eye_az = s.from_az + (s.to_az - s.from_az) * _min_jerk(te)
-            self.eye_el = s.from_el + (s.to_el - s.from_el) * _min_jerk(te)
 
             if s.head_duration > 0.0:
                 th = (drives.now - s.start - s.head_delay) / s.head_duration
@@ -291,12 +297,33 @@ class AttentionSystem:
                     self.head_yaw = s.head_from_yaw + (s.head_to_yaw - s.head_from_yaw) * k
                     self.head_pitch = s.head_from_pitch + (s.head_to_pitch - s.head_from_pitch) * k
 
+            # The eye target is the *residual* after whatever the head has
+            # covered so far, recomputed every frame. That is the counter-roll:
+            # as the head continues toward the target the eyes ease back toward
+            # centre, and the combined gaze stays put instead of overshooting.
+            res_az = s.to_az - self.head_yaw
+            res_el = s.to_el - self.head_pitch
+            k = _min_jerk(te)
+            self.eye_az = s.from_az + (res_az - s.from_az) * k
+            self.eye_el = s.from_el + (res_el - s.from_el) * k
+
             done_eye = te >= 1.0
-            done_head = s.head_duration <= 0.0 or \
-                (drives.now - s.start - s.head_delay) >= s.head_duration
+            done_head = s.head_duration <= 0.0 or                 (drives.now - s.start - s.head_delay) >= s.head_duration
             if done_eye and done_head:
                 self._shift = None
             return
+
+        # Holding. The head eases toward its share of the current target and
+        # the eyes take whatever is left, so gaze stays locked while the neck
+        # settles.
+        share = self._hold_share(self.point_az)
+        want_yaw = self.point_az * share
+        want_pitch = self.point_el * share * 0.6
+        k = 1.0 - math.exp(-drives.dt / 1.4)
+        self.head_yaw += (want_yaw - self.head_yaw) * k
+        self.head_pitch += (want_pitch - self.head_pitch) * k
+        self.eye_az = self.point_az - self.head_yaw
+        self.eye_el = self.point_el - self.head_pitch
 
         if drives.now >= self.dwell_until and drives.allow_voluntary():
             self._begin_shift(drives, self._choose(drives))
