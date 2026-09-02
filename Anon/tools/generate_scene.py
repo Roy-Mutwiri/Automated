@@ -63,13 +63,11 @@ WIDTH, HEIGHT = 1344, 768
 
 # Encoder 1: who he is and how he is framed. MUST stay under 77 CLIP tokens.
 SUBJECT_PROMPT = (
-    "medium shot photo, waist up, camera 2m back, "
-    "a brown-skinned Arab man in his mid 30s, warm brown skin, "
-    "short trimmed dark beard, dark charcoal shirt, "
-    "sitting in a matte black high-back gaming chair with a headrest, "
-    "head straight facing the camera, symmetrical frontal face, "
-    "looking directly into the lens, calm neutral expression, "
-    "mouth closed, eyes open, natural skin texture"
+    "medium shot photo, waist up, "
+    "a brown-skinned Arab man in his 30s, short dark beard, charcoal shirt, "
+    "in a matte black high-back gaming chair with headrest, "
+    "head straight to camera, symmetrical frontal face, looking into the lens, "
+    "calm neutral expression, mouth closed, eyes open, natural skin texture"
 )
 
 # Encoder 2: where he is and how it is lit. Also under 77 tokens.
@@ -110,10 +108,9 @@ NEGATIVE = (
 NEGATIVE_2 = (
     "empty room, no people, unoccupied, "
     "rgb lighting, rainbow, neon, purple, cyberpunk, gamer bedroom, cluttered, "
-    "cgi, 3d render, architectural render, showroom, illustration, cartoon, "
-    "plastic skin, airbrushed, waxy, warped walls, crooked shelves, "
-    "deformed hands, extra limbs, two people, fisheye, blurry face, "
-    "overexposed, flat lighting"
+    "cgi, 3d render, showroom, illustration, cartoon, plastic skin, "
+    "airbrushed, waxy, warped walls, deformed hands, extra limbs, two people, "
+    "fisheye, blurry face, overexposed, flat lighting"
 )
 
 
