@@ -74,6 +74,26 @@ ENGAGEMENT_COUPLING: dict[str, tuple[float, float, float]] = {
 }
 
 
+def neutral_head_baseline() -> tuple[float, float, float]:
+    """World yaw/pitch/roll of the head produced by the seated neutral pose.
+
+    Adapters whose renderer already contains the rest pose need this to
+    subtract it. The 2D face renderer is driven by deltas from a photograph in
+    which the man is *already sitting* with his posture; feeding it the absolute
+    chain tipped his head down 7.8 degrees, because the neutral pose was being
+    counted twice - once in the plate and once in the pose.
+
+    A rig, by contrast, rests in a T-pose and wants the absolute value. Same
+    motion state, opposite requirement, which is the clearest justification for
+    the adapter boundary in the whole system.
+    """
+    chain = ("pelvis", "spine_lower", "spine_mid", "chest", "neck", "head")
+    rx = sum(SEATED_NEUTRAL[j][0] for j in chain)
+    ry = sum(SEATED_NEUTRAL[j][1] for j in chain)
+    rz = sum(SEATED_NEUTRAL[j][2] for j in chain)
+    return rx, ry, rz
+
+
 class _Shift:
     """One comfort adjustment in flight."""
 

@@ -33,6 +33,7 @@ get there.
 from __future__ import annotations
 
 from ...types import AvatarPose
+from ..body import neutral_head_baseline
 from ..state import HumanMotionState
 
 __all__ = ["to_avatar_pose", "GAZE_UNITS_PER_DEG"]
@@ -46,11 +47,22 @@ def to_avatar_pose(motion: HumanMotionState) -> AvatarPose:
     """Project a full-body motion state onto what a face renderer can show."""
     pose = AvatarPose()
 
-    # Whole-chain orientation. The renderer only has a head, but everything
-    # below it still decides where that head points.
-    pose.yaw = motion.head_world_yaw()
-    pose.pitch = motion.head_world_pitch()
-    pose.roll = motion.head_world_roll()
+    # Whole-chain orientation, minus the rest pose.
+    #
+    # The renderer only has a head, but everything below it still decides where
+    # that head points - a presenter who leans forward and turns his chest is
+    # aiming his face somewhere different, so the chain is summed rather than
+    # taking `head` alone.
+    #
+    # The subtraction matters as much as the sum. This renderer drives deltas
+    # from a photograph of a man who is *already sitting*; handing it the
+    # absolute chain counted the seated neutral twice and tipped his head down
+    # 7.8 degrees. A rig would want the absolute value, which is exactly why
+    # this decision belongs to an adapter and not to the motion state.
+    b_rx, b_ry, b_rz = neutral_head_baseline()
+    pose.yaw = motion.head_world_yaw() - b_ry
+    pose.pitch = motion.head_world_pitch() - b_rx
+    pose.roll = motion.head_world_roll() - b_rz
 
     # Eyes are stored relative to the head, which is exactly what the renderer
     # wants: it drives irises inside a face it is already orienting.
