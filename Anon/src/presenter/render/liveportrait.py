@@ -228,7 +228,19 @@ class LivePortraitRenderer:
             for name, value in cached.items():
                 setattr(self, name, value)
         else:
-            self._prepare_source(path)
+            # Preparing writes the renderer's state in place across three
+            # methods, so a failure part-way through - a variant the landmark
+            # detector cannot find a face in, say - would leave the presenter
+            # half-changed: a new head over the previous outfit's mask, with no
+            # way back. Rolling back keeps a bad portrait a refused outfit
+            # change rather than a broken renderer.
+            previous = self._capture_source_state()
+            try:
+                self._prepare_source(path)
+            except Exception:
+                for name, value in previous.items():
+                    setattr(self, name, value)
+                raise
             self._source_cache[key] = self._capture_source_state()
 
         self.source_path = path
