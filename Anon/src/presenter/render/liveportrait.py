@@ -590,15 +590,31 @@ class LivePortraitRenderer:
         """Synthesise x_d from the behaviour pose. No driving video involved."""
         from .calibration import apply_expression_deltas
 
+        # Pull the head toward frontal before adding behaviour deltas.
+        #
+        # A portrait is rarely shot dead-on: this source sits at yaw -10 deg,
+        # pitch +8 deg. Applying behaviour on top of that leaves the presenter
+        # permanently addressing a point off to one side, which undoes the eye
+        # contact the whole design depends on.
+        #
+        # Not neutralised all the way by default. LivePortrait has to
+        # hallucinate whatever the rotation reveals, and the further it is
+        # driven from the source pose the more that shows - especially along a
+        # jaw or a headdress edge. Around 0.7 removes most of the off-axis look
+        # while staying inside the range the model reproduces cleanly.
+        keep = 1.0 - self.neutralize_pose
         info = {
             "pitch": torch.tensor(
-                [[self.src_pitch + pose.pitch]], device=self.device, dtype=torch.float32
+                [[self.src_pitch * keep + pose.pitch]],
+                device=self.device, dtype=torch.float32,
             ),
             "yaw": torch.tensor(
-                [[self.src_yaw + pose.yaw]], device=self.device, dtype=torch.float32
+                [[self.src_yaw * keep + pose.yaw]],
+                device=self.device, dtype=torch.float32,
             ),
             "roll": torch.tensor(
-                [[self.src_roll + pose.roll]], device=self.device, dtype=torch.float32
+                [[self.src_roll * keep + pose.roll]],
+                device=self.device, dtype=torch.float32,
             ),
             # Breathing rides on scale and vertical translation.
             "scale": torch.tensor(
