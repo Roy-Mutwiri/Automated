@@ -320,7 +320,14 @@ def main() -> int:
             cv2.waitKey(1)
 
             t0 = time.perf_counter()
-            fresh = renderer.set_source(wardrobe.path(*want))
+            try:
+                fresh = renderer.set_source(wardrobe.path(*want))
+            except Exception as exc:  # noqa: BLE001 - keep the stream alive
+                # set_source rolls itself back, so the presenter is still
+                # wearing what they were wearing. Say so and carry on.
+                print(f"[app] cannot wear {want[0]}/{want[1]}: {exc}",
+                      file=sys.stderr)
+                return
             outfit = want
             bar.set_menus(build_menus())
             print(f"[app] outfit -> {outfit[0]}/{outfit[1]} "
