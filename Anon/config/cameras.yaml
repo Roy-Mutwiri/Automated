@@ -87,22 +87,28 @@ cameras:
       bedroom, rgb lighting, neon, purple, cyberpunk, text, signage, logo,
       watermark, cgi, 3d render, face, frontal face
 
+  # "Top down view" alone returned frontal shots and, worse, line drawings -
+  # the shared negative excludes "cgi, 3d render" but never excluded
+  # *illustration*, so several candidates came back as sketches. Both are fixed
+  # here: the camera position is stated as a physical fact ("camera mounted on
+  # the ceiling"), and drawing terms are banned outright.
   cam5:
     label: "5 Overhead"
     animated: false
     hint: looking down on him from above the desk - a still
     subject: >-
-      overhead photograph looking straight down at one adult male streamer
-      seated at his desk, seen from above, the top of his head and his
-      shoulders, keyboard and desk surface below him, 35mm lens, top down view
+      photograph from a camera mounted on the ceiling directly above a desk,
+      looking straight down, bird eye view from above of one adult male
+      streamer sitting at his desk, only the top of his head visible,
+      keyboard and desk surface seen from above
     negative: >-
-      frontal face, portrait, eye level, low angle, racing simulator, sim rig,
-      empty room, no people, rustic, cabin, antique, library, wooden room,
-      brown room, music studio, midi keyboard, piano
+      sketch, line art, drawing, illustration, monochrome, black and white,
+      frontal face, portrait, eye level, low angle, empty room, no people,
+      rustic, cabin, antique, library, wooden room, brown room
     negative_2: >-
-      frontal face, eye level, racing simulator, empty room, no people, office
-      chair, mesh chair, bedroom, rgb lighting, neon, purple, cyberpunk, text,
-      signage, logo, watermark, cgi, 3d render, deformed hands
+      sketch, line art, drawing, illustration, monochrome, frontal face,
+      eye level, empty room, no people, bedroom, rgb lighting, neon, purple,
+      cyberpunk, text, signage, logo, watermark, cgi, 3d render, deformed hands
 
   cam6:
     label: "6 Room wide"
