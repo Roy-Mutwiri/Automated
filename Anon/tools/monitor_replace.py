@@ -63,6 +63,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+# Fraction of the original LCD luminance the replacement aims for. Below 1.0 on
+# purpose - see the exposure step for the argument.
+LUMA_TARGET_FRAC = 0.75
+
+# Ceiling on screen chroma, in OpenCV's 0-255 saturation units.
+MAX_SCREEN_SAT = 96.0
+
 
 # --- Masks ------------------------------------------------------------------
 
@@ -75,17 +82,34 @@ def quad_mask(shape, quad) -> np.ndarray:
 def occlusion_mask(img, quad_m, protect, dark_v: int = 62) -> np.ndarray:
     """What sits in front of this screen. Authoritative over the quad.
 
-    The segmented human plus a darkness test. The darkness test exists because
-    the subject's headphones and hair are near-black against a lit panel and
-    segmentation under-covers them; inside a screen quad, near-black is not
-    screen, it is something in front of the screen.
+    The segmented human, plus dark pixels **connected to** the human. The
+    darkness test exists because segmentation under-covers black headphones and
+    flyaway hair against a lit panel - but it cannot stand alone. A first
+    version took every dark pixel inside the quad, which promptly classified the
+    dark regions of the *old screen content* as occluders and punched the
+    previous picture's silhouette straight through the new interface.
+
+    Connectivity is what separates the two cases. Headphones and hair touch the
+    head; a dark patch in a photograph on the monitor touches nothing. So the
+    dark mask is split into components and only those overlapping the segmented
+    human survive. On a panel the subject does not overlap at all, the test
+    correctly contributes nothing.
     """
     v = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)[:, :, 2]
     dark = ((v < dark_v) & (quad_m > 0.5)).astype(np.uint8)
     dark = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
     dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-    dark = cv2.dilate(dark, np.ones((5, 5), np.uint8))
-    occ = np.maximum(protect, dark.astype(np.float32))
+
+    seed = cv2.dilate((protect > 0.5).astype(np.uint8), np.ones((9, 9), np.uint8))
+    n, labels = cv2.connectedComponents(dark, 8)
+    keep = np.zeros_like(dark)
+    for i in range(1, n):
+        comp = labels == i
+        if (comp & (seed > 0)).any():
+            keep[comp] = 1
+    keep = cv2.dilate(keep, np.ones((5, 5), np.uint8))
+
+    occ = np.maximum(protect, keep.astype(np.float32))
     return np.clip(cv2.GaussianBlur(occ, (0, 0), 1.6), 0.0, 1.0)
 
 
@@ -158,13 +182,35 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
     warped = cv2.warpPerspective(source, H, (w, h), flags=cv2.INTER_AREA,
                                  borderMode=cv2.BORDER_REPLICATE).astype(np.float32)
 
-    # 3. Exposure: match the visible original LCD's own luminance.
+    # 3. Exposure: lift the UI to the plate's own LCD luminance with a gamma
+    #    curve, not a multiplier.
+    #
+    #    A linear gain of 3.2x hit the accents as hard as the charcoal and turned
+    #    the muted cyan into a saturated blue panel - the exact failure section 20
+    #    warns about. A gamma lift raises the dark base steeply and the bright
+    #    accents barely at all, which is also how a display's own transfer curve
+    #    behaves.
+    #
+    #    The target is 0.75x the original, not 1.0x. A charcoal dashboard on the
+    #    same monitor at the same brightness genuinely photographs darker than a
+    #    bright photograph does; matching the mean exactly would mean building a
+    #    UI that is not dark. 0.75 keeps the panel unmistakably lit while letting
+    #    it be the cool, quiet counterpoint the room needs.
     orig_lum = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    new_lum = cv2.cvtColor(warped.astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)
-    tgt_mean, tgt_p95 = float(orig_lum[sel].mean()), float(np.percentile(orig_lum[sel], 95))
-    cur_mean, cur_p95 = float(new_lum[sel].mean()), float(np.percentile(new_lum[sel], 95))
-    gain = np.clip(tgt_mean / max(cur_mean, 1e-3), 0.35, 3.2)
-    warped *= gain
+    tgt_mean = float(orig_lum[sel].mean()) * LUMA_TARGET_FRAC
+    tgt_p95 = float(np.percentile(orig_lum[sel], 95))
+
+    norm = np.clip(warped / 255.0, 0.0, 1.0)
+    lum_n = cv2.cvtColor((norm * 255).astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)[sel] / 255.0
+    lo, hi = 0.30, 1.20
+    for _ in range(40):                       # bisection on the gamma
+        g = 0.5 * (lo + hi)
+        if float(np.power(lum_n, g).mean()) * 255.0 < tgt_mean:
+            hi = g
+        else:
+            lo = g
+    gain = 0.5 * (lo + hi)
+    warped = np.power(norm, gain) * 255.0
 
     # 5. Reflections: keep the panel's light, drop its picture.
     env, spec, spec_frac = reflection_layers(frame, sel)
@@ -192,6 +238,12 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
         np.clip(warped, 0, 255) * screen[..., None]
     out = np.clip(out, 0, 255).astype(np.uint8)
 
+    # Section 20: keep saturation low. The lift can only ever push chroma up, so
+    # this is a ceiling applied inside the screen region and nowhere else.
+    hsv = cv2.cvtColor(out, cv2.COLOR_BGR2HSV).astype(np.float32)
+    hsv[:, :, 1] = np.where(sel, np.minimum(hsv[:, :, 1], MAX_SCREEN_SAT), hsv[:, :, 1])
+    out = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+
     outside = screen <= 0.0
     out[outside] = frame[outside]
 
@@ -201,7 +253,7 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
         occluded_frac=float((occ[qm > 0.5] > 0.5).mean()),
         luma_before=tgt_mean, luma_after=float(fin_lum[sel].mean()),
         p95_before=tgt_p95, p95_after=float(np.percentile(fin_lum[sel], 95)),
-        exposure_gain=float(gain), defocus_sigma=sigma,
+        exposure_gamma=float(gain), defocus_sigma=sigma,
         grain_plate=want, grain_new=have, grain_added=added,
         specular_frac=spec_frac,
     )
@@ -210,7 +262,7 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
               f"({100 * info['occluded_frac']:.0f}% of the panel occluded), "
               f"luma {tgt_mean:.1f} -> {info['luma_after']:.1f} "
               f"(p95 {tgt_p95:.0f} -> {info['p95_after']:.0f}), "
-              f"gain {gain:.2f}, defocus sigma {sigma:.2f}, "
+              f"gamma {gain:.2f}, defocus sigma {sigma:.2f}, "
               f"grain plate {want:.2f} new {have:.2f} added {added:.2f}, "
               f"specular kept {100 * spec_frac:.1f}%")
     return out, info
