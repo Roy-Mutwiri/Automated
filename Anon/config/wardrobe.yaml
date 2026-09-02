@@ -43,17 +43,19 @@ clothing:
   tee:
     label: Grey tee
     prompt: null            # the base portrait, unedited
-  # "Bright pure white" and "brilliant white" are doing real work here. The
-  # first version said "crisp white ... pressed white cotton" and came back
-  # grey every time: the garment mask is large and its whole border is the
-  # grey tee underneath, so the model follows the surrounding colour unless
-  # the prompt insists. The ghutra is white on the first attempt because its
-  # mask borders hair and background instead.
-  thobe_white:
-    label: White thobe
+  # Named for what it renders, not what was asked for. The prompt says white
+  # and the result is consistently mid-grey - and it is genuinely grey rather
+  # than white under-exposed, because in the very same frames the ghutra comes
+  # out bright white against the same key light. Pushing the prompt harder
+  # ("bright pure white, brilliant white cotton") made it worse, not whiter:
+  # it turned the garment into a grey waistcoat over a beige kurta. The
+  # original wording produces a clean thobe with a correct collar and placket,
+  # so it stays, and the label matches the picture.
+  thobe_grey:
+    label: Grey thobe
     prompt: >-
-      wearing a bright pure white thobe kandura, brilliant white cotton,
-      plain round collar, narrow buttoned placket, long sleeves
+      wearing a crisp white thobe kandura, plain round collar,
+      narrow buttoned placket, long sleeves, pressed white cotton
   thobe_beige:
     label: Beige thobe
     prompt: >-
