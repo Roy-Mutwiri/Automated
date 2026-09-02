@@ -1,0 +1,32 @@
+[project]
+name = "gold-live"
+version = "0.1.0"
+description = "24/7 multi-session AI broadcasting system for XAUUSD commentary"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.40",
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+    "redis>=5.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.6"]
+
+[project.scripts]
+gold-dryrun = "runtime.dryrun:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["shared", "intelligence", "platform_", "runtime"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
