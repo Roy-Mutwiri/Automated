@@ -1,0 +1,66 @@
+# One session per unit, templated on the session id:
+#
+#   systemctl --user enable --now goldlive-session@SESSION_001
+#   systemctl --user status goldlive-session@SESSION_003
+#   journalctl --user -u goldlive-session@SESSION_001 -f
+#
+# A unit per session is the point: a crash in one takes down that unit and
+# nothing else. Running all seven in one process would make any single failure
+# a total outage.
+#
+# --user, not system: screen capture and audio need a logged-in desktop
+# session. A system unit has neither and would run happily while doing nothing.
+
+[Unit]
+Description=Gold Live session %i
+After=network-online.target
+Wants=network-online.target
+# Not Requires=: if the model server is down the session should still start,
+# report itself degraded, and keep retrying. Refusing to start would take the
+# broadcast off air over a dependency that recovers on its own.
+After=goldlive-model.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/gold-live
+Environment=PYTHONPATH=%h/gold-live
+Environment=GOLDLIVE_DATA_DIR=%h/.local/share/GoldLive
+EnvironmentFile=-%h/.local/share/GoldLive/.env
+
+ExecStart=%h/gold-live/.venv/bin/python -m runtime.live \
+    --session %i \
+    --mode local \
+    --market websocket \
+    --adapter screen \
+    --tts piper
+
+# SIGTERM lets the session checkpoint what it has covered and flush traces.
+# Killing it straight away means the restarted session forgets and repeats.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=always
+RestartSec=5
+# Give up after 5 failures in 10 minutes rather than restarting forever. A
+# crash loop that restarts silently is worse than one that stops, because
+# nobody finds out.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# Seven sessions on one box: keep any single one from starving the others.
+MemoryMax=2G
+CPUWeight=100
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=goldlive-%i
+
+# Modest hardening. Not a sandbox -- the process needs the display and audio.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/GoldLive
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,37 @@
+# Operator dashboard.
+#
+#   systemctl --user enable --now goldlive-dashboard
+#
+# Bound to localhost deliberately: there is no authentication. Reach it over an
+# SSH tunnel rather than exposing it:
+#
+#   ssh -L 8080:127.0.0.1:8080 user@the-machine
+
+[Unit]
+Description=Gold Live operator dashboard
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/gold-live
+Environment=PYTHONPATH=%h/gold-live
+Environment=GOLDLIVE_DATA_DIR=%h/.local/share/GoldLive
+
+ExecStart=%h/gold-live/.venv/bin/python -m dashboard.server \
+    --host 127.0.0.1 --port 8080
+
+Restart=always
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=goldlive-dashboard
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/GoldLive
+
+[Install]
+WantedBy=default.target
