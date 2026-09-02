@@ -132,7 +132,9 @@ NEGATIVE = (
     "extreme bokeh, blurry face, out of focus face, "
     # Look failures.
     "plastic skin, airbrushed, oversmoothed, waxy, doll-like, "
-    "cgi, 3d render, video game screenshot, illustration, cartoon, anime, "
+    "cgi, 3d render, architectural rendering, interior design render, showroom, "
+    "empty room, no people, unoccupied, video game screenshot, illustration, "
+    "cartoon, anime, "
     "overexposed, blown highlights, flat lighting, harsh flash, "
     "cheap, low quality, jpeg artifacts"
 )
