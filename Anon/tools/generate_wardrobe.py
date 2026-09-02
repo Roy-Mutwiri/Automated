@@ -1,4 +1,4 @@
-"""Generate wardrobe variants of the presenter portrait by SDXL inpainting.
+"""Generate the wardrobe's variant portraits by SDXL inpainting.
 
 ## Why the outfit has to be baked into the source image
 
@@ -10,41 +10,57 @@ and the head is warped from source appearance features. So a garment or a
 headdress cannot be an overlay - it has to be part of the image the whole
 pipeline is built from.
 
-The consequence is the design: **one prepared source per outfit**, generated
-ahead of time, and the dropdown swaps between prepared sources rather than
-compositing anything at runtime. That is also why it looks right - the folds,
-the shadows and the way the cloth catches the key light are all real diffusion
-output at portrait resolution, not a 2D sticker tracked onto a moving head.
+Hence the design: **one prepared source per outfit**, generated ahead of time,
+and the dropdown swaps between prepared sources rather than compositing
+anything at runtime. That is also why it looks right - the folds, the shadows
+and the way the cloth takes the key light are real diffusion output at portrait
+resolution, not a 2D sticker tracked onto a moving head.
 
 ## Why inpainting rather than regenerating
 
 Regenerating from the prompt with `generate_presenter.py --subject "...in a
 thobe"` produces *a different person* every time. The wardrobe has to be the
 same man in different clothes, so the face, the beard, the skin and the key
-light must survive untouched. Inpainting masks the face out of the edit
-entirely: only the garment region is denoised, and everything the identity
+light must survive untouched. Inpainting removes the face from the edit
+entirely: only the masked region is denoised and everything the identity
 depends on is copied through.
+
+## Why the dedicated inpainting checkpoint
+
+SDXL base was tried first and cannot do this. Its UNet takes 4 channels and was
+never trained on mask conditioning, so a masked region is just a region it is
+denoising blind. Measured across three rounds on the headwear:
+
+* at strength 0.97 it re-imagines the skull and returns a **wound turban**;
+* at 0.85 it stops generating a headdress at all and merely restyles the hair;
+* with the drape mask it drops the cloth onto the **neck, as a scarf**.
+
+The garments came out well throughout - a shirt is a plausible continuation of
+a torso, so blind denoising lands on one. A ghutra is not a plausible
+continuation of a scalp; putting a new object into a masked region is exactly
+what mask conditioning is for, and the 9-channel inpainting UNet is trained on
+it. `--model` can be pointed back at the base checkpoint to reproduce the
+failure.
 
 ## Chaining
 
-Clothing and headwear are separate edits applied in sequence (body first, then
-head) so the two dropdowns can combine freely without generating a bespoke
-prompt for every pair. Each stage re-reads the previous stage's output, so a
-ghutra is drawn over the thobe that is already there and picks up its colour
-bounce.
+Clothing and headwear are separate edits applied in sequence (body, then head)
+so the two dropdowns combine freely without a bespoke prompt per pair. The
+headwear stage re-reads the clothing stage's output, so a ghutra is drawn over
+the thobe that is already there and picks up its bounce light.
 
 ## The masks
 
-Derived from the face landmarks rather than hard-coded fractions, so this still
-works if the base portrait is replaced.
+Derived from face landmarks, not hard-coded fractions, so this survives the
+base portrait being replaced.
 
-* **Garment** - everything below the chin, down to a line above the hands.
-  Hands stay out of it deliberately: diffusion models are unreliable at hands
-  and there is no reason to re-roll a pair that already came out correct.
-* **Headwear** - the crown and the sides of the head down to shoulder height,
-  *minus* the face. A ghutra is not a hat; it drapes over the ears and onto the
-  shoulders, so a mask that stops at the hairline can only ever produce
-  something that sits on the head like a cap.
+* **Garment** - the shoulders, chest and arms with the head punched out, down
+  to a line above the hands. Hands stay out of it deliberately: diffusion
+  models are unreliable at hands and there is no reason to re-roll a pair that
+  already came out correct.
+* **Headwear** - the crown, plus a panel down each side of the head, *minus*
+  the face. A ghutra is not a hat; it hangs past the ears onto the shoulders,
+  so a mask stopping at the hairline can only ever produce a cap.
 
 Run `--preview` first. It writes the masks over the portrait and generates
 nothing, which costs seconds instead of minutes.
@@ -68,113 +84,38 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
+from presenter.render.wardrobe import Item, Wardrobe  # noqa: E402
+
+# The 9-channel, mask-conditioned checkpoint. Same CreativeML Open RAIL++-M
+# terms as SDXL base, so the licensing story in PROVENANCE.md is unchanged.
+MODEL = "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
+BASE_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 
 # CLIP truncates at 77 tokens, silently.
 #
 # The first version of this file paired a 53-token garment description with a
 # 56-token block of photographic direction and lost 31 tokens off the end -
 # which is to say, it lost the *entire* photographic direction while appearing
-# to work. The results came back looking like costume-shop stock photos and the
-# cause was invisible until the prompts were actually tokenised.
-#
-# Everything below is written to fit. `check_prompts()` asserts it, so a future
-# edit that overruns fails loudly instead of quietly dropping the tail.
+# to work. `check_prompts()` runs before anything is generated so a future edit
+# fails loudly instead of quietly dropping the tail.
 TOKEN_LIMIT = 77
 
-LOOK = (
-    "photorealistic raw photo, natural fabric texture, soft warm key light, "
-    "50mm lens, natural cloth folds, high detail"
-)
 
-NEGATIVE = (
-    "cartoon, illustration, 3d render, costume, cosplay, plastic, "
-    "distorted fabric, melted cloth, extra arms, hands, fingers, "
-    "text, logo, watermark, low quality, blurry"
-)
-
-# Headwear has its own failure mode, and it is specific: asked for a ghutra,
-# SDXL reaches for a turban - cloth wound tightly around the skull - because
-# that is what dominates its training data for "Arab headdress". A ghutra is
-# the opposite: a square of cloth laid *over* the head, weighted by the agal,
-# hanging free past the ears. Naming the wrong outcomes is the most effective
-# lever available.
-HEADWEAR_NEGATIVE = (
-    "turban, wound cloth, wrapped around head, bandana, tied headscarf, "
-    "hijab, veil, hat, cap, hood, long hair, blonde hair, visible hairline"
-)
-
-# -- the wardrobe -----------------------------------------------------------
-# Terminology is the real terminology. "Arabic headscarf" would prompt a
-# tourist-shop approximation; SDXL knows ghutra, shemagh, agal and taqiyah, and
-# naming them is most of what separates a plausible result from a costume.
-
-CLOTHING = {
-    "tee": None,   # the base portrait, unedited
-    "thobe_white": (
-        "wearing a crisp white thobe kandura, plain round collar, "
-        "narrow buttoned placket, long sleeves, pressed white cotton"
-    ),
-    "thobe_beige": (
-        "wearing a light beige thobe kandura, plain round collar, "
-        "long sleeves, soft matte cotton"
-    ),
-    "polo_navy": (
-        "wearing a navy blue cotton polo shirt, ribbed collar, "
-        "short sleeves, soft knit texture"
-    ),
-    "hoodie_charcoal": (
-        "wearing a charcoal grey hoodie, hood down behind the neck, "
-        "heavy cotton fleece, drawstrings"
-    ),
-    "shirt_linen": (
-        "wearing an oatmeal linen button-down shirt, open collar, "
-        "rolled sleeves, natural linen slub texture"
-    ),
-}
-
-HEADWEAR = {
-    "none": None,  # bare head, keeps the headphones
-    "ghutra_white": (
-        "a thick black agal rope ring resting on top of a white ghutra, "
-        "the white cloth laid over his head hanging loose past his ears "
-        "onto his shoulders, Gulf Arab headdress"
-    ),
-    "shemagh_red": (
-        "a thick black agal rope ring resting on top of a red and white "
-        "checkered shemagh, the cloth laid over his head hanging loose "
-        "past his ears onto his shoulders, Arab headdress"
-    ),
-    "ghutra_loose": (
-        "a plain white ghutra cloth laid over his head without any cord, "
-        "hanging loose past his ears onto his shoulders, one end thrown "
-        "back over the shoulder, Arab headdress"
-    ),
-    "taqiyah": (
-        "a white embroidered taqiyah kufi skullcap fitted close to the "
-        "crown of his head, fine tonal embroidery, cotton"
-    ),
-}
-
-
-def check_prompts() -> list[str]:
-    """Report every prompt that CLIP would silently truncate.
-
-    Truncation is the failure this whole file is most exposed to, because it
-    does not raise, does not warn in the pipeline output, and produces images
-    that look deliberate. Checking is three lines and it runs before anything
-    is generated.
-    """
+def check_prompts(w: Wardrobe, model: str) -> list[str]:
+    """Report every prompt CLIP would silently truncate."""
     from transformers import CLIPTokenizer
 
-    tok = CLIPTokenizer.from_pretrained(MODEL, subfolder="tokenizer")
+    tok = CLIPTokenizer.from_pretrained(model, subfolder="tokenizer")
+    combos = [
+        ("negative", w.negative_for(headwear=False)),
+        ("negative+headwear", w.negative_for(headwear=True)),
+    ]
+    for section, kind in ((w.clothing, "clothing"), (w.headwear, "headwear")):
+        for item in section.values():
+            if item.edits:
+                combos.append((f"{kind}/{item.key}", w.prompt_for(item)))
+
     over = []
-    combos = [("negative", NEGATIVE),
-              ("negative+headwear", f"{NEGATIVE}, {HEADWEAR_NEGATIVE}")]
-    for table, kind in ((CLOTHING, "clothing"), (HEADWEAR, "headwear")):
-        for name, prompt in table.items():
-            if prompt is not None:
-                combos.append((f"{kind}/{name}", f"{prompt}, {LOOK}"))
     for name, text in combos:
         n = len(tok(text).input_ids)
         if n > TOKEN_LIMIT:
@@ -253,19 +194,18 @@ def garment_mask(g: Geometry, hands_at: float = 0.86, feather: int = 41) -> np.n
 def headwear_mask(g: Geometry, drape: float = 0.9, feather: int = 31) -> np.ndarray:
     """Crown and ears, plus the cloth falling past them, minus the face.
 
-    A ghutra is not a hat. It is a square of cloth over the crown whose sides
-    hang past the ears and onto the shoulders, so the mask is a cap *plus two
-    side panels* rather than one large blob - a single big ellipse reaches
-    across the chest, where no part of the headdress actually goes, and hands
-    the model a bib to fill in.
+    A ghutra is a square of cloth laid over the crown whose sides hang past the
+    ears, so the mask is a cap *plus two side panels* rather than one large
+    blob - a single big ellipse reaches across the chest, where no part of the
+    headdress goes, and hands the model a bib to fill in.
 
     ``drape`` is how far the side panels fall below the chin, in face heights;
     at 0 the panels vanish and the mask is a skullcap.
     """
     m = np.zeros((g.h, g.w), np.uint8)
 
-    # The crown. The landmark set covers the face only, and the top of the
-    # head sits roughly half a face-height above the brow line.
+    # The crown. The landmark set covers the face only, and the top of the head
+    # sits roughly half a face-height above the brow line.
     cv2.ellipse(
         m,
         (int(g.cx), int(g.brow_y + g.face_h * 0.05)),
@@ -292,10 +232,9 @@ def preview(img: np.ndarray, masks: dict[str, np.ndarray], out: Path) -> None:
     tint = {"garment": (0, 200, 255), "headwear": (255, 120, 0)}
     tiles = []
     for name, m in masks.items():
-        over = img.copy().astype(np.float32)
+        over = img.astype(np.float32)
         a = (m.astype(np.float32) / 255.0)[..., None] * 0.55
-        over = over * (1 - a) + np.array(tint[name], np.float32) * a
-        over = over.astype(np.uint8)
+        over = (over * (1 - a) + np.array(tint[name], np.float32) * a).astype(np.uint8)
         cv2.putText(over, name, (24, 56), cv2.FONT_HERSHEY_SIMPLEX, 1.4,
                     (255, 255, 255), 3, cv2.LINE_AA)
         tiles.append(cv2.resize(over, (512, 512)))
@@ -303,48 +242,59 @@ def preview(img: np.ndarray, masks: dict[str, np.ndarray], out: Path) -> None:
     print(f"[wardrobe] mask preview -> {out}")
 
 
+def contact_sheet(paths: list[Path], out: Path, cols: int = 3) -> None:
+    cell = 420
+    rows = (len(paths) + cols - 1) // cols
+    sheet = np.full((rows * cell, cols * cell, 3), 24, np.uint8)
+    for i, p in enumerate(paths):
+        im = cv2.imread(str(p))
+        if im is None:
+            continue
+        im = cv2.resize(im, (cell - 6, cell - 6))
+        r, c = divmod(i, cols)
+        sheet[r * cell + 3:r * cell + cell - 3, c * cell + 3:c * cell + cell - 3] = im
+        cv2.putText(sheet, p.stem, (c * cell + 12, r * cell + 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2, cv2.LINE_AA)
+    cv2.imwrite(str(out), sheet)
+    print(f"[wardrobe] contact sheet -> {out}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--base", default="assets/presenter_source.png")
-    ap.add_argument("--out", default="assets/wardrobe")
+    ap.add_argument("--wardrobe", default="config/wardrobe.yaml")
     ap.add_argument("--liveportrait-root", default="third_party/LivePortrait")
-    ap.add_argument("--clothing", action="append", choices=sorted(CLOTHING))
-    ap.add_argument("--headwear", action="append", choices=sorted(HEADWEAR))
+    ap.add_argument("--model", default=MODEL,
+                    help=f"inpainting checkpoint. Point at {BASE_MODEL} to "
+                         f"reproduce the failure described in the module "
+                         f"docstring")
+    ap.add_argument("--clothing", action="append")
+    ap.add_argument("--headwear", action="append")
     ap.add_argument("--all", action="store_true",
                     help="every clothing x headwear combination")
     ap.add_argument("--preview", action="store_true",
                     help="write the masks over the portrait and stop")
     ap.add_argument("--steps", type=int, default=40)
-    ap.add_argument("--guidance", type=float, default=7.0)
-    ap.add_argument("--strength", type=float, default=0.95,
-                    help="garment denoising strength. SDXL base has a "
-                         "4-channel UNet, so masked denoising has to run near "
-                         "full strength or the original garment ghosts through")
-    ap.add_argument("--head-strength", type=float, default=0.85,
-                    help="headwear denoising strength, deliberately lower: at "
-                         "0.95+ the model stops treating the skull underneath "
-                         "as fixed and re-imagines the hairline and head "
-                         "shape, which is what turns a draped ghutra into a "
-                         "wound turban")
+    ap.add_argument("--guidance", type=float, default=7.5)
+    ap.add_argument("--strength", type=float, default=0.99,
+                    help="garment denoising strength")
+    ap.add_argument("--head-strength", type=float, default=0.99,
+                    help="headwear denoising strength, separate because the "
+                         "two edits fail in different directions")
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--force", action="store_true",
                     help="regenerate variants that already exist")
+    ap.add_argument("--sheet", action="store_true",
+                    help="also write a contact sheet of everything generated")
     args = ap.parse_args()
 
-    over = check_prompts()
-    if over:
-        print("[wardrobe] prompts exceed CLIP's 77-token limit and would be "
-              "truncated without warning:")
-        for line in over:
-            print(f"[wardrobe]   {line}")
-        return 2
+    w = Wardrobe.load(args.wardrobe)
 
-    base_path = ROOT / args.base if not Path(args.base).is_absolute() else Path(args.base)
-    img = cv2.imread(str(base_path))
+    img = cv2.imread(str(w.base))
     if img is None:
-        return print(f"[wardrobe] cannot read {base_path}") or 2
+        print(f"[wardrobe] cannot read base portrait {w.base}")
+        return 2
 
     lp_root = Path(args.liveportrait_root)
     if not lp_root.is_absolute():
@@ -354,41 +304,51 @@ def main() -> int:
     print(f"[wardrobe] face {g.face_w:.0f}x{g.face_h:.0f} at ({g.cx:.0f}, "
           f"{g.eye_y:.0f}), chin {g.chin_y:.0f}")
 
-    out_dir = ROOT / args.out if not Path(args.out).is_absolute() else Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    w.directory.mkdir(parents=True, exist_ok=True)
 
     if args.preview:
-        preview(img, {"garment": garment_mask(g),
-                      "headwear": headwear_mask(g)},
-                out_dir / "mask_preview.png")
+        preview(img, {"garment": garment_mask(g), "headwear": headwear_mask(g)},
+                w.directory / "mask_preview.png")
         return 0
 
+    over = check_prompts(w, args.model)
+    if over:
+        print("[wardrobe] prompts exceed CLIP's 77-token limit and would be "
+              "truncated without warning:")
+        for line in over:
+            print(f"[wardrobe]   {line}")
+        return 2
+
     if args.all:
-        clothes, heads = sorted(CLOTHING), sorted(HEADWEAR)
+        clothes, heads = list(w.clothing), list(w.headwear)
     else:
-        clothes = args.clothing or ["tee"]
-        heads = args.headwear or ["none"]
+        clothes = args.clothing or [next(iter(w.clothing))]
+        heads = args.headwear or [next(iter(w.headwear))]
+    for key, table, kind in ((clothes, w.clothing, "clothing"),
+                             (heads, w.headwear, "headwear")):
+        unknown = [k for k in key if k not in table]
+        if unknown:
+            print(f"[wardrobe] unknown {kind}: {unknown}; have {sorted(table)}")
+            return 2
 
     import torch
     from diffusers import AutoPipelineForInpainting
-
-    pipe = AutoPipelineForInpainting.from_pretrained(
-        MODEL, torch_dtype=torch.float16, variant="fp16", use_safetensors=True,
-    ).to("cuda")
-    pipe.set_progress_bar_config(disable=True)
-
     from PIL import Image
 
-    def to_pil(bgr):
-        return Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+    print(f"[wardrobe] loading {args.model}")
+    pipe = AutoPipelineForInpainting.from_pretrained(
+        args.model, torch_dtype=torch.float16, variant="fp16",
+        use_safetensors=True,
+    ).to("cuda")
+    pipe.set_progress_bar_config(disable=True)
+    print(f"[wardrobe] UNet takes {pipe.unet.config.in_channels} channels "
+          f"({'mask-conditioned' if pipe.unet.config.in_channels > 4 else 'NOT mask-conditioned'})")
 
-    def inpaint(bgr, mask, prompt, seed, *, head=False):
+    def inpaint(bgr, mask, item: Item, seed: int, *, head: bool):
         result = pipe(
-            prompt=f"{prompt}, {LOOK}",
-            negative_prompt=(
-                f"{NEGATIVE}, {HEADWEAR_NEGATIVE}" if head else NEGATIVE
-            ),
-            image=to_pil(bgr),
+            prompt=w.prompt_for(item),
+            negative_prompt=w.negative_for(headwear=head),
+            image=Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)),
             mask_image=Image.fromarray(mask),
             num_inference_steps=args.steps,
             guidance_scale=args.guidance,
@@ -399,30 +359,35 @@ def main() -> int:
         return cv2.cvtColor(np.array(result), cv2.COLOR_RGB2BGR)
 
     gmask = garment_mask(g)
-    made = 0
+    written: list[Path] = []
     for ci, cloth in enumerate(clothes):
-        body = img
-        if CLOTHING[cloth] is not None:
-            body = inpaint(img, gmask, CLOTHING[cloth], args.seed + ci * 17)
+        body = None                      # generated lazily: skipped combos cost nothing
         for hi, head in enumerate(heads):
-            name = f"{cloth}__{head}.png"
-            path = out_dir / name
+            path = w.path(cloth, head)
+            if path == w.base:
+                continue                 # this combination *is* the base portrait
             if path.exists() and not args.force:
-                print(f"[wardrobe] {name} exists, skipping")
+                print(f"[wardrobe] {path.name} exists, skipping")
                 continue
-            out = body
-            if HEADWEAR[head] is not None:
-                # A skullcap sits on the crown; a ghutra falls to the
-                # shoulders. Same mask function, different drape.
-                drape = 0.0 if head == "taqiyah" else 0.9
-                out = inpaint(body, headwear_mask(g, drape=drape),
-                              HEADWEAR[head], args.seed + ci * 17 + hi * 3,
-                              head=True)
-            cv2.imwrite(str(path), out)
-            made += 1
-            print(f"[wardrobe] {name}")
 
-    print(f"[wardrobe] {made} variant(s) -> {out_dir}")
+            if body is None:
+                item = w.clothing[cloth]
+                body = (inpaint(img, gmask, item, args.seed + ci * 17, head=False)
+                        if item.edits else img)
+
+            out = body
+            head_item = w.headwear[head]
+            if head_item.edits:
+                out = inpaint(body, headwear_mask(g, drape=head_item.drape),
+                              head_item, args.seed + ci * 17 + hi * 3, head=True)
+            cv2.imwrite(str(path), out)
+            written.append(path)
+            print(f"[wardrobe] {path.name}")
+
+    if args.sheet and written:
+        contact_sheet(written, w.directory / "contact_sheet.png")
+    print(f"[wardrobe] {len(written)} variant(s) -> {w.directory}")
+    print(f"[wardrobe] {len(w.missing())} combination(s) still missing")
     return 0
 
 
