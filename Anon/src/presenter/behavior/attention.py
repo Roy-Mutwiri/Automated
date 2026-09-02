@@ -131,6 +131,17 @@ STATE_BIAS: dict[str, dict[str, float]] = {
 }
 
 
+# Eye-head recruitment constants.
+#
+# Raised from an initial 11 / 42 / 0.62, which produced the side-eye the review
+# found: a 17.5 degree glance recruited 2.6 degrees of head, so the eyes carried
+# it alone. Human coordination puts roughly a quarter to a third of a 20 degree
+# shift on the head in casual conditions and more with intent.
+EYE_ONLY_DEG = 8.0            # below this, eyes alone
+HEAD_SHARE_FULL_DEG = 35.0    # eccentricity at which the head takes its full share
+HEAD_SHARE_MAX = 0.75         # the eyes always keep some eccentricity
+
+
 # How much more (or less) head a state recruits at the same angle. Reading and
 # focusing turn the head; idle glancing does not.
 STATE_HEAD_RECRUITMENT = {
@@ -241,7 +252,7 @@ class AttentionSystem:
 
     # -- the shift ----------------------------------------------------------
     def _hold_share(self, az: float, dwell: float = 3.0,
-                    state: str = "IDLE_ATTENTIVE") -> float:
+                    state: str = "IDLE_ATTENTIVE", el: float = 0.0) -> float:
         """How much of a held eccentricity the head carries.
 
         Not `head = eye_angle * k`. Human recruitment depends on more than
@@ -272,14 +283,19 @@ class AttentionSystem:
         with no separate recentring rule.
         """
         p = self.profile
-        eye_only = getattr(p, "eye_only_deg", 11.0)
-        mag = abs(az)
+        eye_only = getattr(p, "eye_only_deg", EYE_ONLY_DEG)
+        # Full eccentricity, not azimuth alone. Using azimuth by itself meant
+        # the desk - 6 degrees across but 17 down - recruited no head at all,
+        # so the presenter looked at his own hands with his eyes alone. People
+        # drop their chin to look down; the vertical component has to count.
+        mag = math.hypot(az, el)
         if mag <= eye_only:
             return 0.0
 
-        span = max(getattr(p, "head_share_full_deg", 42.0) - eye_only, 1e-3)
+        span = max(getattr(p, "head_share_full_deg", HEAD_SHARE_FULL_DEG)
+                   - eye_only, 1e-3)
         share = min((mag - eye_only) / span, 1.0)
-        share *= getattr(p, "head_share_max", 0.62)
+        share *= getattr(p, "head_share_max", HEAD_SHARE_MAX)
 
         # Intent. A 0.6 s glance keeps ~55% of the geometric share; a 5 s read
         # gets ~1.35x it. The curve is gentle either side of a ~2.5 s pivot.
@@ -316,9 +332,9 @@ class AttentionSystem:
         magnitude = math.hypot(d_az, d_el)
 
         planned = t.dwell_median
-        share = self._hold_share(to_az, planned, drives.state.value)
+        share = self._hold_share(to_az, planned, drives.state.value, to_el)
         head_to_yaw = to_az * share
-        head_to_pitch = to_el * share * 0.6
+        head_to_pitch = to_el * share * 0.85
         self._planned_dwell = planned
         self._state_at_shift = drives.state.value
 
@@ -421,9 +437,9 @@ class AttentionSystem:
         on_target = max(drives.now - self.last_change, 0.0)
         ramp = 1.0 - math.exp(-on_target / 1.8)
         share = self._hold_share(self.point_az, self._planned_dwell,
-                                 self._state_at_shift) * ramp
+                                 self._state_at_shift, self.point_el) * ramp
         want_yaw = self.point_az * share
-        want_pitch = self.point_el * share * 0.6
+        want_pitch = self.point_el * share * 0.85
         k = 1.0 - math.exp(-drives.dt / 1.4)
         self.head_yaw += (want_yaw - self.head_yaw) * k
         self.head_pitch += (want_pitch - self.head_pitch) * k
