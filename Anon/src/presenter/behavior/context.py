@@ -37,6 +37,17 @@ class Drives:
     now: float = 0.0
     dt: float = 0.0
 
+    # Smoothed frame interval. Distinct from `dt`, which is the instantaneous
+    # step and far too noisy to make decisions from.
+    #
+    # Timing being frame-rate independent is necessary but not sufficient: a
+    # movement also has to be *sampled* often enough to be perceived as motion
+    # rather than as a jump. A 145 ms blink at 13 FPS lands on one intermediate
+    # frame - the eye appears to teleport shut. Subsystems whose motion is fast
+    # relative to the frame interval consult this and stretch themselves to
+    # stay visible.
+    frame_interval: float = 1.0 / 30.0
+
     # Cross-subsystem coupling, written by the scheduler before subsystems run.
     # Blink probability rises with time held in fixation, so the gaze system's
     # state has to be visible to the blink system.
