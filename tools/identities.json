@@ -1,8 +1,8 @@
 {
-  "_comment": "Emails deliberately use the non-routable .local domain so GitHub cannot bind these commits to a real account. Do NOT use name@users.noreply.github.com here - GitHub resolves those to whichever real user owns that login.",
+  "_comment": "All three identities author with the GitHub noreply address for user 132381941 (Roy-Mutwiri), so every commit binds to that account and counts toward the contribution graph. The display names stay distinct, so `git log --author` and the commit subjects still separate Anon / Dripper / shared work. The noreply form keeps the owner's real email out of this repo's public history - do NOT replace it with a routable personal address.",
   "folders": {
-    "Anon":    { "name": "Anon",    "email": "anon@automated.local" },
-    "Dripper": { "name": "Dripper", "email": "dripper@automated.local" }
+    "Anon":    { "name": "Anon",    "email": "132381941+Roy-Mutwiri@users.noreply.github.com" },
+    "Dripper": { "name": "Dripper", "email": "132381941+Roy-Mutwiri@users.noreply.github.com" }
   },
-  "shared":    { "name": "Roy-Mutwiri", "email": "mutwiriroy63@gmail.com" }
+  "shared":    { "name": "Roy-Mutwiri", "email": "132381941+Roy-Mutwiri@users.noreply.github.com" }
 }
