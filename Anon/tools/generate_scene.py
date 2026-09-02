@@ -69,25 +69,41 @@ WIDTH, HEIGHT = 1344, 768
 # 256 px inference input once cropped - the room looked superb and the face was
 # unusable. Closer framing trades a little visible room for a face that can
 # actually be driven.
+# BOTH encoders begin with the man. That rule is the hard-won one.
+#
+# SDXL runs two text encoders (CLIP-L and OpenCLIP-G) and diffusers takes a
+# separate prompt for each. Whatever leads a prompt dominates it, and OpenCLIP-G
+# dominates the image. Leading encoder B with the wall produced eight of twelve
+# candidates containing no human at all; leading encoder A with the man while
+# encoder B described only the room produced blank walls behind a good subject.
+#
+# So: encoder A is WHO + COMPOSITION + CAMERA, encoder B is WHO + ENVIRONMENT +
+# MATERIALS, and both open on the same subject clause. The room is context, not
+# the topic.
+_ANCHOR = "one adult male streamer seated close to camera"
+
+# Encoder A: who, how framed, what lens.
+#
+# The camera has moved from 2.2 m to ~1.4 m. At the previous distance the room
+# looked superb and the head measured 94 px - unusable. Head height is the
+# quantity being targeted now (240-280 px at 1344x768), and camera distance is
+# the lever that actually moves it.
 SUBJECT_PROMPT = (
-    "medium close-up photo, head and chest, camera 1.2m away, "
-    "a brown-skinned Arab man in his 30s, short dark beard, charcoal shirt, "
-    "in a matte black high-back gaming chair with headrest, "
-    "head straight to camera, frontal face, looking into the lens, "
-    "calm neutral expression, mouth closed, eyes open, natural skin"
+    "photorealistic livestream camera frame, " + _ANCHOR + ", "
+    "a brown-skinned Arab man in his 30s with a short dark beard, "
+    "in a matte black high-back gaming chair, facing directly toward camera, "
+    "head and upper torso large in frame, symmetrical frontal face, "
+    "looking into the lens, calm neutral expression, mouth closed, eyes open, "
+    "40mm lens, eye level, natural skin texture"
 )
 
-# Encoder 2 (OpenCLIP-G): the room - but it MUST still lead with the man.
-#
-# SDXL weights OpenCLIP-G heavily. A room-only prompt here produced eight
-# candidates out of twelve with no human in them at all, even with "empty room,
-# no people" in the negative. Anchoring the sentence on the man keeps him
-# present while the wall still gets described.
+# Encoder B: the same man, then the room he is in.
 ROOM = (
-    "a man seated close to camera in his luxury streamer man cave at night, "
+    "photo of " + _ANCHOR + " in his luxury streamer man cave at night, "
     "behind him a wall of narrow vertical dark walnut wood slats with real "
-    "wood grain, dark walnut desk, monitor, broadcast microphone on a boom, "
-    "matte black and charcoal, warm amber practical lights, 45mm, photograph"
+    "wood grain, dark walnut desk, monitor, broadcast microphone on a boom "
+    "arm, matte black and charcoal, warm amber practical lights, "
+    "shallow depth of field, photograph"
 )
 
 CONCEPTS = {
@@ -104,20 +120,19 @@ CONCEPTS = {
 # tokens, so two thirds of it - every geometry and look term - was discarded
 # before the model saw it.
 NEGATIVE = (
-    "curtains, drapes, fabric wall, cloth wall, pleated textile, stage curtain, "
-    "velvet, folded material, textile panel, "
-    "piano, midi keyboard, synthesizer, musical instrument, mixing console, "
-    "recording studio, podcast studio, "
-    "office chair, mesh chair, executive chair, racing stripes, "
-    "text, letters, words, signage, logo, watermark, screen text, numbers"
+    "wide room shot, tiny person, distant person, full body, far away, "
+    "empty room, no people, unoccupied, interior only, "
+    "architectural visualization, interior design render, showroom, "
+    "curtains, drapes, fabric wall, cloth wall, pleated textile, "
+    "piano, midi keyboard, synthesizer, musical instrument, mixing console"
 )
 
 NEGATIVE_2 = (
-    "empty room, no people, unoccupied, "
-    "rgb lighting, rainbow, neon, purple, cyberpunk, gamer bedroom, cluttered, "
-    "cgi, 3d render, showroom, illustration, cartoon, plastic skin, "
-    "airbrushed, waxy, warped walls, deformed hands, extra limbs, two people, "
-    "fisheye, blurry face, overexposed, flat lighting"
+    "office chair, mesh chair, executive chair, corporate office, "
+    "rgb lighting, rainbow, neon, purple, cyberpunk, gamer bedroom, "
+    "text, letters, signage, logo, watermark, screen text, numbers, "
+    "cgi, 3d render, illustration, cartoon, sketch, plastic skin, waxy, "
+    "deformed hands, extra limbs, two people, blurry face, overexposed"
 )
 
 
