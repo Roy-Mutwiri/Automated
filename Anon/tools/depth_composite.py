@@ -381,16 +381,34 @@ def self_test(camera_id, width, height, sim_time):
           f"median {np.median(finite):.3f}  max {finite.max():.3f} m")
     print(f"[composite] background (no geometry hit): {(room_depth >= FAR/2).mean():.1%}")
 
+    # Preconditions. None of the occlusion numbers below mean anything unless
+    # the scene actually contains the things being compared, so they are
+    # asserted rather than assumed - the vacuous pass is the failure mode this
+    # whole file was written around.
+    room_finite = validate_depth(room_depth, "room depth")
+    print(f"[composite] precondition: {room_finite} room pixels carry geometry")
+
     results = {}
     for label, depth_m, colour in (("subject", dist, (90, 150, 230, 255)),
                                    ("behind-desk", finite.max() - 0.05,
                                     (200, 120, 90, 255))):
         rgba, hd = _slab(width, height, depth_m, colour)
-        out, panel = composite(room_rgb, room_depth, rgba, hd, debug=True)
         card = hd < FAR / 2
+        card_px = int(card.sum())
+        overlap = int((card & (room_depth < FAR / 2)).sum())
+        if card_px == 0:
+            raise AssertionError(f"{label}: the probe card has no finite pixels")
+        if overlap == 0:
+            raise AssertionError(
+                f"{label}: the card and the room geometry do not overlap "
+                f"anywhere, so no occlusion decision is being exercised. A "
+                f"pass here would be meaningless.")
+        out, panel = composite(room_rgb, room_depth, rgba, hd, debug=True)
         in_front = int(((hd < room_depth) & card).sum())
         behind = int(((room_depth <= hd) & card).sum())
         results[label] = (in_front, behind)
+        print(f"[composite] precondition: {label} card {card_px} px, "
+              f"{overlap} px overlap room geometry")
         print(f"[composite] card at {depth_m:6.3f} m ({label:11s}): "
               f"{in_front:7d} px in front, {behind:7d} px occluded by the room")
         if label == "subject":
