@@ -114,6 +114,45 @@ blinks per minute. Animation is driven by elapsed time, never frame count.
 
 Sources for every number: [`docs/human_behavior.md`](docs/human_behavior.md).
 
+## Performance: honest numbers
+
+Measured on the RTX 5080 Laptop, 1280×720 output, 150–200 frame runs.
+
+| Configuration | Frame time | p95 | FPS |
+|---|---|---|---|
+| Initial working version | 116 ms | — | 8.4 |
+| + compositing rewrite | 94.5 ms | 107 ms | 10.6 |
+| + `torch.compile` | **74.7 ms** | 82.7 ms | **13.4** |
+
+VRAM: 1.25 GB reserved. **Target is 25 FPS minimum. This does not meet it.**
+
+### Why — and why it is not a quality problem
+
+Sampling the GPU under load: **14–18 % utilisation, 1065–1297 MHz, 30 W.** The
+GPU sits idle most of every frame. This is a **launch-bound** workload — many
+small kernels the CPU cannot dispatch fast enough — not a compute limit. The
+evidence is consistent: converting weights fp32→fp16 moved the needle only
+68.9→65.0 ms, exactly what you expect when the GPU is not the constraint.
+
+So the remaining performance is available *for free*, without touching visual
+quality. Reducing resolution or model size to buy frames would be the wrong
+trade: the brief ranks a stable realistic 30 FPS above an unstable 60, and
+there is a large amount of headroom being wasted.
+
+**Routes to 25–30 FPS, in order of expected return:**
+
+1. **CUDA graphs.** Directly eliminates launch overhead.
+   `torch.compile(mode="reduce-overhead")` currently fails with
+   `accessing tensor output of CUDAGraphs that has been overwritten` inside
+   `warping_network.forward` — the fix is cloning the module outputs.
+2. **TensorRT.** [FasterLivePortrait](https://github.com/warmshao/FasterLivePortrait)
+   reports 30+ FPS on an RTX 3090 including pre/post-processing. It targets
+   TensorRT 8.x and CUDA 12.2, so Blackwell/CUDA 12.8 needs work.
+3. **GPU-side compositing.** The warp and blend still run on CPU.
+
+Also worth checking: 30 W draw suggests the laptop may be on a power-saving
+profile. Worth confirming before attributing everything to software.
+
 ## Configuration
 
 [`config/avatar.yaml`](config/avatar.yaml). All timing values are **medians**,
