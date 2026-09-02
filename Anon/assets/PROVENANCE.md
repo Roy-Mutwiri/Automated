@@ -31,7 +31,8 @@ different downstream terms:
 
 The sample obtained contained 133 Flux1.dev, 69 SDXL and 63 Flux1.pro images.
 **Only the SDXL subset is unambiguously safe for commercial use**, and since the
-commercial question is currently open, the choice was restricted to those 69.
+commercial question is currently open, the choice was restricted to the SDXL
+subset (69 in the tiny sample, 550 in the small sample).
 The generating model is recorded in each filename, so this is verifiable rather
 than assumed.
 
@@ -57,7 +58,7 @@ the licence-safe SDXL subset against the visual requirements:
   source - the behaviour engine can only move relative to it - so this is a
   portrait-selection problem, not a tuning one. Worth checking on any
   replacement.
-- Head pose in the source is yaw −10°, pitch +8°. The renderer neutralises 85 %
+- Head pose in the source is yaw −10.2°, pitch +1.5°. The renderer neutralises 85 %
   of that (`neutralize_pose`) so he addresses the lens; a little residual is
   left deliberately, since a perfectly square head is itself unnatural.
 
