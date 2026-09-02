@@ -43,23 +43,53 @@ so that where he looks and where things are cannot drift apart.
 Changing the shape of `pose`, or the meaning of a `gaze_target`, is a change to
 a shared interface. Everything else in each column is one terminal's business.
 
-## Automated commits make ownership hard to see in history
+## The branch is the ownership boundary
 
-A scheduled task, `AutomatedRepoSync`, runs `tools/sync.ps1`: it watches the
-tree, auto-commits, then pulls with rebase and pushes. It attributes commits by
-**top-level folder** — `Anon/` versus `Dripper/` — so it cannot separate two
-terminals that both work inside `Anon/`.
+Each terminal works in its own git worktree, on its own branch. The directory is
+the isolation and the branch is the record:
 
-The practical consequences:
+| Worktree | Branch | Owner |
+|---|---|---|
+| `Automated/` | `main` | shared / integration |
+| `Automated-camera/` | `camera-terminal` | camera terminal |
+| `Automated-movement/` | `movement-terminal` | movement terminal |
 
-* Work from both terminals lands in the same auto-generated commit
-  (`Anon: 12 files (9 added, 3 modified)`) whenever they save close together.
-* History cannot be rewritten while the task runs. A `git reset --soft` is
-  re-committed within seconds and then rebased away by the next pull.
+Confirm which one you are in before doing anything:
 
-So commit boundaries are not a reliable record of ownership here. **This file
-is.** If the boundaries matter, stop the scheduled task first, or give each
-terminal its own branch and let the sync push both.
+    git branch --show-current
+
+Both terminals legitimately edit files under `Anon/`, so a path can never say
+who wrote a change. A branch can, and does.
+
+## Automated commits follow the branch, not the folder
+
+One scheduled task per worktree, `AutomatedRepoSync_<worktree>`, runs
+`tools/sync.ps1 -Worktree <that directory>`. Each watcher:
+
+    detect the current branch
+        -> commit only its own worktree, as that branch's owner, in one commit
+        -> push only that branch
+
+Branch to identity is mapped in `tools/identities.json` under `branches`. A
+watcher never reads a source path to decide an owner, and never touches a branch
+another terminal is sitting on. Registration lives in `tools/autostart.ps1`;
+`-Remove` unregisters every watcher.
+
+The old behaviour attributed commits by top-level folder — `Anon/` versus
+`Dripper/` — which could not separate two terminals working in the same folder,
+and merged their work into single commits like
+`Anon: 12 files (9 added, 3 modified)`. Folder attribution now survives only as
+the fallback for a branch with no mapping, in practice `main`, where `Anon/` and
+`Dripper/` really are two separate projects.
+
+To give a commit a real message instead of a generated one, write the message to
+`.sync-message` in your worktree before saving. The watcher uses it verbatim and
+deletes it.
+
+History still cannot be rewritten while your watcher runs: a `git reset --soft`
+is re-committed within seconds. Stop that one task first —
+`Stop-ScheduledTask -TaskName AutomatedRepoSync_<worktree>` — which now affects
+only your own branch.
 
 ## Frozen infrastructure
 
@@ -73,7 +103,7 @@ them wrong. Each was validated against something external rather than asserted.
 | Blender to external-renderer camera matrices | the same reprojection test |
 | `tools/depth_composite.py` | median room depth 2.935 m where config puts the wall at 2.94 m |
 | ray-cast room depth | as above; chosen over the EXR pass, which cannot be read back headless |
-| cached depth per camera | cache is keyed to camera and resolution |
+| cached depth per camera | cache is keyed to camera, resolution, and a hash of `config/cameras.yaml` + `config/room_geometry.yaml`, so moving a camera or changing the room invalidates it |
 | near/far occlusion self-tests | two probes, one that must win and one that must lose |
 | cam1/2/3 depth validation | mic and boom correctly occlude the human on cam2 |
 
