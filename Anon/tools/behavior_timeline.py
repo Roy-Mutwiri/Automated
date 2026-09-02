@@ -113,7 +113,11 @@ def detect_repeats(
     computed as the count a uniform-random sequence over the observed alphabet
     would produce.
     """
-    kinds = [e.kind for e in events if e.kind in VOLUNTARY_KINDS]
+    kinds = [
+        (f"attention:{e.metadata.get('target', '?')}"
+         if e.kind == "attention" and e.metadata else e.kind)
+        for e in events if e.kind in VOLUNTARY_KINDS
+    ]
     if len(kinds) < length + 1:
         return [], 0.0
     # Attention events carry their target, because "looked at the lens then the
@@ -122,7 +126,6 @@ def detect_repeats(
     # then dominates the stream and makes `attention > attention > attention >
     # attention` the top "loop" in any sequence whatsoever - the marginal
     # distribution showing through, not a repetition.
-    kinds = [k for k in kinds]
     grams = Counter(
         tuple(kinds[i : i + length]) for i in range(len(kinds) - length + 1)
     )
