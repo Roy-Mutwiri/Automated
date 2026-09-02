@@ -260,12 +260,32 @@ def main() -> int:
     # and what lens it carries is world configuration, not a feature of the
     # face renderer - tying the two together is what made camera switching
     # look broken when it had simply never been created.
+    # Fatal, not advisory. The shared venv holds an editable install of
+    # `presenter` pointing at whichever worktree it was installed from, so
+    # `-m presenter.app` can execute a different branch's code while your edits
+    # sit on disk doing nothing. That is not a warning-level problem: every
+    # subsequent observation would be about the wrong source tree.
+    #
+    # The test is narrow enough to be safe. It only fires when the directory
+    # you launched from contains its own presenter package AND Python imported
+    # a different one - a situation that is always a mistake.
+    import presenter as _pkg
+
+    _imported = Path(_pkg.__file__).resolve().parent
+    _expected = Path.cwd() / "src" / "presenter"
+    if _expected.is_dir() and _expected.resolve() != _imported:
+        print("\nFATAL: WRONG WORKTREE SOURCE", file=sys.stderr)
+        print(f"  EXPECTED SOURCE:          {_expected.resolve()}", file=sys.stderr)
+        print(f"  ACTUAL PRESENTER IMPORT:  {_imported}", file=sys.stderr)
+        print("\nPython imported the presenter package from a different tree "
+              "than the one you are standing in.\nFix it with either:\n"
+              "    tools\\run_app.ps1\n"
+              "    $env:PYTHONPATH='src'\n", file=sys.stderr)
+        return 2
+
     if args.debug:
-        # Which source tree is actually executing. The shared venv holds an
-        # editable install pointing at another worktree, so `-m presenter.app`
-        # can silently run a different branch's code - edits then appear to do
-        # nothing, which is a genuinely confusing hour. Print it, always.
-        import presenter as _pkg
+        # Which source tree is actually executing, printed every launch so the
+        # answer is on screen rather than something to go and work out.
         import subprocess as _sp
 
         src_root = Path(_pkg.__file__).resolve().parents[1]
