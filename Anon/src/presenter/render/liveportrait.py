@@ -211,6 +211,73 @@ class LivePortraitRenderer:
 
         self._prepare_compositing(img_bgr, lmk, crop)
 
+    def _person_matte(self, img_bgr: np.ndarray) -> np.ndarray:
+        """Segment the presenter from the source portrait. Runs once.
+
+        Uses torchvision's DeepLabV3 (BSD-licensed weights, already available
+        with torch) rather than adding a matting dependency. Its output is
+        coarse around hair, which would normally be disqualifying for a
+        portrait with this much of it - but two things make it sufficient here:
+
+        * The replacement background is heavily defocused, so there is no sharp
+          detail behind the edge for a ragged matte to contrast against.
+        * The matte is dilated and feathered before use, so the transition band
+          carries a few pixels of the *original* background - itself soft, warm
+          bokeh - which blends into the generated room rather than cutting
+          against it.
+
+        The dilation has a second job: the head moves a few pixels as it turns,
+        and a matte computed from a static frame would otherwise clip the
+        silhouette on the leading edge.
+        """
+        import torch
+        import torchvision
+
+        weights = torchvision.models.segmentation.DeepLabV3_MobileNet_V3_Large_Weights.DEFAULT
+        model = torchvision.models.segmentation.deeplabv3_mobilenet_v3_large(
+            weights=weights
+        ).eval().to(self.device)
+
+        rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        batch = weights.transforms()(
+            torch.from_numpy(rgb).permute(2, 0, 1)
+        ).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            logits = model(batch)["out"][0]
+        # Class 15 is "person" in the VOC label set these weights use.
+        probs = logits.softmax(0)[15].cpu().numpy()
+
+        del model
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
+
+        h, w = img_bgr.shape[:2]
+        matte = cv2.resize(probs.astype(np.float32), (w, h),
+                           interpolation=cv2.INTER_LINEAR)
+        matte = (matte > 0.5).astype(np.float32)
+
+        if matte.mean() < 0.03:
+            raise RuntimeError(
+                "person segmentation found almost nothing - the source "
+                "portrait may not contain a recognisable person"
+            )
+
+        # Keep only the largest connected region; stray specks elsewhere in the
+        # frame would punch holes in the new background.
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(
+            matte.astype(np.uint8), 8
+        )
+        if n > 1:
+            largest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+            matte = (labels == largest).astype(np.float32)
+
+        grow = max(int(0.012 * min(h, w)), 3)
+        matte = cv2.dilate(matte, np.ones((grow, grow), np.uint8))
+        feather = max(int(0.016 * min(h, w)) | 1, 5)
+        matte = cv2.GaussianBlur(matte, (feather, feather), 0)
+        return np.clip(matte, 0.0, 1.0)
+
     def _build_fill(self, img_bgr: np.ndarray, out_w: int, out_h: int) -> np.ndarray:
         """Fill the 16:9 canvas either side of a taller-than-16:9 framing.
 
