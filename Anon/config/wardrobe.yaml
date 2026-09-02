@@ -29,14 +29,16 @@ negative: >-
   distorted fabric, melted cloth, extra arms, hands, fingers,
   text, logo, watermark, low quality, blurry
 
-# Headwear has a specific failure mode: asked for a ghutra, a diffusion model
-# reaches for a turban, because wound cloth dominates its training data for
-# "Arab headdress". A ghutra is the opposite - a square of cloth laid *over* the
-# head, weighted by the agal, hanging free past the ears. Naming the wrong
-# outcomes is the most effective lever available.
+# Headwear has its own failure modes, and they were found by sweeping variants
+# rather than guessed: braided hair and reconstructed headphone cups down the
+# sides of the head, and a wound turban instead of a draped cloth. Naming the
+# wrong outcomes is the most effective lever available, and `headphones` has to
+# be in here because the base portrait has a prominent pair that the model
+# otherwise keeps rebuilding inside the mask.
 headwear_negative: >-
-  turban, wound cloth, wrapped around head, bandana, tied headscarf,
-  hijab, veil, hat, cap, hood, long hair, blonde hair, visible hairline
+  turban, wound cloth, wrapped around head, bandana, hijab, hat, hood,
+  hair, dreadlocks, braids, headphones, headset, cables, tassels, fringe,
+  embroidery, patterned edge
 
 clothing:
   tee:
