@@ -85,6 +85,8 @@ class CameraRig:
                 animated=bool(spec.get("animated", True)),
                 subject=(spec.get("subject") or "").strip(),
                 hint=(spec.get("hint") or "").strip(),
+                derive=bool(spec.get("derive", False)),
+                framing=str(spec.get("framing", "full")),
                 room=(spec.get("room") or None),
                 negative=(spec.get("negative") or None),
                 negative_2=(spec.get("negative_2") or None),
