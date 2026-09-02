@@ -98,7 +98,10 @@ TUNGSTEN_3000K = np.array([107.0, 180.0, 255.0]) / 255.0   # BGR, sRGB primaries
 
 # --- Lights -----------------------------------------------------------------
 #
-# Three. Not one per shelf, not a strip around the room.
+# Two. Not one per shelf, not a strip around the room. This room only offers
+# two surfaces that can plausibly receive an architectural practical without
+# touching the subject, the chair or a screen; see the note at the end of the
+# list for the third that was designed, measured and removed.
 
 LIGHTS = [
     # A vertical wash grazing the walnut from off-frame left. This is the main
@@ -107,22 +110,20 @@ LIGHTS = [
     dict(name="left_wall_wash", kind="point",
          origin=(-70.0, 250.0), radius=430.0,
          direction=(1.0, 0.22), lobe_power=1.1,
-         intensity=0.30),
+         intensity=0.34),
 
     # Hidden warm LED under the walnut shelf, pointing down onto the AV gear.
     # The emitter itself is never visible - only what it lands on.
     dict(name="under_shelf_led", kind="line",
          p0=SHELF_P0, p1=SHELF_P1, radius=105.0,
          direction=(0.05, 1.0), lobe_power=1.9,
-         intensity=0.44),
+         intensity=0.50),
 
-    # A soft bounce on the walnut in the gap between the centre monitor and the
-    # chair. Weakest of the three; it exists to stop that panel going dead flat
-    # behind the subject, not to rim him.
-    dict(name="mid_wall_bounce", kind="point",
-         origin=(1005.0, 235.0), radius=250.0,
-         direction=(-0.35, 1.0), lobe_power=1.0,
-         intensity=0.17),
+    # A third practical was designed for the walnut gap between the centre
+    # monitor and the chair, and cut after measuring it: mean delta 0.00. The
+    # chair fills that gap almost entirely, so the only surface available to
+    # receive the light was the chair itself - which section 9 puts off limits.
+    # Two motivated sources beat three where one lands on nothing.
 ]
 
 VARIANTS = {
