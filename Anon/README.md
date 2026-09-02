@@ -7,9 +7,10 @@ This project handles appearance and behaviour only. Dialogue, LLM, TTS and
 voice are Developer A's scope and are deliberately absent here. No webcam, no
 microphone, no face tracking — the avatar behaves autonomously.
 
-> **Current status: behaviour engine complete and validated. Photoreal renderer
-> blocked on a source portrait.** See [Status](#status) below. The runnable demo
-> today is a schematic rig preview for tuning, not the deliverable.
+> **Current status: photoreal renderer working; behaviour engine complete and
+> validated. Frame rate is 13.4 FPS against a 25 FPS target — the cause is
+> identified and is not a quality trade-off.** See
+> [Performance](#performance-honest-numbers) and [Status](#status).
 
 ## The actual problem
 
