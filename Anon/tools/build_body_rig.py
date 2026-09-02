@@ -118,7 +118,9 @@ def contact_points(j: dict) -> dict[str, tuple[float, float, float]]:
         # Whatever budget is left after dropping to desk height goes forward,
         # with a little of it inward so the hands are nearer than the shoulders.
         planar = max(d * d - dy * dy, 0.25) ** 0.5
-        dx = -sign * planar * 0.22          # inward, toward the midline
+        # Barely inward. At 0.22 both hands converged on the midline and the
+        # fingers met, which is a person praying, not a person at a desk.
+        dx = -sign * planar * 0.04
         dz = max(planar * planar - dx * dx, 0.25) ** 0.5
 
         hand = "desk_rest_l" if side == "l" else "mouse"
