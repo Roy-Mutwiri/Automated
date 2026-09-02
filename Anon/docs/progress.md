@@ -202,3 +202,30 @@ table for free.
    hypothesis borrowed from community tooling, marked `verified=False` in
    `render/calibration.py` with deliberately tiny gains so a wrong guess is
    ineffective rather than face-distorting.
+
+## [Correction] GPU measurement was wrong — 2026-09-02
+
+The performance section above originally reported **14-18 % GPU utilisation at
+30 W** and concluded the workload was almost entirely launch-bound.
+
+**That measurement was invalid.** It sampled 12 s after launching a process
+whose first frame alone takes 31 s (cudnn autotune of the 3D convolution
+shapes). It measured the autotune phase — CPU-side algorithm search — not
+rendering.
+
+Re-measured in steady state with the UI running: **58-73 % utilisation,
+1755-2002 MHz, 76-78 W, 67-70 °C.**
+
+Consequences:
+
+- The GPU is working hard, not idling. Headroom is ~30-40 %, not ~85 %.
+- The realistic win from TensorRT / CUDA graphs is **1.5-2x, not 5x**.
+  Reaching 25 FPS from 13.4 needs ~1.9x — the optimistic end of that band, and
+  not guaranteed.
+- CPU-side compositing (~20 ms of the 74.7 ms budget) is proportionally more
+  significant than the earlier framing implied, and moving it to GPU rises up
+  the priority list.
+
+Lesson worth keeping: never sample GPU counters without first confirming the
+process has reached steady state. A warm-up phase that long makes any early
+sample meaningless.
