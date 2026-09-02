@@ -36,6 +36,7 @@ from typing import Any
 from intelligence.director import SpeechIntent
 from intelligence.personas import Persona
 from intelligence.safety import price_policy_note
+from platform_.llm.base import ChatMessage, LLMBackend
 from shared.contracts import CommentIntent, MarketState, Provenance, TriggerType
 
 log = logging.getLogger(__name__)
@@ -124,7 +125,9 @@ def build_turn_context(intent: SpeechIntent, market: MarketState, transcript: li
                      "rather than restating the current price action.")
     elif intent.trigger is TriggerType.EDUCATION:
         instruction = intent.payload.get("instruction", intent.topic)
-        lines.append(f"  Planned segment: {instruction}")
+        lines.append(f"  {instruction}")
+        if rationale := intent.payload.get("rationale"):
+            lines.append(f"  (worth raising now because: {rationale})")
         if market.confidence.value != "live":
             lines.append(
                 "  The market is closed or the feed is not live, so this is the "
@@ -142,6 +145,82 @@ def build_turn_context(intent: SpeechIntent, market: MarketState, transcript: li
 # ---------------------------------------------------------------------------
 # Claude
 # ---------------------------------------------------------------------------
+
+
+class LocalGenerator(Generator):
+    """The default. Runs against the locally hosted model on the central machine.
+
+    Streams and yields sentence segments as they complete, so TTS can start on
+    segment 1 while the model is still writing segment 3.
+
+    Temperature is deliberately high and the backend applies presence/frequency
+    penalties: the failure mode for a 24/7 host is not incoherence, it is
+    sounding like the same three sentences rearranged. Determinism is the enemy
+    here.
+    """
+
+    def __init__(self, llm: LLMBackend, temperature: float = 0.9) -> None:
+        self.llm = llm
+        self.temperature = temperature
+
+    async def generate(
+        self,
+        persona: Persona,
+        intent: SpeechIntent,
+        market: MarketState,
+        transcript: list[str],
+    ) -> GenerationResult:
+        t0 = time.perf_counter()
+        first_token_ms: int | None = None
+        chunks: list[str] = []
+
+        messages = [
+            # Byte-stable for the life of the session -- this is what the
+            # server's prefix cache keys on. Nothing volatile may go here.
+            ChatMessage(role="system", content=persona.system_prompt()),
+            ChatMessage(
+                role="user", content=build_turn_context(intent, market, transcript)
+            ),
+        ]
+
+        async for delta in self.llm.stream(
+            messages, max_tokens=260, temperature=self.temperature
+        ):
+            if first_token_ms is None:
+                first_token_ms = int((time.perf_counter() - t0) * 1000)
+            chunks.append(delta)
+
+        text = _clean(("".join(chunks)).strip())
+        return GenerationResult(
+            text=text,
+            segments=split_sentences(text),
+            provenance=Provenance(
+                market_state_id=market.state_id,
+                market_confidence=market.confidence,
+                model=self.llm.name,
+                first_token_ms=first_token_ms,
+                generation_ms=int((time.perf_counter() - t0) * 1000),
+            ),
+        )
+
+
+# Smaller local models leak stage directions and formatting that a spoken
+# stream must never carry. Cheap to strip, and far more reliable than asking
+# the model not to do it.
+_STRIP_PATTERNS = [
+    re.compile(r"^\s*(host|ai|assistant|speaker)\s*:\s*", re.I),
+    re.compile(r"\*[^*]{0,80}\*"),          # *clears throat*
+    re.compile(r"\([^)]{0,60}(pause|laugh|beat|smiles)[^)]{0,20}\)", re.I),
+    re.compile(r"^#{1,6}\s+", re.M),        # markdown headings
+    re.compile(r"^[-*]\s+", re.M),          # bullet points
+    re.compile(r"\[[^\]]{0,40}\]"),         # [inaudible]
+]
+
+
+def _clean(text: str) -> str:
+    for pattern in _STRIP_PATTERNS:
+        text = pattern.sub("", text)
+    return re.sub(r"\s{2,}", " ", text).strip()
 
 
 class ClaudeGenerator(Generator):
@@ -303,12 +382,42 @@ class OfflineGenerator(Generator):
         )
 
 
-def build_generator(offline: bool = False) -> Generator:
-    if offline or not os.environ.get("ANTHROPIC_API_KEY"):
-        if not offline:
-            log.warning("ANTHROPIC_API_KEY not set - falling back to offline generator")
-        return OfflineGenerator()
-    return ClaudeGenerator()
+async def build_generator(mode: str = "auto") -> tuple[Generator, LLMBackend | None]:
+    """Resolve a generator.
+
+    'local'   the hosted model on the central machine (the design default)
+    'api'     hosted API, for A/B comparison against local output
+    'offline' templates, no model at all -- structure tests only
+    'auto'    local if its server answers, else offline
+
+    Returns the backend alongside so callers can share it with the proposer and
+    classifier rather than opening a second connection pool.
+    """
+    if mode == "offline":
+        return OfflineGenerator(), None
+
+    if mode in ("auto", "local"):
+        from platform_.llm.local import LocalLLM
+
+        llm = LocalLLM()
+        if await llm.health():
+            log.info("using local model at %s (%s)", llm.base_url, llm.model)
+            return LocalGenerator(llm), llm
+        await llm.close()
+        if mode == "local":
+            raise RuntimeError(
+                f"No local model server responding at {LocalLLM().base_url}. "
+                "Start vLLM/Ollama, or run with --mode offline."
+            )
+        log.warning("no local model server; falling back to offline templates")
+        return OfflineGenerator(), None
+
+    if mode == "api":
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise RuntimeError("mode=api needs ANTHROPIC_API_KEY")
+        return ClaudeGenerator(), None
+
+    raise ValueError(f"unknown generator mode: {mode}")
 
 
 __all__ = [

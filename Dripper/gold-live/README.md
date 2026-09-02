@@ -9,21 +9,48 @@ Read §00 before building anything on top of this.
 and a runnable dry run. No live market feed, no platform adapter, no device
 agent yet.
 
+## The model runs locally
+
+All generation runs on a self-hosted model on the central machine. Nothing is
+pre-scripted: the host's words, and the choice of what to talk about, are both
+generated from live context.
+
+Any OpenAI-compatible server works — vLLM, llama.cpp, Ollama, TGI, SGLang.
+vLLM is recommended for two specific reasons:
+
+- **Continuous batching.** Seven sessions share one GPU. They never speak at the
+  same instant (the Director rate-limits each), so real load is ~10 generations
+  a minute. A batching server absorbs that on one card; a serial one will not.
+- **Prefix caching.** Each session's persona prompt is byte-identical on every
+  request for the life of the session. Without `--enable-prefix-caching` you
+  reprocess it on every utterance and pay hundreds of milliseconds for nothing.
+
+```bash
+vllm serve <model> --port 8000 --enable-prefix-caching
+```
+
+**Benchmark before buying hardware** — spec sheets measure the wrong thing:
+
+```bash
+PYTHONPATH=. .venv/Scripts/python -m scripts.bench_llm
+```
+
+Reports time-to-first-token (decides when audio starts), tokens/sec under
+concurrency, and prefix-cache hits. Target: p95 TTFT under 900ms at your
+session count.
+
 ## Run it
 
 ```bash
 python -m venv .venv
 .venv/Scripts/python -m pip install -e ".[dev]"
 
-# Offline generator, no API key needed
+# Local model if its server is up, else offline templates
 PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun
 
-# Real Claude generation
-export ANTHROPIC_API_KEY=sk-ant-...
-PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun --live
-
-# Three sessions, with the cross-session isolation check
-PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun --sessions 3
+PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun --mode local    # require it
+PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun --mode offline  # structure only
+PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun --sessions 3    # isolation check
 
 PYTHONPATH=. .venv/Scripts/python -m pytest
 ```
@@ -72,9 +99,21 @@ LLM writes the words; it does not choose the moment.
 Blocks numeric price claims when `MarketState.confidence != LIVE`, and blocks
 outcome-certainty language. Runs after generation, before audio.
 
+**`intelligence/proposer.py`** — decides what to talk about next, generated
+rather than scripted. The model is given the market, the audience's questions
+and everything already covered, and asked what is genuinely worth saying now.
+Proposals are then filtered against coverage memory, because being told not to
+repeat is not the same as not repeating.
+
 **`intelligence/memory.py`** — four layers plus repetition detection. Ships
 with character n-gram cosine (no dependencies); swap in embeddings behind
 `SimilarityIndex` when soak tests show it is needed.
+
+**`configs/content.yaml`** — cold-start and fallback seed **only**. It is what
+the stream falls back to when the model is unreachable; a degraded stream
+reading from a list beats a silent one. `SessionRuntime.fallback_used` counts
+how often that happens and belongs on the dashboard — in normal operation it
+should be near zero. This file is not the content plan.
 
 **Session isolation** is enforced in four independent layers — process, Redis
 namespace, `session_id` on every record, and a runtime assertion in the comment

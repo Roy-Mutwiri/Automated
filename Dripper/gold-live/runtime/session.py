@@ -7,6 +7,7 @@ Everything it touches is scoped to self.session_id.
 from __future__ import annotations
 
 import logging
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -18,6 +19,7 @@ from intelligence.director import Decision, Director, SpeechIntent
 from intelligence.generation import Generator
 from intelligence.memory import SessionMemory
 from intelligence.personas import Persona
+from intelligence.proposer import TopicCandidate, TopicProposer
 from platform_.tts.base import TTSProvider
 from shared.contracts import (
     AIResponse,
@@ -52,6 +54,7 @@ class SessionRuntime:
         tts: TTSProvider,
         out_dir: Path,
         planner: ContentPlanner | None = None,
+        proposer: TopicProposer | None = None,
     ) -> None:
         self.state = state
         self.persona = persona
@@ -59,7 +62,11 @@ class SessionRuntime:
         self.tts = tts
         self.out_dir = out_dir / state.session_id
         self.planner = planner
+        self.proposer = proposer
+        self.coverage = proposer.coverage if proposer else None
+        self._candidates: deque[TopicCandidate] = deque()
         self.content_exhausted_at: datetime | None = None
+        self.fallback_used = 0
 
         self.memory = SessionMemory(state.session_id)
         self.director = Director(state.session_id, self.memory)
@@ -122,6 +129,68 @@ class SessionRuntime:
                 payload={"topic": topic},
             )
         )
+
+    async def offer_next_topic(
+        self,
+        phase: MarketPhase,
+        market: MarketState,
+        now: datetime | None = None,
+    ) -> TopicCandidate | Beat | None:
+        """Decide what to talk about next, generated rather than scripted.
+
+        Proposals are fetched in batches ahead of time and queued, so a slow
+        proposal never delays speech. If the model is unreachable the scripted
+        inventory takes over -- a degraded stream reading from a list beats a
+        silent one, but `fallback_used` should be near zero in normal operation
+        and belongs on the dashboard.
+        """
+        now = now or utcnow()
+        if self.director.has_pending(TriggerType.EDUCATION):
+            return None
+
+        if self.proposer is not None:
+            if not self._candidates:
+                self._candidates.extend(
+                    await self.proposer.propose(
+                        persona=self.persona,
+                        market=market,
+                        phase=phase.value,
+                        audience_questions=self.memory.hot_questions(min_count=1),
+                        now=now,
+                    )
+                )
+            if self._candidates:
+                candidate = self._candidates.popleft()
+                self._offer_candidate(candidate, phase, now)
+                return candidate
+
+        # Model unreachable or proposing nothing usable.
+        self.fallback_used += 1
+        return self.offer_planned_content(phase, now)
+
+    def _offer_candidate(
+        self, c: TopicCandidate, phase: MarketPhase, now: datetime
+    ) -> None:
+        priority = Priority.LOW if phase is MarketPhase.ACTIVE else Priority.MEDIUM
+        self.director.offer(
+            SpeechIntent(
+                trigger=TriggerType.EDUCATION,
+                priority=priority,
+                topic=c.topic,
+                seed_text=c.brief,
+                ttl_s=600.0,
+                created_at=now,
+                payload={
+                    "topic": c.topic_key,
+                    "instruction": c.brief,
+                    "rationale": c.rationale,
+                    "category": c.category,
+                    "generated": True,
+                },
+            )
+        )
+        if self.coverage is not None:
+            self.coverage.record(c.topic_key, c.brief, now)
 
     def offer_planned_content(
         self, phase: MarketPhase, now: datetime | None = None

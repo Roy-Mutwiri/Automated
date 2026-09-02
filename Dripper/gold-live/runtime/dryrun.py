@@ -8,8 +8,9 @@ sound like something a person would listen to for an hour? Run it, read the
 transcript, listen to the audio. If it is boring, everything downstream is
 wasted effort -- and you have found that out in week one.
 
-    python -m runtime.dryrun                    # offline generator, no API key
-    python -m runtime.dryrun --live             # real Claude generation
+    python -m runtime.dryrun                    # local model if up, else offline
+    python -m runtime.dryrun --mode local       # require the local model
+    python -m runtime.dryrun --mode offline     # templates, structure only
     python -m runtime.dryrun --sessions 3       # isolation check across 3 sessions
 """
 
@@ -48,9 +49,9 @@ def load_sessions(n: int) -> list[dict]:
     return cfg["sessions"][:n]
 
 
-async def run(beats: int, n_sessions: int, live: bool, out_dir: Path) -> int:
+async def run(beats: int, n_sessions: int, mode: str, out_dir: Path) -> int:
     personas = load_personas(ROOT / "configs" / "personas")
-    generator = build_generator(offline=not live)
+    generator, _llm = await build_generator(mode)
     tts = FileTTS()
     market = MockMarketEngine()
 
@@ -79,7 +80,7 @@ async def run(beats: int, n_sessions: int, live: bool, out_dir: Path) -> int:
 
     t0 = utcnow()
     print(f"\n{'=' * 78}\n  GOLD LIVE - M1 DRY RUN")
-    print(f"  generator: {'claude' if live else 'offline templates'}   "
+    print(f"  generator: {type(generator).__name__} (mode={mode})   "
           f"sessions: {n_sessions}   beats: {beats}")
     print(f"{'=' * 78}\n")
 
@@ -156,7 +157,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Gold Live M1 dry run")
     ap.add_argument("--beats", type=int, default=18, help="market ticks to simulate")
     ap.add_argument("--sessions", type=int, default=1, help="concurrent sessions")
-    ap.add_argument("--live", action="store_true", help="use the real Claude API")
+    ap.add_argument("--mode", default="auto", choices=["auto","local","api","offline"],
+                    help="generator backend (default: local if running, else offline)")
     ap.add_argument("--out", default=str(ROOT / "out"), help="output directory")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
@@ -165,7 +167,7 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)-7s %(name)s: %(message)s",
     )
-    asyncio.run(run(args.beats, args.sessions, args.live, Path(args.out)))
+    asyncio.run(run(args.beats, args.sessions, args.mode, Path(args.out)))
 
 
 if __name__ == "__main__":
