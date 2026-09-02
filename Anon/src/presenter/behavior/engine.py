@@ -116,6 +116,7 @@ class BehaviorEngine:
         # Leaky accumulator; charged on voluntary movement, decays with a ~3 s
         # time constant.
         self._motion_budget = 0.0
+        self._frame_interval = 1.0 / 30.0
         self._events: list[BehaviorEvent] = []
         self._pose = AvatarPose()
 
