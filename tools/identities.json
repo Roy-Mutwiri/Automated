@@ -1,8 +1,18 @@
 {
-  "_comment": "All three identities author with the GitHub noreply address for user 132381941 (Roy-Mutwiri), so every commit binds to that account and counts toward the contribution graph. The display names stay distinct, so `git log --author` and the commit subjects still separate Anon / Dripper / shared work. The noreply form keeps the owner's real email out of this repo's public history - do NOT replace it with a routable personal address.",
+  "_comment": "All identities author with the GitHub noreply address for user 132381941 (Roy-Mutwiri), so every commit binds to that account and counts toward the contribution graph. The display names stay distinct, so `git log --author` and the commit subjects still separate the work. The noreply form keeps the owner's real email out of this repo's public history - do NOT replace it with a routable personal address.",
+
+  "_attribution_order": "BRANCH FIRST, folder only as a fallback. If the current branch appears in `branches`, the whole worktree is committed as that identity in one commit and file paths are not consulted at all. Only a branch with no mapping falls back to `folders`.",
+
+  "branches": {
+    "camera-terminal":   { "name": "Anon Camera",   "email": "132381941+Roy-Mutwiri@users.noreply.github.com" },
+    "movement-terminal": { "name": "Anon Movement", "email": "132381941+Roy-Mutwiri@users.noreply.github.com" }
+  },
+
+  "_folders_comment": "Retained ONLY for branches with no mapping above - in practice `main`, where Anon/ and Dripper/ are two genuinely separate projects and splitting by folder is the correct attribution. This is the one place path-based classification still applies, and it is deliberate: removing it would collapse Dripper's contributions into a single anonymous identity, which is a different problem from the one branch ownership solves.",
   "folders": {
     "Anon":    { "name": "Anon",    "email": "132381941+Roy-Mutwiri@users.noreply.github.com" },
     "Dripper": { "name": "Dripper", "email": "132381941+Roy-Mutwiri@users.noreply.github.com" }
   },
+
   "shared":    { "name": "Roy-Mutwiri", "email": "132381941+Roy-Mutwiri@users.noreply.github.com" }
 }

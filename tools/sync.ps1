@@ -1,17 +1,36 @@
 <#
 .SYNOPSIS
-    Auto-commits and pushes every change in the Automated repo, attributing
-    each commit to the contributor whose folder it came from.
+    Auto-commits and pushes changes in one worktree, attributing each commit to
+    the identity that owns the current BRANCH.
 
 .DESCRIPTION
-    Changes under Anon/    are committed as the Anon identity.
-    Changes under Dripper/ are committed as the Dripper identity.
-    Anything else (repo root, tools/) is committed as the shared identity.
+    Ownership is determined by branch, not by file path.
 
-    A single save touching both folders produces two commits, one per author,
-    so `git log --author` and the GitHub contributor graph stay accurate.
+    Folder attribution was structurally unable to separate the Camera and
+    Movement terminals, because both legitimately work inside Anon/. Two
+    terminals saving at the same moment produced one commit containing both
+    their work, and neither could rewrite it afterwards - this watcher
+    re-committed any `git reset` within seconds and then rebased it away.
 
-    Identities are read from tools/identities.json.
+    So: if the current branch is listed in identities.json `branches`, the whole
+    worktree is committed as that identity in a single commit and file paths are
+    never consulted. Each terminal runs in its own worktree on its own branch,
+    and only its own branch is pushed.
+
+    The one surviving path-based rule is the fallback for branches with no
+    mapping - in practice `main`, where Anon/ and Dripper/ are two separate
+    projects and folder splitting is the correct attribution. Collapsing that
+    would lose Dripper's contributor history, which is a different problem from
+    the one branch ownership solves.
+
+    A terminal that wants a specific commit message writes it to `.sync-message`
+    in its worktree; this script uses it verbatim and deletes it. Otherwise the
+    subject is generated from the staged name-status, as before.
+
+.PARAMETER Worktree
+    Which worktree to watch and commit. Defaults to the repo containing this
+    script. Each terminal gets its own watcher pointed at its own worktree; a
+    watcher never touches a worktree other than this one.
 
 .PARAMETER Once
     Run a single commit+push pass and exit, instead of watching.
@@ -24,13 +43,15 @@
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File tools\sync.ps1
-    powershell -ExecutionPolicy Bypass -File tools\sync.ps1 -Once
+    powershell -ExecutionPolicy Bypass -File tools\sync.ps1 -Once -NoPush
+    powershell -ExecutionPolicy Bypass -File tools\sync.ps1 -Worktree C:\Users\me\Automated-camera
 #>
 [CmdletBinding()]
 param(
     [switch] $Once,
     [double] $DebounceSeconds = 2,
-    [switch] $NoPush
+    [switch] $NoPush,
+    [string] $Worktree
 )
 
 # 'Continue', not 'Stop': in Windows PowerShell 5.1 a native command writing to
@@ -38,9 +59,16 @@ param(
 # and git narrates constantly. Exit codes are checked explicitly instead.
 $ErrorActionPreference = 'Continue'
 
-$RepoRoot = Split-Path -Parent $PSScriptRoot
-$LogFile  = Join-Path $PSScriptRoot 'sync.log'
+# The worktree this watcher owns. Every git call below is scoped to it, so two
+# watchers on two worktrees cannot commit each other's work.
+if ($Worktree) {
+    $RepoRoot = (Resolve-Path -LiteralPath $Worktree).Path
+} else {
+    $RepoRoot = Split-Path -Parent $PSScriptRoot
+}
+$LogFile  = Join-Path $PSScriptRoot ('sync-{0}.log' -f (Split-Path -Leaf $RepoRoot))
 $IdFile   = Join-Path $PSScriptRoot 'identities.json'
+$MsgFile  = Join-Path $RepoRoot '.sync-message'
 
 $script:GitExitCode = 0
 
@@ -73,7 +101,33 @@ function Get-Identities {
     foreach ($prop in $json.folders.PSObject.Properties) {
         $map[$prop.Name] = $prop.Value
     }
-    return @{ Folders = $map; Shared = $json.shared }
+    $branches = [ordered]@{}
+    if ($json.branches) {
+        foreach ($prop in $json.branches.PSObject.Properties) {
+            $branches[$prop.Name] = $prop.Value
+        }
+    }
+    return @{ Folders = $map; Branches = $branches; Shared = $json.shared }
+}
+
+# The branch this worktree is on, or $null when detached. A detached HEAD has no
+# owner and nothing sensible to push to, so syncing stops rather than guesses.
+function Get-CurrentBranch {
+    $branch = Invoke-Git @('rev-parse', '--abbrev-ref', 'HEAD') | Select-Object -First 1
+    if ($script:GitExitCode -ne 0 -or -not $branch -or $branch -eq 'HEAD') { return $null }
+    return $branch.Trim()
+}
+
+# A commit message the terminal asked for, if it left one. Read once and
+# removed, so a stale file cannot re-label a later unrelated commit.
+function Read-IntendedMessage {
+    if (-not (Test-Path -LiteralPath $MsgFile)) { return $null }
+    try {
+        $text = (Get-Content -LiteralPath $MsgFile -Raw).Trim()
+        Remove-Item -LiteralPath $MsgFile -Force -ErrorAction SilentlyContinue
+        if ($text) { return $text }
+    } catch { }
+    return $null
 }
 
 # ---------------------------------------------------------------------------
@@ -120,7 +174,7 @@ function New-CommitMessage {
 # Returns $true when a commit was created.
 # ---------------------------------------------------------------------------
 function Invoke-GroupCommit {
-    param([string] $Author, [string] $Email, [string[]] $PathSpec)
+    param([string] $Author, [string] $Email, [string[]] $PathSpec, [string] $Message)
 
     # Start from a clean index so each group commits only its own paths.
     Invoke-Git @('reset', '-q') | Out-Null
@@ -130,7 +184,8 @@ function Invoke-GroupCommit {
               Where-Object { $_ -ne '' }
     if ($status.Count -eq 0) { return $false }
 
-    $message = New-CommitMessage -Author $Author -NameStatus $status
+    if ($Message) { $message = $Message }
+    else          { $message = New-CommitMessage -Author $Author -NameStatus $status }
 
     $env:GIT_AUTHOR_NAME     = $Author
     $env:GIT_AUTHOR_EMAIL    = $Email
@@ -155,9 +210,26 @@ function Invoke-GroupCommit {
 # Commit every pending change, split by contributor folder.
 # ---------------------------------------------------------------------------
 function Invoke-CommitAll {
+    param([string] $Branch)
+
     $ids  = Get-Identities
     $made = $false
 
+    # ---- Branch ownership. The whole worktree, one commit, no path rules. ----
+    if ($Branch -and $ids.Branches.Contains($Branch)) {
+        $id = $ids.Branches[$Branch]
+        $intended = Read-IntendedMessage
+        if (Invoke-GroupCommit -Author $id.name -Email $id.email `
+                               -PathSpec @('.') -Message $intended) {
+            $made = $true
+        }
+        return $made
+    }
+
+    # ---- Fallback: no branch mapping, so split by project folder. ----
+    # This is the only remaining path-based classification, and it exists for
+    # `main`, where Anon/ and Dripper/ really are separate projects. A terminal
+    # branch never reaches here.
     foreach ($folder in @($ids.Folders.Keys)) {
         $id = $ids.Folders[$folder]
         if (Invoke-GroupCommit -Author $id.name -Email $id.email -PathSpec @($folder)) {
@@ -184,7 +256,10 @@ function Test-HasUnpushed {
 }
 
 function Invoke-Push {
+    param([string] $Branch)
+
     if ($NoPush) { return }
+    if (-not $Branch) { return }
 
     $remotes = @(Invoke-Git @('remote')) | Where-Object { $_ -ne '' }
     if ($remotes -notcontains 'origin') {
@@ -192,27 +267,32 @@ function Invoke-Push {
         return
     }
 
-    $branch = Invoke-Git @('rev-parse', '--abbrev-ref', 'HEAD') | Select-Object -First 1
-
-    $out = Invoke-Git @('pull', '--rebase', '--autostash', '-q', 'origin', $branch)
+    # Only this worktree's own branch is ever pulled or pushed. A watcher must
+    # not move a branch another terminal is sitting on.
+    $out = Invoke-Git @('pull', '--rebase', '--autostash', '-q', 'origin', $Branch)
     if ($script:GitExitCode -ne 0) {
         Write-Log "pull --rebase failed, push skipped - resolve by hand: $out" 'ERROR'
         return
     }
 
-    $out = Invoke-Git @('push', '-q', 'origin', $branch)
+    $out = Invoke-Git @('push', '-q', 'origin', $Branch)
     if ($script:GitExitCode -ne 0) {
         Write-Log "push failed, will retry on next change: $out" 'ERROR'
         return
     }
 
-    Write-Log "pushed $branch to origin"
+    Write-Log "pushed $Branch to origin"
 }
 
 function Invoke-Sync {
     try {
-        $committed = Invoke-CommitAll
-        if ($committed -or (Test-HasUnpushed)) { Invoke-Push }
+        $branch = Get-CurrentBranch
+        if (-not $branch) {
+            Write-Log 'detached HEAD - no branch owns this worktree, sync skipped' 'WARN'
+            return
+        }
+        $committed = Invoke-CommitAll -Branch $branch
+        if ($committed -or (Test-HasUnpushed)) { Invoke-Push -Branch $branch }
     }
     catch {
         Write-Log "sync error: $_" 'ERROR'
@@ -230,7 +310,9 @@ function Test-RelevantPath {
     if ($rel -match '^\.git($|[\\/])')            { return $false }  # our own commits
     if ($rel -match '^Anon[\\/]Dripper($|[\\/])') { return $false }  # junction
     if ($rel -match '^Dripper[\\/]Anon($|[\\/])') { return $false }  # junction
-    if ($rel -match '^tools[\\/]sync\.log$')      { return $false }  # our own log
+    if ($rel -match '^tools[\\/]sync.*\.log$')    { return $false }  # our own log
+    if ($rel -match '^\.sync-message$')           { return $false }  # consumed below
+    if ($rel -match '^\.claude[\\/]worktrees[\\/]') { return $false }  # another worktree
     return $true
 }
 
