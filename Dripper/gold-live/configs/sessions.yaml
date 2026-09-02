@@ -1,0 +1,19 @@
+# Adding session 8 means adding an entry here. It must never mean changing code.
+sessions:
+  - session_id: SESSION_001
+    persona_id: scalper
+    platform: mock
+    channel_id: mock-channel-1
+    device_id: DEVICE_001
+
+  - session_id: SESSION_002
+    persona_id: educator
+    platform: mock
+    channel_id: mock-channel-2
+    device_id: DEVICE_002
+
+  - session_id: SESSION_003
+    persona_id: macro
+    platform: mock
+    channel_id: mock-channel-3
+    device_id: DEVICE_003
