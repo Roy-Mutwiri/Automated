@@ -433,28 +433,61 @@ class LivePortraitRenderer:
 
         # Static background, composed once.
         if self.environment == "streaming_room":
-            from .environment import render_desk_foreground, render_streaming_room
-
-            desk_bgr, desk_alpha = render_desk_foreground(
-                out_w, out_h, style=self.room_style
+            from .environment import (
+                RoomStyle,
+                fit_exposure,
+                light_wrap,
+                luminance,
+                render_desk_foreground,
+                render_streaming_room,
             )
-            rows = np.where(desk_alpha[:, 0, 0] > 0.003)[0]
-            if len(rows):
-                y0d = int(rows.min())
-                self.desk_band = (y0d, out_h)
-                self.desk_rgb_premul = (
-                    desk_bgr[y0d:].astype(np.float32) * desk_alpha[y0d:]
-                )
-                self.desk_inv_alpha = 1.0 - desk_alpha[y0d:]
-            else:
-                self.desk_band = None
+
+            style = self.room_style or RoomStyle()
 
             # The generated room replaces the portrait's own background
             # everywhere, so the fill and the area behind the subject are the
             # same image - no seam between them by construction.
             fill = render_streaming_room(
                 out_w, out_h, style=self.room_style, seed=self.room_seed
-            ).astype(np.float32)
+            )
+
+            # Fit the plate to the face rather than to taste.
+            #
+            # Everything else about this background is a judgement call; this
+            # one is a number. The face is measured with a median over the
+            # landmark bounding box - robust to the specular highlights on
+            # forehead and nose, which are not what "how bright is the face"
+            # means - and the room is then scaled to sit the conventional 1-2
+            # stops beneath it. Tuning the wall colours by eye instead would
+            # bake this source portrait's exposure into the constants and
+            # silently mis-expose the room for any other one.
+            fx0, fx1 = int(lmk[:, 0].min()), int(lmk[:, 0].max()) + 1
+            fy0, fy1 = int(lmk[:, 1].min()), int(lmk[:, 1].max()) + 1
+            face = img_bgr[max(fy0, 0):min(fy1, h), max(fx0, 0):min(fx1, w)]
+            self.face_luma = float(np.median(luminance(face))) if face.size else 128.0
+            fill, exposure_scale, self.background_stops = fit_exposure(
+                fill, self.face_luma, style.exposure_ratio, style.exposure_limits
+            )
+            fill = fill.astype(np.float32)
+
+            # The desk is lit by the same room, so it takes the same
+            # correction. Exposing the planes independently is how a composite
+            # ends up looking like three images that happen to be adjacent.
+            desk_bgr, desk_alpha = render_desk_foreground(
+                out_w, out_h, style=self.room_style
+            )
+            desk_bgr = np.clip(
+                desk_bgr.astype(np.float32) * exposure_scale, 0, 255
+            )
+            rows = np.where(desk_alpha[:, 0, 0] > 0.003)[0]
+            if len(rows):
+                y0d = int(rows.min())
+                self.desk_band = (y0d, out_h)
+                self.desk_rgb_premul = desk_bgr[y0d:] * desk_alpha[y0d:]
+                self.desk_inv_alpha = 1.0 - desk_alpha[y0d:]
+            else:
+                self.desk_band = None
+
             matte = self._person_matte(img_bgr)
             self.person_matte = matte
             subject = img_bgr.astype(np.float32) * matte[..., None]
