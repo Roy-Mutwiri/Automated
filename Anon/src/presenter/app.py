@@ -94,9 +94,19 @@ class FrameTimer:
 
 def draw_debug(frame: np.ndarray, engine: BehaviorEngine, pose: AvatarPose,
                timer: FrameTimer, render_ms: float, failures: int,
-               renderer_name: str, has_cameras: bool = True) -> None:
+               renderer_name: str, has_cameras: bool = True,
+               camera_lines: list[str] | None = None,
+               proxy_human: bool = False,
+               number_keys_are_cameras: bool = False) -> None:
     """Overlay engine state. Deliberately dense - this is a diagnostic view."""
-    lines = [
+    lines = list(camera_lines or [])
+    if proxy_human:
+        # The preview shows a mannequin. Saying so is the difference between a
+        # camera test and an apparent claim about the avatar.
+        lines.append("PROXY HUMAN - camera angles only, identity not evaluated")
+    if lines:
+        lines.append("")
+    lines += [
         f"{renderer_name}   {frame.shape[1]}x{frame.shape[0]}",
         f"FPS {timer.fps:5.1f}   render {render_ms:5.2f}ms   "
         f"p95 {timer.percentile(0.95) * 1000:5.1f}ms   worst {timer.worst * 1000:5.1f}ms",
@@ -139,9 +149,12 @@ def draw_debug(frame: np.ndarray, engine: BehaviorEngine, pose: AvatarPose,
     # solely for the photoreal renderer, so under the schematic renderer the
     # bracket keys are inert - and a help line promising "[ ] camera" made that
     # look like broken camera switching rather than a renderer that has none.
-    camera_help = "[ ] camera   " if has_cameras else ""
+    if number_keys_are_cameras:
+        keys_help = "1-7 camera   [ ] camera   "
+    else:
+        keys_help = "1-9 state   " + ("[ ] camera   " if has_cameras else "")
     cv2.putText(frame,
-                f"1-9 state   {camera_help}c clothing   h head attire   "
+                f"{keys_help}c clothing   h head attire   "
                 f"d debug   s screenshot   q quit",
                 (14, frame.shape[0] - 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                 (150, 160, 175), 1, cv2.LINE_AA)
@@ -167,9 +180,14 @@ def main() -> int:
     ap.add_argument("--headless", action="store_true",
                     help="no window; renders and benchmarks only")
     ap.add_argument("--renderer", default="schematic",
-                    choices=["schematic", "liveportrait"],
+                    choices=["schematic", "liveportrait", "camera-preview"],
                     help="schematic = behaviour-tuning rig preview; "
-                         "liveportrait = photoreal")
+                         "liveportrait = photoreal; "
+                         "camera-preview = camera angles only, loads no avatar "
+                         "model and no CUDA")
+    ap.add_argument("--camera-rig", default="config/cameras.yaml",
+                    help="the physical camera rig; drives the camera buttons "
+                         "in every renderer, not just the photoreal one")
     ap.add_argument("--source", default="",
                     help="source portrait for the photoreal renderer; "
                          "overrides the wardrobe's starting outfit")
@@ -238,17 +256,51 @@ def main() -> int:
     # be in force: the outfits were inpainted onto the head-and-shoulders
     # portrait, not onto a room-scale master frame. Whichever was picked last
     # wins, and the UI reflects that by clearing the other one's highlight.
+    # The physical camera rig loads for EVERY renderer. Where a camera stands
+    # and what lens it carries is world configuration, not a feature of the
+    # face renderer - tying the two together is what made camera switching
+    # look broken when it had simply never been created.
+    if args.debug:
+        # Which source tree is actually executing. The shared venv holds an
+        # editable install pointing at another worktree, so `-m presenter.app`
+        # can silently run a different branch's code - edits then appear to do
+        # nothing, which is a genuinely confusing hour. Print it, always.
+        import presenter as _pkg
+        import subprocess as _sp
+
+        src_root = Path(_pkg.__file__).resolve().parents[1]
+        try:
+            branch = _sp.run(["git", "-C", str(src_root), "branch",
+                              "--show-current"], capture_output=True,
+                             text=True, timeout=5).stdout.strip() or "(detached)"
+            worktree = _sp.run(["git", "-C", str(src_root), "rev-parse",
+                                "--show-toplevel"], capture_output=True,
+                               text=True, timeout=5).stdout.strip()
+        except Exception:  # noqa: BLE001
+            branch = worktree = "(git unavailable)"
+        print("[app] SOURCE ROOT:", src_root)
+        print("[app] BRANCH:     ", branch)
+        print("[app] WORKTREE:   ", worktree)
+        print("[app] RENDERER:   ", args.renderer)
+
+    cams = None
+    if args.camera_rig:
+        from presenter.render.camera_manager import CameraManager
+
+        try:
+            cams = CameraManager.load(args.camera_rig)
+        except FileNotFoundError as exc:
+            print(f"[app] {exc}; camera controls disabled")
+        else:
+            missing = cams.missing_previews()
+            print(f"[app] cameras: {len(cams.views)} loaded from "
+                  f"{args.camera_rig}")
+            if missing and args.renderer == "camera-preview":
+                print(f"[app] {len(missing)} have no preview still "
+                      f"({', '.join(missing)}) - run "
+                      f"tools/render_camera_previews.py")
+
     rig = camera = None
-    if args.cameras and args.renderer != "liveportrait":
-        # Say so out loud. The cameras are source photographs prepared for the
-        # photoreal renderer; the schematic renderer draws a wireframe rig and
-        # has nothing to switch between. Staying silent here reads as "camera
-        # switching is broken" rather than "this renderer has no cameras",
-        # which is the wrong thing to go and debug.
-        print(f"[app] camera buttons are OFF: --renderer is "
-              f"'{args.renderer}'. Cameras exist only for the photoreal "
-              f"renderer - re-run with --renderer liveportrait to switch "
-              f"between cam1-cam7.")
     if args.cameras and args.renderer == "liveportrait":
         from presenter.render.cameras import CameraRig
 
@@ -265,7 +317,13 @@ def main() -> int:
                 print(f"[app] cameras: {len(rig.missing())} not generated "
                       f"({', '.join(rig.missing())})")
 
-    if not args.source:
+    # camera-preview never touches a source portrait, a wardrobe or a GPU. It
+    # must stay cheap enough to launch purely to look at camera angles.
+    if args.renderer == "camera-preview" and cams is None:
+        print("[app] camera-preview needs a camera rig; nothing to show.")
+        return 2
+
+    if not args.source and args.renderer != "camera-preview":
         if camera is not None:
             args.source = str(rig.path(camera))
         elif outfit:
@@ -310,6 +368,11 @@ def main() -> int:
             renderer.wrapper.spade_generator = torch.compile(
                 renderer.wrapper.spade_generator)
         print(calibration_report())
+    elif args.renderer == "camera-preview":
+        from presenter.render.camera_preview import CameraPreviewRenderer
+
+        renderer = CameraPreviewRenderer(cams, args.width, args.height)
+        print("[app] camera-preview: no avatar model loaded, no CUDA touched")
     else:
         renderer = SchematicRenderer(args.width, args.height)
 
@@ -332,7 +395,35 @@ def main() -> int:
     # -- camera buttons -----------------------------------------------------
     cam_row = None
     still_frame = None          # set while a non-animated camera is selected
-    if rig is not None and not args.headless:
+    preview_row = None          # camera-preview: buttons driven by CameraManager
+
+    if args.renderer == "camera-preview" and cams is not None and not args.headless:
+        # The preview rig's buttons come from the CameraManager, not from the
+        # LivePortrait rig, and every camera is clickable - including the ones
+        # marked enabled: false. That flag blocks them as *production shots*;
+        # it was never meant to stop anyone looking at where they point.
+        from presenter.ui import Button, ButtonRow
+
+        preview_row = ButtonRow(
+            [Button(v.key, f"{v.key.upper()}  {v.intent}", enabled=True,
+                    live=v.has_preview())
+             for v in cams.ordered()],
+            origin=(14, args.height - 58),
+        )
+        preview_row.selected = cams.current
+        preview_row.attach(WINDOW, (args.width, args.height))
+        cam_row = preview_row
+
+        def cut_to(key: str) -> None:
+            """Hard cut. No renderer work: the next frame is a different array."""
+            if not cams.select(key):
+                return
+            preview_row.selected = key
+            v = cams.view(key)
+            note = "" if v.has_preview() else "  (no still rendered)"
+            print(f"[app] camera -> {key} ({v.intent}){note}")
+
+    elif rig is not None and not args.headless:
         from presenter.ui import Button, ButtonRow, draw_busy
 
         cam_row = ButtonRow(
@@ -556,7 +647,12 @@ def main() -> int:
                     shown = frame.copy()
                 if debug:
                     draw_debug(shown, engine, pose, timer, render_ms, failures,
-                               renderer.info.name, has_cameras=cam_row is not None)
+                               renderer.info.name,
+                               has_cameras=cam_row is not None,
+                               camera_lines=(cams.describe()
+                                             if cams is not None else None),
+                               proxy_human=args.renderer == "camera-preview",
+                               number_keys_are_cameras=preview_row is not None)
                 if cam_row is not None:
                     cam_row.draw(shown)
                 if bar is not None:
@@ -574,13 +670,21 @@ def main() -> int:
                     # dropdowns and the debug readout are instrumentation.
                     cv2.imwrite(str(path), frame)
                     print(f"[app] wrote {path}")
-                if key in _STATE_KEYS:
+                # Number keys mean cameras in camera-preview and behaviour
+                # states everywhere else. In preview mode there is no behaviour
+                # to steer - the frames are stills of one frozen timestamp - so
+                # 1-7 go to the thing the mode exists for, and the help line
+                # states which meaning is active so the UI never lies.
+                if preview_row is not None and ord("1") <= key <= ord("7"):
+                    target = cams.by_number(key - ord("0"))
+                    if target:
+                        cut_to(target)
+                elif key in _STATE_KEYS:
                     engine.set_state(_STATE_KEYS[key])
                     print(f"[app] state -> {_STATE_KEYS[key].value}")
 
                 if cam_row is not None:
-                    # Cameras cannot use 1-9: those are behaviour states and
-                    # were there first. Bracket keys step through the rig.
+                    # Bracket keys step through the rig in every mode.
                     if key == ord("["):
                         nxt = cam_row.step(-1)
                         if nxt:
