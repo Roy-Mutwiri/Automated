@@ -229,3 +229,66 @@ Consequences:
 Lesson worth keeping: never sample GPU counters without first confirming the
 process has reached steady state. A warm-up phase that long makes any early
 sample meaningless.
+
+## Background: researched, then measured — 2026-09-02
+
+The generated room was built from first principles and it held up: warm-dominant
+wall matched to the source key, restrained LED accent at the frame edges, two
+static hues, clustered bokeh with an aperture rim, desk as a separate foreground
+plane. Surveying how streaming and podcast rooms are actually built and shot
+(`docs/background_research.md`) agreed with all of it independently — including
+the one place the generic advice says the opposite. Nearly every source
+recommends cool blues and greys and warns off warm tones; that advice is for a
+room whose lighting you control, and here the source portrait's warm key is
+fixed, so lighting match wins and the warm room stays.
+
+Five things were genuinely missing, and are now in:
+
+- **Light wrap.** The subject was not lit by this room, so its outline was a
+  clean algebraic cut. `light_wrap()` bleeds the plate's own colour back onto
+  the inside of the silhouette — magenta on the left of the head, teal on the
+  right, because it samples the actual plate rather than a uniform glow.
+- **Exposure fitted to the face instead of tuned by eye.** `fit_exposure()`
+  scales the plate to sit the conventional 1-2 stops under the key-lit skin.
+  Measured: **-1.51 stops**, reported in the renderer's info line.
+- **Cat's-eye bokeh.** Optical vignetting clips off-axis highlights into
+  tangentially-elongated lens shapes. Modelled as the intersection of two
+  offset circles, which is what physically happens and gets the orientation
+  right without a separate rotation.
+- **Chromatic fringing** on the glow layer, as a per-channel radial zoom.
+- **A third focus plane**: objects on the shelf, blurred less than the wall.
+
+### Two corrections, both caught by looking at a render
+
+**Blurring the shelf board less than the wall was wrong.** It seemed to follow
+from "create micro-layers", and it put a hard rule straight across the frame.
+The board is attached to the wall, so it is at wall distance; only the objects
+standing on it are nearer. Nothing in the numbers flagged this — the room's mean
+luminance, determinism and shape were all unchanged. It took one look at the
+output.
+
+**The median is the wrong statistic for a face.** A landmark box on this source
+is 60 % beard, hair and shadow, so its median reads 72 against lit skin at
+140-170, and the plate came out two thirds of a stop too dark. `key_luminance()`
+uses the 80th percentile — inside the lit cheek, below the speculars. Once
+corrected, the fitted exposure landed within 3 % of the constants that had been
+tuned by eye, which is the strongest available evidence that both are right.
+
+### Cost
+
+The wrap is the only addition on the per-frame path. Indexed by boolean mask it
+measured **0.89 ms/frame**; addressing the same ~5 300 pixels by integer index
+instead measured **0.11 ms**, which is what shipped — the boolean form makes
+numpy scan the whole blend box to find a perimeter's worth of pixels.
+
+A slow LED "breathe" was considered and rejected. The ambient-loop literature
+supports it (intensity-only modulation cannot warp or wobble, so it does not
+violate the stability requirement), but it would force the background to be
+recomposed every frame, undoing the optimisation that took compositing from
+44 ms down. A 2 % brightness wobble is not worth that at 13.4 FPS.
+
+### Not fixed, and not a background problem
+
+The dark wedge visible at the presenter's lower left is the office chair's frame
+in the source photograph, pulled in by the DeepLabV3 person matte. It predates
+this work and belongs to matting, not to the environment.
