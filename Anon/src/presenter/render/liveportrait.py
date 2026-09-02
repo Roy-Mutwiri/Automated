@@ -450,6 +450,7 @@ class LivePortraitRenderer:
                 light_wrap,
                 luminance,
                 render_desk_foreground,
+                render_mic_foreground,
                 render_streaming_room,
             )
 
