@@ -247,9 +247,21 @@ def main() -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    prompt = build_prompt(args.concept)
+    prompt, prompt_2 = build_prompts(args.concept)
+
+    # Enforce the token budget before spending minutes on generation. Silent
+    # truncation already cost two rounds; it does not get a third.
+    from transformers import CLIPTokenizer
+    tok = CLIPTokenizer.from_pretrained(MODEL, subfolder="tokenizer")
+    n1 = check_length(prompt, "subject prompt", tok)
+    n2 = check_length(prompt_2, "room prompt", tok)
+    n3 = check_length(NEGATIVE, "negative", tok)
+    n4 = check_length(NEGATIVE_2, "negative_2", tok)
+
     print(f"[scene] concept {args.concept}  {WIDTH}x{HEIGHT}  "
           f"{args.count} candidates, {args.steps} steps, cfg {args.guidance}")
+    print(f"[scene] tokens  subject {n1}  room {n2}  neg {n3}  neg2 {n4}  "
+          f"(limit {CLIP_LIMIT} each)")
 
     pipe = StableDiffusionXLPipeline.from_pretrained(
         MODEL, torch_dtype=torch.float16, variant="fp16", use_safetensors=True,
@@ -261,7 +273,9 @@ def main() -> int:
         seed = args.seed + i
         image = pipe(
             prompt=prompt,
+            prompt_2=prompt_2,
             negative_prompt=NEGATIVE,
+            negative_prompt_2=NEGATIVE_2,
             num_inference_steps=args.steps,
             guidance_scale=args.guidance,
             width=WIDTH, height=HEIGHT,

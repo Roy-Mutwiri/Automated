@@ -84,14 +84,31 @@ class DropdownBar:
 
     def __init__(self, menus: list[Menu], origin: tuple[int, int] = (14, 14),
                  gap: int = 10) -> None:
-        self.menus = menus
-        x, y = origin
-        for m in menus:
-            m.x, m.y = x, y
-            x += m.width + gap
+        self.origin = origin
+        self.gap = gap
+        self.menus: list[Menu] = []
         self._pending: tuple[str, str] | None = None
         self._window: str | None = None
         self._frame_size = (0, 0)
+        self.set_menus(menus)
+
+    def set_menus(self, menus: list[Menu]) -> None:
+        """Replace the menus, preserving which one is open.
+
+        Rebuilding rather than mutating is what keeps the enabled flags honest:
+        whether an outfit is pickable depends on the *other* dropdown's current
+        value, so the lists have to be recomputed after every change. Laying
+        them out here rather than at the call site is not tidiness - a menu that
+        skips layout draws at the origin of the frame, on top of the presenter.
+        """
+        x, y = self.origin
+        for menu in menus:
+            menu.x, menu.y = x, y
+            x += menu.width + self.gap
+        was_open = {m.ident for m in self.menus if m.open}
+        for menu in menus:
+            menu.open = menu.ident in was_open
+        self.menus = menus
 
     # -- input --------------------------------------------------------------
     def attach(self, window: str, frame_size: tuple[int, int]) -> None:
