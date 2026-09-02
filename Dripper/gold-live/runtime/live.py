@@ -131,6 +131,19 @@ async def build_adapter(kind: str, session_id: str, salt: str):
         )
         await adapter.connect()
         return adapter
+    if kind == "file":
+        # Development adapter: type into a file, the host hears it as a comment.
+        # The only comment source that runs in the live process without
+        # paddleocr, an API key or a live broadcast.
+        from platform_.adapters.filetail import FileTailAdapter
+
+        adapter = FileTailAdapter(
+            session_id=session_id,
+            path=data_path("comments.txt", create_parent=True),
+            author_salt=salt,
+        )
+        await adapter.connect()
+        return adapter
     if kind == "youtube":
         from platform_.adapters.youtube import YouTubeLiveAdapter
 
@@ -602,8 +615,11 @@ def main() -> None:
         help="gold = free real-time tokenized gold (no key needed)",
     )
     ap.add_argument("--market-path")
-    ap.add_argument("--adapter", default="mock",
-                    choices=["mock", "screen", "youtube"])
+    ap.add_argument(
+        "--adapter", default="mock",
+        choices=["mock", "file", "screen", "youtube"],
+        help="file = tail a text file you type into (development)",
+    )
     ap.add_argument("--tts", default="file", choices=["file", "piper"])
     ap.add_argument("--voices", default=str(data_path("voices", create_parent=False)))
     ap.add_argument("--voice", help="override the persona's voice for this run")
