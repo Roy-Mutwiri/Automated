@@ -6,17 +6,16 @@
       "haze": 0.06
     },
     "peak_irradiance": {
-      "left_wall_wash": 0.16054731607437134,
-      "under_shelf_led": 0.23864251375198364,
-      "mid_wall_bounce": 0.013829047791659832
+      "left_wall_wash": 0.18195360898971558,
+      "under_shelf_led": 0.27118468284606934
     },
     "byte_lock": 0,
     "wall_before": 47.969085693359375,
-    "wall_after": 48.70098876953125,
+    "wall_after": 48.83916473388672,
     "batten_before": 67.85655212402344,
-    "batten_after": 68.79338073730469,
+    "batten_after": 68.94923400878906,
     "felt_before": 27.717737197875977,
-    "felt_after": 28.240962982177734
+    "felt_after": 28.36113739013672
   },
   "B": {
     "params": {
@@ -25,17 +24,16 @@
       "haze": 0.1
     },
     "peak_irradiance": {
-      "left_wall_wash": 0.2919042110443115,
-      "under_shelf_led": 0.433895468711853,
-      "mid_wall_bounce": 0.02514372207224369
+      "left_wall_wash": 0.33082473278045654,
+      "under_shelf_led": 0.4930630326271057
     },
     "byte_lock": 0,
     "wall_before": 47.969085693359375,
-    "wall_after": 49.52645492553711,
+    "wall_after": 49.75065994262695,
     "batten_before": 67.85655212402344,
-    "batten_after": 69.74757385253906,
+    "batten_after": 70.0114974975586,
     "felt_before": 27.717737197875977,
-    "felt_after": 28.935340881347656
+    "felt_after": 29.119104385375977
   },
   "C": {
     "params": {
@@ -44,16 +42,15 @@
       "haze": 0.15
     },
     "peak_irradiance": {
-      "left_wall_wash": 0.45245152711868286,
-      "under_shelf_led": 0.6725379824638367,
-      "mid_wall_bounce": 0.03897276893258095
+      "left_wall_wash": 0.5127783417701721,
+      "under_shelf_led": 0.7642476558685303
     },
     "byte_lock": 0,
     "wall_before": 47.969085693359375,
-    "wall_after": 50.5421257019043,
+    "wall_after": 50.87607955932617,
     "batten_before": 67.85655212402344,
-    "batten_after": 70.95125579833984,
+    "batten_after": 71.33475494384766,
     "felt_before": 27.717737197875977,
-    "felt_after": 29.759572982788086
+    "felt_after": 30.043071746826172
   }
 }
