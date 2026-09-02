@@ -518,3 +518,81 @@ def test_replacing_menus_keeps_layout_and_open_state():
     ])
     assert [(m.x, m.y) for m in bar.menus] == before
     assert bar.menus[0].open and not bar.menus[1].open
+
+
+# -- cameras ----------------------------------------------------------------
+def test_camera_rig_separates_live_cameras_from_stills():
+    """Only a camera he looks into has a face LivePortrait can drive.
+
+    evaluate_scenes.py rejects a master frame past 10 degrees of yaw, so a shot
+    of his back or a wide room shot cannot be animated. The rig has to say which
+    is which, because the application takes a completely different path for a
+    still - it never calls the renderer at all."""
+    from presenter.render.cameras import CameraRig
+
+    rig = CameraRig.load()
+    assert len(rig.cameras) == 7, "the buttons are camera 1 to camera 7"
+
+    live = [c for c in rig.ordered() if c.animated]
+    stills = [c for c in rig.ordered() if not c.animated]
+    assert live and stills, "a rig of all-live or all-still cameras is suspect"
+
+    for cam in live:
+        # A live camera must ask him to look into the lens, or its yaw will
+        # fail the gate and the frame cannot be animated.
+        assert "look" in cam.subject.lower(), (
+            f"{cam.key} is marked live but never asks him to look at the lens"
+        )
+    for cam in stills:
+        assert cam.negative, (
+            f"{cam.key} is a still but inherits the shared negative, which "
+            f"forbids exactly the shot it is trying to make"
+        )
+
+    assert [c.index for c in rig.ordered()] == [1, 2, 3, 4, 5, 6, 7]
+
+
+def test_camera_default_prefers_a_live_camera():
+    """Opening on a still would show a frozen presenter, which is the one thing
+    this project exists to avoid."""
+    from presenter.render.cameras import Camera, CameraRig
+
+    rig = CameraRig.load()
+    rig.cameras = {
+        "cam6": Camera("cam6", "6 Still", False, "s"),
+        "cam1": Camera("cam1", "1 Hero", True, "looking into the lens"),
+    }
+    rig.exists = lambda key: True                      # pretend both generated
+    assert rig.default() == "cam1"
+
+    rig.cameras.pop("cam1")
+    assert rig.default() == "cam6", "with no live camera, a still is fine"
+
+
+def test_camera_buttons_press_and_step():
+    from presenter.ui import Button, ButtonRow
+    import cv2
+
+    row = ButtonRow([
+        Button("cam1", "1 Hero"),
+        Button("cam2", "2 Close", enabled=False),
+        Button("cam3", "3 Wide", live=False),
+    ], origin=(10, 600))
+    assert row.selected == "cam1"
+
+    b = row.buttons[2]
+    assert row.on_mouse(cv2.EVENT_LBUTTONDOWN, b.x + 5, b.y + 5) is True
+    assert row.take_selection() == "cam3"
+    assert row.take_selection() is None
+
+    dead = row.buttons[1]
+    assert row.on_mouse(cv2.EVENT_LBUTTONDOWN, dead.x + 5, dead.y + 5) is True
+    assert row.take_selection() is None, "a camera with no frame was selectable"
+
+    assert row.on_mouse(cv2.EVENT_LBUTTONDOWN, 5, 5) is False, "claimed a click "\
+        "outside the row, which would stop the dropdowns ever seeing one"
+
+    # Stepping skips the ungenerated camera rather than stalling on it.
+    row.selected = "cam1"
+    assert row.step(1) == "cam3"
+    assert row.step(-1) == "cam3"
