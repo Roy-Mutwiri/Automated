@@ -447,12 +447,8 @@ class LivePortraitRenderer:
         silhouette on the leading edge.
         """
         import torch
-        import torchvision
 
-        weights = torchvision.models.segmentation.DeepLabV3_ResNet101_Weights.DEFAULT
-        model = torchvision.models.segmentation.deeplabv3_resnet101(
-            weights=weights
-        ).eval().to(self.device)
+        model, weights = self._segmenter()
 
         rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         batch = weights.transforms()(
@@ -463,10 +459,6 @@ class LivePortraitRenderer:
             logits = model(batch)["out"][0]
         # Class 15 is "person" in the VOC label set these weights use.
         probs = logits.softmax(0)[15].cpu().numpy()
-
-        del model
-        if self.device == "cuda":
-            torch.cuda.empty_cache()
 
         h, w = img_bgr.shape[:2]
         probs = cv2.resize(probs.astype(np.float32), (w, h),
