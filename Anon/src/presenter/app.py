@@ -499,11 +499,13 @@ def main() -> int:
 
             if not args.headless:
                 shown = frame
-                if debug or bar is not None:
+                if debug or bar is not None or cam_row is not None:
                     shown = frame.copy()
                 if debug:
                     draw_debug(shown, engine, pose, timer, render_ms, failures,
                                renderer.info.name)
+                if cam_row is not None:
+                    cam_row.draw(shown)
                 if bar is not None:
                     bar.draw(shown)
                 cv2.imshow(WINDOW, shown)
