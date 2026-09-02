@@ -142,24 +142,36 @@ def render_streaming_room(
     # -- shelf silhouette ---------------------------------------------------
     if style.shelf:
         sy = int(h * style.shelf_y)
-        thickness = max(int(h * 0.018), 2)
-        cv2.rectangle(room, (0, sy), (w, sy + thickness), (0, 0, 0), -1)
-        # A few objects standing on it. Rectangles of varying width; once
-        # blurred they become the vague clutter every real room has.
+        thickness = max(int(h * 0.014), 2)
+        # Drawn as a *darkening* of the wall rather than as black. A hard black
+        # bar survives even heavy blur as a visible band, which reads as a
+        # graphic element rather than as a piece of furniture.
+        shelf_layer = np.zeros((h, w), np.float32)
+        cv2.rectangle(shelf_layer, (0, sy), (w, sy + thickness), 1.0, -1)
         x = int(w * 0.04)
         while x < w * 0.96:
-            ow = rng.uniform(0.03, 0.085) * w
-            oh = rng.uniform(0.04, 0.12) * h
-            if rng.chance(0.72):
-                shade = rng.uniform(0.15, 0.5) * style.shelf_darkness
+            ow = rng.uniform(0.025, 0.07) * w
+            oh = rng.uniform(0.03, 0.09) * h
+            if rng.chance(0.6):
                 cv2.rectangle(
-                    room,
-                    (int(x), int(sy - oh)),
-                    (int(x + ow), sy),
-                    tuple(float(c * shade) for c in style.wall_dark),
-                    -1,
+                    shelf_layer,
+                    (int(x), int(sy - oh)), (int(x + ow), sy),
+                    float(rng.uniform(0.35, 0.8)), -1,
                 )
-            x += ow + rng.uniform(0.015, 0.06) * w
+            x += ow + rng.uniform(0.02, 0.07) * w
+        shelf_layer = cv2.GaussianBlur(
+            shelf_layer, (max(int(short * 0.012) | 1, 3),) * 2, 0
+        )
+        room *= (1.0 - style.shelf_darkness * shelf_layer)[..., None]
+
+    # -- defocus the wall ---------------------------------------------------
+    # Everything above is at wall distance and goes out of focus together.
+    # Bokeh is added *after* this: a defocused highlight already carries its
+    # own softness and its characteristic hot rim, and blurring it a second
+    # time turns it into a shapeless smear. Getting this order wrong is what
+    # makes synthetic bokeh look like a stock overlay.
+    k = int(short * style.blur) | 1
+    room = cv2.GaussianBlur(room, (k, k), 0)
 
     # -- bokeh: defocused fairy lights --------------------------------------
     glow = np.zeros((h, w, 3), np.float32)
