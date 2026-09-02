@@ -182,3 +182,20 @@ Thank you,
 ---
 
 *Word count: ~980.*
+
+---
+
+## PARKED — 2026-09-02
+
+**Not sent, and no longer the active path.** The project was reclassified as
+personal / non-commercial, so the commercial-rights blockers this enquiry exists
+to resolve are not currently blockers at all.
+
+Kept because the analysis stays valid if the project is ever commercialised: the
+standard agreement's ownership clause, the no-download restriction and the
+ML-retention term are all still true, and this draft already asks the right
+questions in the right order.
+
+The technical assessment in `docs/didimo_technical_assessment.md` remains
+independently useful - 51 ARKit poses and 208 joints is a good benchmark to
+judge any other candidate against.
