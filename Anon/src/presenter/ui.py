@@ -147,9 +147,10 @@ class DropdownBar:
             return x, y
         return int(x * fw / ww), int(y * fh / wh)
 
-    def _on_mouse(self, event, x, y, flags, param) -> None:  # noqa: ARG002
+    def on_mouse(self, event, x, y) -> bool:
+        """Handle a click. Returns True if it landed on this widget."""
         if event != cv2.EVENT_LBUTTONDOWN:
-            return
+            return False
         x, y = self._to_image(x, y)
 
         for menu in self.menus:
@@ -157,7 +158,7 @@ class DropdownBar:
                 was = menu.open
                 self.close_all()
                 menu.open = not was
-                return
+                return True
 
         for menu in self.menus:
             if not menu.open:
@@ -167,11 +168,13 @@ class DropdownBar:
                     if option.enabled:
                         self._pending = (menu.ident, option.key)
                         menu.open = False
-                    return
+                    return True
 
         # A click anywhere else dismisses. Without this the only way to close a
         # menu opened by accident is to pick something from it.
+        was_open = self.is_open
         self.close_all()
+        return was_open
 
     def close_all(self) -> None:
         for menu in self.menus:
