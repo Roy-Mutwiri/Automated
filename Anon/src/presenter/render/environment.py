@@ -100,11 +100,13 @@ class RoomStyle:
     # varied heights, grouped rather than spread evenly: an even rank of
     # similar blocks reads as a graphic pattern, not as someone's shelf.
     shelf_objects: int = 5
-    # The shelf stands proud of the wall, so it is fractionally nearer the
-    # camera and takes a correspondingly weaker blur. This is the third plane
-    # in the focus ramp - wall, shelf, desk - and it is what stops the room
-    # collapsing into a single painted backdrop.
-    shelf_focus: float = 0.72
+    # Objects on the shelf stand proud of the wall, so they are fractionally
+    # nearer the camera and take a correspondingly weaker blur than the board
+    # they sit on. This is the third plane in the focus ramp - wall, shelf
+    # objects, desk - and it is what stops the room collapsing into a single
+    # painted backdrop. The board itself stays at wall distance; see
+    # render_streaming_room for why that distinction matters.
+    shelf_focus: float = 0.78
 
     # Desk edge across the bottom of frame, closer to camera than the wall and
     # therefore less blurred. This is what actually sells "seated at a desk".
