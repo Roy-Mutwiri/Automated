@@ -97,13 +97,25 @@ class AttentionTarget:
 # only a few degrees apart. SECOND_DISPLAY and CHAT are the off-axis glances
 # that make a streamer look like they are working rather than performing.
 DEFAULT_TARGETS: tuple[AttentionTarget, ...] = (
-    AttentionTarget("LENS", 0.0, 0.6, dwell_median=6.4, weight=3.4, spread=0.9),
-    AttentionTarget("MAIN_DISPLAY", -2.0, -4.5, dwell_median=4.0, weight=2.2, spread=2.2),
-    AttentionTarget("SECOND_DISPLAY", -21.0, -3.5, dwell_median=1.9, weight=0.75, spread=3.0),
-    AttentionTarget("CHAT", 17.5, -5.5, dwell_median=2.3, weight=0.7, spread=2.6),
-    AttentionTarget("DESK", -6.0, -17.0, dwell_median=1.4, weight=0.5, spread=3.2),
-    AttentionTarget("MIDDLE_DISTANCE", 10.0, 8.0, dwell_median=2.6, weight=0.5, spread=4.0),
+    AttentionTarget("LENS", 0.0, 0.6, dwell_median=9.3, weight=3.4, spread=0.9),
+    AttentionTarget("MAIN_DISPLAY", -2.0, -4.5, dwell_median=5.8, weight=2.2, spread=2.2),
+    AttentionTarget("SECOND_DISPLAY", -21.0, -3.5, dwell_median=2.8, weight=0.75, spread=3.0),
+    AttentionTarget("CHAT", 17.5, -5.5, dwell_median=3.3, weight=0.7, spread=2.6),
+    AttentionTarget("DESK", -6.0, -17.0, dwell_median=2.0, weight=0.5, spread=3.2),
+    AttentionTarget("MIDDLE_DISTANCE", 10.0, 8.0, dwell_median=3.8, weight=0.5, spread=4.0),
 )
+
+# Dwell times were raised 1.45x from a first pass that felt reasonable and
+# measured badly. With the original figures the stillness audit failed: median
+# gap between visible movements 2.57 s against a 3.00 s standard and 43% of gaps
+# over three seconds against 50%. The presenter was not doing anything wrong,
+# he was simply doing it too often - and "too often" is the failure mode the
+# brief cares about most, because the commonest valid human action is nothing.
+#
+# A nine-second median on the lens sounds long written down. It is not: a silent
+# presenter holding the camera for nine seconds reads as composure, and the
+# log-normal spread means individual holds run from about three seconds to
+# nearly a minute.
 
 # State -> multiplicative bias on each target's selection weight. This is how a
 # state means something: READING is not "a label", it is "the main display is
