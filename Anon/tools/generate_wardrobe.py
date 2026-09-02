@@ -88,8 +88,8 @@ LOOK = (
 )
 
 NEGATIVE = (
-    "cartoon, illustration, 3d render, painting, costume, cosplay, "
-    "plastic, distorted fabric, melted cloth, extra arms, hands, fingers, "
+    "cartoon, illustration, 3d render, costume, cosplay, plastic, "
+    "distorted fabric, melted cloth, extra arms, hands, fingers, "
     "text, logo, watermark, low quality, blurry"
 )
 
