@@ -20,15 +20,14 @@ warp/decode. The expensive identity work is paid for exactly once, which is
 what makes real-time feasible and also what keeps identity fixed - `f_s` and
 `x_c` never change, so the face cannot drift.
 
-## Detection: MediaPipe, not InsightFace
+## Detection: no third-party detector at all
 
 LivePortrait's stock cropper uses InsightFace, whose **models are licensed for
 non-commercial research only** - the one real licensing hazard in the stack.
-Detection runs a single time at startup, so substituting MediaPipe
-(Apache-2.0) costs nothing and keeps the pipeline commercially clean.
-LivePortrait's own `landmark.onnx` is used for the 203-point landmarks that
-eye retargeting needs; that model is not InsightFace and carries no such
-restriction.
+This backend does not use it, and does not use MediaPipe either: LivePortrait's
+own `landmark.onnx` bootstraps itself in two passes (see `_detect_landmarks`).
+Detection runs once at startup, so the two passes cost nothing measurable, and
+the runtime ends up with **no non-commercial component anywhere in it**.
 
 ## Calibration status
 
