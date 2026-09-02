@@ -472,6 +472,61 @@ class World:
 
         self.landmarks["head_centre"] = (h["hip"][0], h["hip"][1] - 0.012,
                                          h["eye_height"] + 0.045)
+        return ob
+
+    def project_identity_texture(self, ob, plate_path, camera_id="cam1"):
+        """Project the approved plate onto the mesh through Camera 1.
+
+        Skin tone, brows, beard and lip colour are the strongest identity
+        signals a face has, and none of them are geometry. The plate already
+        contains all of them, photographed through a camera whose parameters we
+        know exactly - so projecting it back along that camera's rays puts the
+        right colour on the right part of the mesh by construction, with no
+        painting and no guessing.
+
+        This is a *front* projection and it is honest about what that means:
+
+        * Surfaces facing Camera 1 get correct colour.
+        * Surfaces turned away from it - the sides of the head, behind the
+          ears, the back of the skull - get stretched colour, because the plate
+          contains no information about them. Camera 2 and 3 will show that.
+
+        Nothing is invented for the hidden regions here. That is a separate
+        decision, taken once and locked, and it should be made after seeing how
+        far the honest projection gets.
+        """
+        cam = self.cameras.get(camera_id)
+        if cam is None or not Path(plate_path).exists():
+            return False
+
+        from bpy_extras.object_utils import world_to_camera_view
+
+        scene = bpy.context.scene
+        mesh = ob.data
+        uv = mesh.uv_layers.new(name="cam1_projection")
+        mw = ob.matrix_world
+        for loop in mesh.loops:
+            co = mw @ mesh.vertices[loop.vertex_index].co
+            p = world_to_camera_view(scene, cam, co)
+            uv.data[loop.index].uv = (p.x, p.y)
+        mesh.uv_layers.active = uv
+
+        mat = bpy.data.materials.new("identity_projected")
+        mat.use_nodes = True
+        nt = mat.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        tex = nt.nodes.new("ShaderNodeTexImage")
+        tex.image = bpy.data.images.load(str(plate_path))
+        tex.extension = "EXTEND"
+        nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+        bsdf.inputs["Roughness"].default_value = 0.55
+        # Some subsurface, or skin reads as painted plastic under a key light.
+        if "Subsurface Weight" in bsdf.inputs:
+            bsdf.inputs["Subsurface Weight"].default_value = 0.12
+        mesh.materials.clear()
+        mesh.materials.append(mat)
+        print(f"[world] projected {Path(plate_path).name} through {camera_id} "
+              f"onto {len(mesh.loops)} loops")
         return True
 
     # -- lighting -----------------------------------------------------------
