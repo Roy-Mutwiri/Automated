@@ -26,7 +26,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-__all__ = ["Option", "Menu", "DropdownBar"]
+__all__ = ["Option", "Menu", "DropdownBar", "Button", "ButtonRow"]
 
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 
