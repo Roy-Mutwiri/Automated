@@ -282,8 +282,21 @@ def human_protection(img: np.ndarray, grow: float = 0.012) -> np.ndarray:
     torch.cuda.empty_cache()
     h, w = img.shape[:2]
     p = cv2.resize(p.astype(np.float32), (w, h))
+
+    # Keep only the largest component. Semantic segmentation cannot tell a
+    # person in the room from a *picture* of a person on a screen, and the right
+    # monitor displays exactly that - it was being reported as 33% occluded by
+    # its own content, which would have left the old figure's silhouette
+    # untouched under the new interface. The real subject is an order of
+    # magnitude larger than anything shown on a panel behind him.
+    binm = (p > 0.4).astype(np.uint8)
+    n, labels, st, _ = cv2.connectedComponentsWithStats(binm, 8)
+    if n > 1:
+        biggest = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
+        binm = (labels == biggest).astype(np.uint8)
+
     g = max(int(grow * min(h, w)) | 1, 5)
-    return cv2.dilate((p > 0.4).astype(np.float32), np.ones((g, g), np.uint8))
+    return cv2.dilate(binm.astype(np.float32), np.ones((g, g), np.uint8))
 
 
 def main() -> int:
