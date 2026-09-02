@@ -105,7 +105,7 @@ class LivePortraitRenderer:
 
         self.landmark_runner = LandmarkRunner(
             ckpt_path=str(weights / "liveportrait/landmark.onnx"),
-            onnx_provider="cuda" if device == "cuda" else "cpu",
+            onnx_provider="cpu",  # runs once at startup; CUDA EP needs CUDA 13 DLLs
             device_id=0,
         )
         self.landmark_runner.warmup()
@@ -164,9 +164,7 @@ class LivePortraitRenderer:
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         self.source_full = img_bgr
 
-        seed_lmk = self._detect_landmarks_mediapipe(img_rgb)
-        # Refine to LivePortrait's own 203-point format in original coordinates.
-        lmk = self.landmark_runner.run(img_rgb, seed_lmk)
+        lmk = self._detect_landmarks(img_rgb)
 
         # Source crop parameters are LivePortrait's documented defaults for
         # still images: a wider crop than the driving crop, so pasting back
