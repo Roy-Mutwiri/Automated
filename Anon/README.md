@@ -193,9 +193,27 @@ quality.
 - Schematic rig preview at 29.7 FPS, 0 render failures over 30 s.
 - Renderer chosen (LivePortrait) with reasoning and licence review.
 
-**Blocked**
-- Photoreal renderer needs a source portrait. None exists in the repo and the
-  choice of face is a product decision, not an engineering one.
+- **Photoreal renderer working.** Identity preserved, skin texture intact
+  (pores and fine lines survive), background stable, and blinks are
+  anatomically correct — lid crease and lash line included, because closure
+  goes through LivePortrait's trained `retarget_eye` network rather than
+  hand-nudged keypoints.
+- **No non-commercial component anywhere in the runtime.** LivePortrait's stock
+  cropper needs InsightFace (non-commercial models); this backend uses
+  LivePortrait's own `landmark.onnx` bootstrapped in two passes instead, and
+  needs neither InsightFace nor MediaPipe.
+
+**Known defects**
+- **13.4 FPS against a 25 FPS target.** Cause identified (launch-bound, 16 %
+  GPU utilisation), routes forward listed above.
+- **Framing is a tight close-up, not head-and-shoulders.** Cropping 16:9 from a
+  1024×1024 *square* source cannot retain shoulders. Source-image limitation,
+  not a code defect — fix with a portrait framed wider or in landscape.
+- **Gaze and brow mapping are uncalibrated.** LivePortrait has no native gaze
+  control and its `exp` dimensions are undocumented. Current indices are a
+  hypothesis from community tooling, marked `verified=False` in
+  `render/calibration.py` with deliberately tiny gains so a wrong guess is
+  ineffective rather than face-distorting. **Do not treat gaze as working.**
 
 **Not started (deliberately)**
 - Lip sync, audio, LLM, TTS, OBS, virtual camera, streaming. Out of scope until
