@@ -46,6 +46,19 @@ class Tick:
 class Feed(ABC):
     name: str
 
+    #: How long a gap between updates is NORMAL for this source, in seconds.
+    #: The engine's staleness thresholds are derived from this, because they
+    #: mean different things per feed: a tick-by-tick spot feed going quiet for
+    #: ten seconds is a problem, while a token whose book only prints on a
+    #: top-of-book change routinely does exactly that. Getting this wrong makes
+    #: the host stop quoting prices for no reason.
+    expected_interval_s: float = 1.0
+
+    def staleness_thresholds(self) -> tuple[float, float, float]:
+        """(delayed_after, stale_after, unavailable_after) in seconds."""
+        base = max(1.0, self.expected_interval_s)
+        return base * 6, base * 20, base * 120
+
     @abstractmethod
     def ticks(self) -> AsyncIterator[Tick]: ...
 

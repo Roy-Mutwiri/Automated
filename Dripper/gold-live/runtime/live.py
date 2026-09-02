@@ -67,6 +67,13 @@ def load_session_config(session_id: str) -> dict:
 
 
 def build_feed(kind: str, path: str | None) -> Feed:
+    if kind == "gold":
+        # Free, real-time, no API key. The default because a real price beats
+        # a random walk, and every paid alternative is a decision the operator
+        # has to make rather than one this can make for them.
+        from platform_.market.exchange_feed import ExchangeGoldFeed
+
+        return ExchangeGoldFeed()
     if kind == "synthetic":
         return SyntheticFeed(interval_s=0.25)
     if kind == "replay":
@@ -492,6 +499,20 @@ class LiveSession:
         METRICS.gauge("goldlive_session_up", 1, {"session": self.session_id})
 
         feed = build_feed(self.args.market, self.args.market_path)
+        # Staleness thresholds belong to the feed, not to one global guess.
+        delayed, stale, unavailable = feed.staleness_thresholds()
+        self.engine.delayed_after_s = delayed
+        self.engine.stale_after_s = stale
+        self.engine.unavailable_after_s = unavailable
+        log.info(
+            "staleness thresholds for %s: delayed %.0fs, stale %.0fs, unavailable %.0fs",
+            feed.name, delayed, stale, unavailable,
+        )
+
+        source_note = getattr(feed, "describe_source", None)
+        if source_note is not None:
+            self.engine.price_source_note = source_note()
+            log.info("%s", self.engine.price_source_note)
         self._tasks = [
             asyncio.create_task(self._market_loop(feed), name="market"),
             asyncio.create_task(self._bar_loop(), name="bars"),
@@ -563,8 +584,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Run one live session")
     ap.add_argument("--session", required=True)
     ap.add_argument("--mode", default="auto", choices=["auto", "local", "api", "offline"])
-    ap.add_argument("--market", default="synthetic",
-                    choices=["synthetic", "replay", "rest", "websocket"])
+    ap.add_argument(
+        "--market", default="gold",
+        choices=["gold", "synthetic", "replay", "rest", "websocket"],
+        help="gold = free real-time tokenized gold (no key needed)",
+    )
     ap.add_argument("--market-path")
     ap.add_argument("--adapter", default="mock",
                     choices=["mock", "screen", "youtube"])

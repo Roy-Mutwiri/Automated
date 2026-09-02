@@ -97,6 +97,10 @@ class MarketEngine:
         self._atr_history: dict[str, list[float]] = {k: [] for k in self.series}
         self._reported_levels: dict[str, set[float]] = {k: set() for k in self.series}
         self._pending: list[MarketEvent] = []
+        #: What the price actually comes from. Reaches the generator via
+        #: MarketState.context so the host can be accurate about its source
+        #: rather than implying an interbank quote.
+        self.price_source_note: str | None = None
 
     # -- warm-up ----------------------------------------------------------
 
@@ -316,7 +320,15 @@ class MarketEngine:
             timeframes=views,
             observations=observations,
             detections=detections,
-            context=[MarketContext(kind="session", label=f"{session.value} session")],
+            context=[
+                MarketContext(kind="session", label=f"{session.value} session"),
+                *(
+                    [MarketContext(kind="news", label="price source",
+                                   detail=self.price_source_note)]
+                    if self.price_source_note
+                    else []
+                ),
+            ],
         )
 
     def drain_events(self) -> list[MarketEvent]:
