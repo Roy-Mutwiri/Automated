@@ -62,6 +62,23 @@ def person_mask(img_bgr: np.ndarray) -> np.ndarray:
     return cv2.resize(probs.astype(np.float32), (w, h))
 
 
+# Screens and hardware, read off a coordinate grid on the approved master.
+#
+# Hard-coded on purpose. This runs once, on one locked image, and a retoucher
+# masking a specific plate would do exactly this. The saturation/luminance
+# heuristic cannot separate them: the right-hand screen is desaturated and
+# mid-bright, so it passed the "wall" test and would have been painted over
+# with walnut - which is precisely the kind of damage this phase must not do.
+#
+# (x0, y0, x1, y1) in master-frame pixels, 1344x768.
+EXCLUDE_RECTS = [
+    (0, 15, 380, 205),        # left monitor, dark panel
+    (415, 25, 885, 300),      # centre monitor, blue content
+    (1040, 15, 1145, 275),    # speaker / tower
+    (1170, 20, 1344, 305),    # right monitor, the AI figure
+]
+
+
 def build(img_bgr: np.ndarray,
           sat_max: int = 46,
           val_lo: int = 70,
@@ -78,6 +95,11 @@ def build(img_bgr: np.ndarray,
 
     # Foreground band: desk, gear, hands. Nearer the lens, never wall.
     wall[int(h * bottom_keep):, :] = 0
+
+    # Screens and hardware. Excluded by explicit geometry, not by heuristic.
+    for (ex0, ey0, ex1, ey1) in EXCLUDE_RECTS:
+        pad = 6
+        wall[max(ey0 - pad, 0):ey1 + pad, max(ex0 - pad, 0):ex1 + pad] = 0
 
     # Person, generously grown. Bigger than the silhouette on purpose - hair is
     # where a generated texture would betray itself.

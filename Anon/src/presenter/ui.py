@@ -210,7 +210,7 @@ class DropdownBar:
 
     def _draw_head(self, frame, menu: Menu) -> None:
         x, y, w, h = menu.head_rect()
-        self._panel(frame, (x, y, w, h), BG_OPEN if menu.open else BG)
+        _panel(frame, (x, y, w, h), BG_OPEN if menu.open else BG)
         cv2.rectangle(frame, (x, y), (x + w - 1, y + h - 1), EDGE, 1, cv2.LINE_AA)
         cv2.putText(frame, menu.title.upper(), (x + 10, y + 13),
                     FONT, 0.32, TITLE, 1, cv2.LINE_AA)
@@ -224,12 +224,12 @@ class DropdownBar:
 
     def _draw_list(self, frame, menu: Menu) -> None:
         x, y, w, h = menu.x, menu.y + menu.HEAD, menu.width, menu.ROW * len(menu.options)
-        self._panel(frame, (x, y, w, h), BG, alpha=0.94)
+        _panel(frame, (x, y, w, h), BG, alpha=0.94)
         cv2.rectangle(frame, (x, y), (x + w - 1, y + h - 1), EDGE, 1, cv2.LINE_AA)
         for i, option in enumerate(menu.options):
             rx, ry, rw, rh = menu.row_rect(i)
             if option.key == menu.selected:
-                self._panel(frame, (rx + 1, ry, rw - 2, rh), BG_OPEN, alpha=0.9)
+                _panel(frame, (rx + 1, ry, rw - 2, rh), BG_OPEN, alpha=0.9)
                 cv2.rectangle(frame, (rx + 1, ry + 4), (rx + 3, ry + rh - 4),
                               HILITE, -1)
             colour = TEXT if option.enabled else TEXT_DIM
