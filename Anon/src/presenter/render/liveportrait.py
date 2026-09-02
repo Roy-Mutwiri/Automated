@@ -234,6 +234,28 @@ class LivePortraitRenderer:
             # half-changed: a new head over the previous outfit's mask, with no
             # way back. Rolling back keeps a bad portrait a refused outfit
             # change rather than a broken renderer.
+            # Refuse rather than die when the GPU is already full.
+            #
+            # Preparing a source is the most memory-hungry thing this renderer
+            # does after start-up - a DeepLabV3 forward pass over a 1024x1024
+            # image on top of everything LivePortrait is already holding - and
+            # it is now triggered by a menu click. Run it with a few hundred
+            # megabytes free and the process does not raise: it is aborted by
+            # the driver, with no traceback and no chance for the rollback
+            # below to run. Observed exactly that, mid-outfit-change, against
+            # an unrelated job holding 15.6 of 16 GB.
+            #
+            # A cheap check beforehand turns a vanished window into a refused
+            # outfit change and a line saying why.
+            if self.device == "cuda" and torch.cuda.is_available():
+                free = torch.cuda.mem_get_info()[0] / (1 << 20)
+                if free < 1200:
+                    raise RuntimeError(
+                        f"only {free:.0f} MB of VRAM free; preparing a source "
+                        f"needs roughly 1.2 GB and would abort the process "
+                        f"rather than raise. Free the GPU and try again."
+                    )
+
             previous = self._capture_source_state()
             try:
                 self._prepare_source(path)
