@@ -458,16 +458,16 @@ def render_mic_foreground(
     # with the capsule ending short of centre frame.
     sign = 1.0 if style.mic_side == "right" else -1.0
     cx = w * (0.86 if sign > 0 else 0.14)
-    base = (int(cx + sign * w * 0.18), int(h * 1.02))
-    tip = (int(cx - sign * w * 0.05), int(h * 0.60))
+    base = (int(cx + sign * w * 0.22), int(h * 1.06))
+    tip = (int(cx - sign * w * 0.10), int(h * 0.50))
 
-    arm_w = max(int(short * 0.016 * style.mic_scale), 3)
+    arm_w = max(int(short * 0.030 * style.mic_scale), 5)
     for canvas, colour in ((layer, style.mic_color), (alpha, 1.0)):
         cv2.line(canvas, base, tip, colour, arm_w)
 
     # Shock mount ring and capsule body.
-    body_len = int(h * 0.20 * style.mic_scale)
-    body_w = max(int(short * 0.055 * style.mic_scale), 8)
+    body_len = int(h * 0.34 * style.mic_scale)
+    body_w = max(int(short * 0.115 * style.mic_scale), 14)
     ang = math.atan2(tip[1] - base[1], tip[0] - base[0])
     bx = int(tip[0] - math.cos(ang) * body_len * 0.1)
     by = int(tip[1] - math.sin(ang) * body_len * 0.1)
