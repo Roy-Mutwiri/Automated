@@ -68,7 +68,7 @@ class CameraRig:
     room: str = ""
 
     @classmethod
-    def load(cls, path: str | Path = "config/cameras.yaml",
+    def load(cls, path: str | Path = "config/cameras_2d_legacy.yaml",
              root: str | Path | None = None) -> CameraRig:
         root = Path(root) if root else Path(__file__).resolve().parents[3]
         path = Path(path)
