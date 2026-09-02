@@ -312,11 +312,13 @@ def test_key_luminance_reads_the_lit_skin_not_the_beard():
 
     from presenter.render.environment import key_luminance, luminance
 
+    # Deliberately shadow-majority, which is what a bearded, dark-haired
+    # subject in low key actually looks like inside a landmark box.
     face = np.zeros((100, 100, 3), np.uint8)
-    face[:55] = 160          # lit skin
-    face[55:] = 30           # beard and shadow side
+    face[:40] = 160          # lit skin
+    face[40:] = 30           # beard, hair, shadow side
     median = float(np.median(luminance(face)))
-    assert median < 100, "fixture is not actually split"
+    assert median < 100, "fixture is not shadow-majority"
     assert key_luminance(face) > 150, (
         "key_luminance is being dragged into the shadow like a median would be"
     )
