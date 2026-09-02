@@ -267,13 +267,19 @@ def main() -> int:
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
 
-        print(f"[app] loading LivePortrait, source={args.source}")
+        # Starting on a camera means starting on a room-scale master frame, and
+        # those are prepared differently from a portrait - see cut_to().
+        start_framing = "full" if camera is not None else args.framing
+        start_env = "source" if camera is not None else args.environment
+
+        print(f"[app] loading LivePortrait, source={args.source} "
+              f"({start_framing}/{start_env})")
         renderer = LivePortraitRenderer(
             source_image=args.source,
             liveportrait_root=args.liveportrait_root,
             output_size=(args.width, args.height),
-            framing=args.framing,
-            environment=args.environment,
+            framing=start_framing,
+            environment=start_env,
             room_seed=args.room_seed,
             neutralize_pose=args.neutralize_pose,
         )
