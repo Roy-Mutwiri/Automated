@@ -163,8 +163,9 @@ def main() -> int:
                     help="source portrait for the photoreal renderer")
     ap.add_argument("--liveportrait-root", default="third_party/LivePortrait")
     ap.add_argument("--framing", default="shoulders",
-                    choices=["shoulders", "close"],
-                    help="shoulders = head and shoulders, blurred side fill; "
+                    choices=["shoulders", "close", "full"],
+                    help="full = master frame used as shot (streaming room); "
+                         "shoulders = head and shoulders, blurred side fill; "
                          "close = tight 16:9 crop")
     ap.add_argument("--environment", default="streaming_room",
                     choices=["streaming_room", "source"],

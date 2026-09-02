@@ -93,9 +93,10 @@ class LivePortraitRenderer:
         self.device = device
         self.output_size = output_size
         self.paste_back = paste_back
-        if framing not in ("shoulders", "close"):
+        if framing not in ("shoulders", "close", "full"):
             raise ValueError(
-                f"framing must be 'shoulders' or 'close', got {framing!r}"
+                f"framing must be 'shoulders', 'close' or 'full', "
+                f"got {framing!r}"
             )
         self.framing = framing
         if environment not in ("streaming_room", "source"):
