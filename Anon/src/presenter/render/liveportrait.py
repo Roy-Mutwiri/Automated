@@ -121,27 +121,41 @@ class LivePortraitRenderer:
         )
 
     # -- one-time identity preparation --------------------------------------
-    def _detect_landmarks_mediapipe(self, img_rgb: np.ndarray) -> np.ndarray:
-        """Initial face landmarks via MediaPipe. Replaces InsightFace detection.
+    def _detect_landmarks(self, img_rgb: np.ndarray) -> np.ndarray:
+        """Locate the face using only LivePortrait's own landmark model.
 
-        Only needs to be roughly right: the output seeds LivePortrait's own
-        landmark model, which then refines to the 203-point set actually used.
+        Neither InsightFace nor MediaPipe is used. `LandmarkRunner.run` called
+        without a seed force-resizes the whole image to 224x224 - which
+        upstream marks "NOT RECOMMEND" for arbitrary photos, and rightly, since
+        a small face in a wide shot would be destroyed by that resize. For a
+        framed head-and-shoulders portrait the face already fills most of the
+        frame, so the first pass lands close enough to define a crop, and a
+        second pass on that crop refines to full accuracy.
+
+        This removes the last third-party detector from the pipeline. The
+        licensing consequence is the point: InsightFace's models are
+        non-commercial-only, and with this two-pass approach nothing in the
+        runtime depends on them.
         """
-        import mediapipe as mp
+        coarse = self.landmark_runner.run(img_rgb)
+        refined = self.landmark_runner.run(img_rgb, coarse)
 
         h, w = img_rgb.shape[:2]
-        with mp.solutions.face_mesh.FaceMesh(
-            static_image_mode=True, max_num_faces=1, refine_landmarks=True,
-            min_detection_confidence=0.5,
-        ) as mesh:
-            result = mesh.process(img_rgb)
-        if not result.multi_face_landmarks:
+        xs, ys = refined[:, 0], refined[:, 1]
+        if not (0 <= xs.mean() <= w and 0 <= ys.mean() <= h):
             raise RuntimeError(
-                "MediaPipe found no face in the source image. The portrait must "
-                "contain one clearly visible, roughly front-facing face."
+                "Landmark detection did not converge on a face. The source "
+                "portrait must contain one clearly visible, roughly "
+                "front-facing face filling a reasonable part of the frame."
             )
-        lm = result.multi_face_landmarks[0].landmark
-        return np.array([[p.x * w, p.y * h] for p in lm], dtype=np.float32)
+        span = max(xs.max() - xs.min(), ys.max() - ys.min())
+        if span < 0.12 * min(h, w):
+            raise RuntimeError(
+                f"Detected face spans only {span:.0f}px in a {w}x{h} image - too "
+                "small for the coarse pass to be reliable. Crop the source "
+                "portrait closer to the head before using it."
+            )
+        return refined
 
     def _prepare_source(self, path: Path) -> None:
         img_bgr = cv2.imread(str(path))
