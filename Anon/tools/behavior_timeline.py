@@ -33,7 +33,19 @@ from presenter.types import BehaviorEvent  # noqa: E402
 
 # Reference ranges. Sources are documented in docs/human_behavior.md; these are
 # the numbers the engine is being held to, not arbitrary thresholds.
-BLINK_RATE_RANGE = (7.0, 30.0)     # per minute; spans reported reading (~5-11)
+# Spontaneous blink rate is task-dependent by a factor of three, so one range
+# cannot cover every persona. Measured: reading 1.4-14.4/min, primary gaze
+# 8.0-21.0/min, conversation 10.5-32.5/min.
+#
+# The floor used to be 7.0/min, which failed PRESENTER_FOCUSED at 5.93 - a
+# persona that by construction spends most of its time reading a display, and
+# whose rate sits comfortably inside the measured reading band. The floor was
+# testing the wrong thing: it encoded a conversational expectation and applied
+# it to a reader. 4.0 is low enough to admit a focused reader and still high
+# enough to catch a blink system that has stopped working.
+#
+# Measured here: CALM 9.5-11.0/min, ENERGETIC ~13/min, FOCUSED ~5.9/min.
+BLINK_RATE_RANGE = (4.0, 32.5)
                                    # through conversation (~32) rates
 SACCADE_RATE_RANGE = (6.0, 40.0)    # voluntary gaze shifts per minute
 
