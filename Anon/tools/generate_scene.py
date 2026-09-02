@@ -121,21 +121,17 @@ CONCEPTS = {
 # tokens, so two thirds of it - every geometry and look term - was discarded
 # before the model saw it.
 NEGATIVE = (
-    "from behind, back of head, rear view, back turned, side profile, "
-    "wide angle, wide room shot, full body, racing simulator, sim rig, "
-    "empty room, no people, tiny person, distant person, "
-    "rustic, cabin, antique, vintage, library, "
-    "wooden room, all wood interior, brown room, bare table lamp, "
-    "music studio, midi keyboard, piano, mixing console"
+    "from behind, back of head, rear view, side profile, wide angle, "
+    "full body, racing simulator, sim rig, empty room, no people, "
+    "tiny person, rustic, cabin, antique, library, wooden room, "
+    "brown room, music studio, midi keyboard, piano"
 )
 
 NEGATIVE_2 = (
     "from behind, back of head, rear view, wide angle, racing simulator, "
-    "empty room, no people, tiny person, distant person, "
-    "office chair, mesh chair, corporate office, bedroom, "
-    "rgb lighting, rainbow, neon, purple, cyberpunk, "
-    "text, letters, signage, logo, watermark, screen text, "
-    "cgi, 3d render, illustration, plastic skin, deformed hands, blurry face"
+    "empty room, no people, tiny person, office chair, mesh chair, bedroom, "
+    "rgb lighting, neon, purple, cyberpunk, text, signage, logo, watermark, "
+    "cgi, 3d render, plastic skin, deformed hands, blurry face"
 )
 
 
