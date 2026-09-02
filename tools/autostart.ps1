@@ -104,9 +104,21 @@ foreach ($worktree in Get-Worktrees) {
         '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Worktree "{1}"' -f $SyncPath, $worktree
     )
 
+    # -Force resets a task to enabled. A terminal that deliberately turned its
+    # watcher off would have it silently turned back on by an unrelated re-run
+    # of this script, so a disabled task stays disabled.
+    $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    $wasDisabled = ($existing -and $existing.State -eq 'Disabled')
+
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
         -Settings $settings -Principal $principal -Force `
         -Description ("Auto-commits and pushes {0} on branch {1}, attributed to that branch's owner." -f $worktree, $branch) | Out-Null
+
+    if ($wasDisabled) {
+        Disable-ScheduledTask -TaskName $taskName | Out-Null
+        Write-Host "Registered '$taskName' -> $worktree (branch $branch) - left disabled."
+        continue
+    }
 
     Write-Host "Registered '$taskName' -> $worktree (branch $branch)."
 
