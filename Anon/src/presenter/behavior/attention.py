@@ -58,6 +58,11 @@ __all__ = ["AttentionTarget", "AttentionSystem", "DEFAULT_TARGETS"]
 OCULAR_LIMIT_DEG = 35.0
 GAZE_UNITS_PER_DEG = 0.42 / OCULAR_LIMIT_DEG
 
+# How much a target's appeal decays per recent visit, and the extra penalty for
+# being the target two shifts ago. The second is what breaks A-B-A cycles.
+RECENCY_DECAY = 0.38
+RETURN_PENALTY = 0.30
+
 
 @dataclass(frozen=True)
 class AttentionTarget:
@@ -85,12 +90,12 @@ class AttentionTarget:
 # only a few degrees apart. SECOND_DISPLAY and CHAT are the off-axis glances
 # that make a streamer look like they are working rather than performing.
 DEFAULT_TARGETS: tuple[AttentionTarget, ...] = (
-    AttentionTarget("LENS", 0.0, 0.6, dwell_median=4.2, weight=3.4, spread=0.9),
-    AttentionTarget("MAIN_DISPLAY", -2.0, -4.5, dwell_median=3.1, weight=2.2, spread=2.2),
+    AttentionTarget("LENS", 0.0, 0.6, dwell_median=6.4, weight=3.4, spread=0.9),
+    AttentionTarget("MAIN_DISPLAY", -2.0, -4.5, dwell_median=4.0, weight=2.2, spread=2.2),
     AttentionTarget("SECOND_DISPLAY", -21.0, -3.5, dwell_median=1.9, weight=0.75, spread=3.0),
     AttentionTarget("CHAT", 17.5, -5.5, dwell_median=2.3, weight=0.7, spread=2.6),
     AttentionTarget("DESK", -6.0, -17.0, dwell_median=1.4, weight=0.5, spread=3.2),
-    AttentionTarget("MIDDLE_DISTANCE", 10.0, 8.0, dwell_median=2.0, weight=0.35, spread=4.0),
+    AttentionTarget("MIDDLE_DISTANCE", 10.0, 8.0, dwell_median=2.6, weight=0.5, spread=4.0),
 )
 
 # State -> multiplicative bias on each target's selection weight. This is how a
@@ -165,12 +170,24 @@ class AttentionSystem:
             if name == "LENS":
                 # camera_affinity is the state's pull toward the audience.
                 w *= 1.0 + 1.6 * affinity
-            # Recently visited targets are less interesting. This is the
-            # behavioural-memory requirement applied where it matters most: a
-            # presenter who alternates LENS, CHAT, LENS, CHAT on a fixed cycle
-            # is the single most obvious loop an idle avatar can produce.
+            # Behavioural memory, and specifically an anti-alternation term.
+            #
+            # A plain recency decay is not enough, and the repetition detector
+            # proved it: with LENS and MAIN_DISPLAY carrying the two largest
+            # weights, the chain LENS -> MAIN_DISPLAY -> LENS appeared 71 times
+            # in a thirty-minute run against 1.6 expected from the marginals -
+            # a 44x excess, and exactly the two-target cycle the brief names as
+            # the most obvious loop an idle avatar can produce.
+            #
+            # The specific pattern is A -> B -> A, so the specific fix is to
+            # penalise the target visited *two steps ago* on top of general
+            # recency. Some going back and forth between lens and monitor is
+            # correct - it is what a streamer does - so this discourages the
+            # cycle rather than forbidding it.
             recency = self._recent.count(name)
-            w *= 0.45 ** recency
+            w *= RECENCY_DECAY ** recency
+            if len(self._recent) >= 2 and name == self._recent[-2]:
+                w *= RETURN_PENALTY
             if name == self.current:
                 w *= 0.08
             out[name] = max(w, 1e-4)
@@ -260,7 +277,7 @@ class AttentionSystem:
         self.shift_count += 1
 
         self._recent.append(name)
-        if len(self._recent) > 4:
+        if len(self._recent) > 6:
             self._recent.pop(0)
 
         dwell = drives.rng.lognormal_interval(
