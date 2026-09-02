@@ -386,8 +386,40 @@ class LivePortraitRenderer:
         M_src2out_h = np.vstack([M_src2out, [0.0, 0.0, 1.0]]).astype(np.float32)
         self.M_crop2out = (M_src2out_h @ M_c2o_h)[:2, :].astype(np.float32)
 
-        # Static background, composed once: the blurred fill underneath, the
-        # correctly-scaled source over it, with a feathered join.
+        # Static background, composed once.
+        if self.environment == "streaming_room":
+            from .environment import render_streaming_room
+
+            # The generated room replaces the portrait's own background
+            # everywhere, so the fill and the area behind the subject are the
+            # same image - no seam between them by construction.
+            fill = render_streaming_room(
+                out_w, out_h, style=self.room_style, seed=self.room_seed
+            ).astype(np.float32)
+            matte = self._person_matte(img_bgr)
+            self.person_matte = matte
+            subject = img_bgr.astype(np.float32) * matte[..., None]
+            content = cv2.warpAffine(
+                subject, M_src2out, (out_w, out_h),
+                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+            )
+            alpha_out = cv2.warpAffine(
+                matte, M_src2out, (out_w, out_h),
+                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+            )[..., None]
+            self.background = np.clip(
+                content + fill * (1.0 - alpha_out), 0, 255
+            ).astype(np.uint8)
+            # Per-frame, the generated crop must be confined to the subject:
+            # LivePortrait regenerates the whole crop including the portrait's
+            # original background, and letting that through would paint the old
+            # bokeh back over the room in a rectangle around the head.
+            self.subject_alpha_out = alpha_out.astype(np.float32)
+            self._finish_blend_setup(crop, w, h, out_w, out_h)
+            return
+
+        self.person_matte = None
+        self.subject_alpha_out = None
         fill = self._build_fill(img_bgr, out_w, out_h).astype(np.float32)
         content = cv2.warpAffine(
             img_bgr, M_src2out, (out_w, out_h),
