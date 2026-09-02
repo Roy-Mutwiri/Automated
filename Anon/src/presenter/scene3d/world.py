@@ -390,6 +390,90 @@ class World:
         self.landmarks["ear_l"] = (head_c[0] - 0.086, head_c[1], head_c[2])
         self.landmarks["ear_r"] = (head_c[0] + 0.086, head_c[1], head_c[2])
 
+    def build_fitted_human(self, pose, obj_path, clip_below=0.95) -> bool:
+        """Load the fitted CC0 mesh human instead of the proxy.
+
+        Coordinates have to be converted, and getting this wrong is silent:
+        MakeHuman's base mesh is **Y-up and in decimetres**, our world is
+        **Z-up and in metres**. So the mesh is scaled by 0.1 and rotated +90
+        degrees about X.
+
+        `clip_below` hides geometry beneath roughly mid-chest. The mesh is a
+        *standing* figure and this stage has no rig to seat it, so its legs
+        would pass straight through the desk. Cameras 1-3 see head, neck,
+        shoulders and upper torso, which is exactly the region the identity
+        gate judges, so the rest is hidden rather than faked. This is a stated
+        limitation of the identity experiment, not a trick to pass it.
+        """
+        obj_path = Path(obj_path)
+        if not obj_path.exists():
+            print(f"[world] no fitted mesh at {obj_path}; using the proxy")
+            return False
+
+        before = set(bpy.data.objects.keys())
+        bpy.ops.wm.obj_import(filepath=str(obj_path), forward_axis="NEGATIVE_Z",
+                              up_axis="Y")
+        new = [bpy.data.objects[n] for n in bpy.data.objects.keys()
+               if n not in before]
+        if not new:
+            print("[world] import produced no object")
+            return False
+        ob = new[0]
+        ob.name = "streamer_fitted"
+
+        # Metres, and stood upright in a Z-up world.
+        ob.scale = (0.1, 0.1, 0.1)
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+
+        # Place by the head, because the head is what the cameras are aimed at
+        # and what the gate is about. The feet land wherever they land.
+        h = self.g["human"]
+        lo = [min(v.co[i] for v in ob.data.vertices) for i in range(3)]
+        hi = [max(v.co[i] for v in ob.data.vertices) for i in range(3)]
+        head_top_target = h["eye_height"] + 0.18
+        ob.location = (
+            h["hip"][0] - (lo[0] + hi[0]) / 2,
+            h["hip"][1] - (lo[1] + hi[1]) / 2,
+            head_top_target - hi[2],
+        )
+        print(f"[world] fitted mesh: {len(ob.data.vertices)} verts, "
+              f"height {hi[2] - lo[2]:.3f} m, placed at z offset "
+              f"{ob.location[2]:.3f}")
+
+        if clip_below is not None:
+            mesh = ob.data
+            zoff = ob.location[2]
+            keep = [p for p in mesh.polygons
+                    if max(mesh.vertices[i].co[2] for i in p.vertices) + zoff
+                    >= clip_below]
+            drop = len(mesh.polygons) - len(keep)
+            if drop:
+                import bmesh
+                bm = bmesh.new()
+                bm.from_mesh(mesh)
+                bm.faces.ensure_lookup_table()
+                doomed = [f for f in bm.faces
+                          if max(v.co[2] for v in f.verts) + zoff < clip_below]
+                bmesh.ops.delete(bm, geom=doomed, context="FACES")
+                bm.to_mesh(mesh)
+                bm.free()
+                print(f"[world] hid {drop} faces below z={clip_below} "
+                      f"(standing mesh, no rig to seat it yet)")
+
+        skin = _material("skin_fitted", (0.36, 0.21, 0.14), roughness=0.52)
+        ob.data.materials.clear()
+        ob.data.materials.append(skin)
+        bpy.ops.object.shade_smooth()
+
+        # The head still has to answer to the behaviour engine.
+        yaw = math.radians(getattr(pose, "yaw", 0.0))
+        ob.rotation_euler = (0.0, 0.0, yaw)
+
+        self.landmarks["head_centre"] = (h["hip"][0], h["hip"][1] - 0.012,
+                                         h["eye_height"] + 0.045)
+        return True
+
     # -- lighting -----------------------------------------------------------
     def build_lighting(self) -> None:
         """One rig. Every camera observes it; no camera relights the scene."""
