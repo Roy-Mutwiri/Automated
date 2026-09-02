@@ -93,7 +93,7 @@ def wordmark(img, x, y, h, colour, gap=None):
         elif ch == "F":
             seg((L, T), (L, B)); seg((L, T), (R, T)); seg((L, M), (R - w // 5, M))
         elif ch == "I":
-            seg(((L + R) // 2, T), ((L + R) // 2, B))
+            seg((L + t, T), (L + t, B))
         elif ch == "X":
             seg((L, T), (R, B)); seg((R, T), (L, B))
         return ox + (w if ch != "I" else w // 2) + gap
@@ -192,11 +192,14 @@ def primary(w=1920, h=1080) -> np.ndarray:
     # Status block grid. Reads as a monitoring surface at a glance.
     rr(img, (930, 590), (1880, 1000), PANEL, 10)
     rr(img, (930, 590), (1880, 1000), EDGE, 10, 1)
+    # Seeded random, not a modular formula: an arithmetic pattern lays a visible
+    # diagonal across the grid, which reads as decoration rather than status.
+    srng = np.random.default_rng(11)
     for r in range(6):
         for c in range(16):
             x, y = 958 + c * 56, 620 + r * 60
-            v = (r * 16 + c * 7) % 23
-            col = ACCENT_DIM if v == 0 else (PANEL_HI if v % 3 else (34, 29, 25))
+            u = srng.random()
+            col = ACCENT_DIM if u > 0.94 else (PANEL_HI if u > 0.55 else (34, 29, 25))
             rr(img, (x, y), (x + 44, y + 44), col, 6)
     return img
 
