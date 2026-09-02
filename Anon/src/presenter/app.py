@@ -269,7 +269,8 @@ def main() -> int:
 
         # Starting on a camera means starting on a room-scale master frame, and
         # those are prepared differently from a portrait - see cut_to().
-        start_framing = "full" if camera is not None else args.framing
+        start_framing = (rig.cameras[camera].framing if camera is not None
+                         else args.framing)
         start_env = "source" if camera is not None else args.environment
 
         print(f"[app] loading LivePortrait, source={args.source} "
