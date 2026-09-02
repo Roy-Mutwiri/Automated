@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 POSES = [
     ("neutral", dict()),
-    ("blink", dict(eye_open_l=0.05, eye_open_r=0.03, brow_raise=-0.05)),
+    ("blink", dict(eye_open_l=0.05, eye_open_r=0.03, brow_l=-0.05, brow_r=-0.05)),
     ("gaze", dict(gaze_x=0.38, gaze_y=-0.12)),
     ("headmove", dict(yaw=1.6, pitch=-0.9, roll=0.5, tx=0.012, ty=-0.008)),
 ]
