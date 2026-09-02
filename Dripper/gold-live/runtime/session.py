@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from intelligence import safety
 from intelligence.comments import CommentPipeline, ScoredComment
+from intelligence.content import ANGLE_INSTRUCTION, Beat, ContentPlanner, MarketPhase
 from intelligence.director import Decision, Director, SpeechIntent
 from intelligence.generation import Generator
 from intelligence.memory import SessionMemory
@@ -50,12 +51,15 @@ class SessionRuntime:
         generator: Generator,
         tts: TTSProvider,
         out_dir: Path,
+        planner: ContentPlanner | None = None,
     ) -> None:
         self.state = state
         self.persona = persona
         self.generator = generator
         self.tts = tts
         self.out_dir = out_dir / state.session_id
+        self.planner = planner
+        self.content_exhausted_at: datetime | None = None
 
         self.memory = SessionMemory(state.session_id)
         self.director = Director(state.session_id, self.memory)
@@ -106,8 +110,7 @@ class SessionRuntime:
         )
 
     def offer_filler(self, topic: str, now: datetime | None = None) -> None:
-        """Something to fall back to during quiet periods -- education, not
-        invented market movement."""
+        """Raw topic string. Prefer offer_planned_content()."""
         self.director.offer(
             SpeechIntent(
                 trigger=TriggerType.SILENCE,
@@ -120,6 +123,63 @@ class SessionRuntime:
             )
         )
 
+    def offer_planned_content(
+        self, phase: MarketPhase, now: datetime | None = None
+    ) -> Beat | None:
+        """Pull the next beat from the content plan.
+
+        This is what fills the market's closed hours and flat sessions without
+        inventing price action. Returns None when the inventory is genuinely
+        exhausted for this phase -- which is a signal worth alerting on, not a
+        condition to paper over.
+        """
+        if self.planner is None:
+            return None
+        now = now or utcnow()
+
+        # At most one unspoken planned beat at a time. Without this the planner
+        # is asked for a beat on every tick and marks it used immediately, so
+        # the whole inventory is spent far faster than it can be spoken -- 368
+        # beats gone in 21 minutes, followed by silence.
+        if self.director.has_pending(TriggerType.EDUCATION):
+            return None
+
+        beat = self.planner.next_beat(phase, now)
+        if beat is None:
+            # Distinguish "not yet" from "nothing left" -- only the latter is
+            # a problem worth alerting on.
+            if self.planner.is_exhausted(phase, now):
+                self.content_exhausted_at = self.content_exhausted_at or now
+            return None
+
+        # When the market is closed or flat, planned content IS the show -- it
+        # is not filler between price updates, and it must not sit at LOW where
+        # it only clears the score floor after minutes of dead air.
+        priority = (
+            Priority.LOW if phase is MarketPhase.ACTIVE else Priority.MEDIUM
+        )
+        self.director.offer(
+            SpeechIntent(
+                trigger=TriggerType.EDUCATION,
+                priority=priority,
+                topic=beat.topic,
+                seed_text=beat.instruction(),
+                ttl_s=600.0,
+                created_at=now,
+                payload={
+                    "topic": beat.item.title,
+                    "instruction": beat.instruction(),
+                    "seed": beat.item.seed,
+                    "angle_instruction": ANGLE_INSTRUCTION[beat.angle],
+                    "angle": beat.angle.value,
+                    "category": beat.item.category,
+                    "beat_key": beat.key,
+                },
+            )
+        )
+        self.planner.mark_used(beat, now)
+        return beat
+
     # -- the speak cycle --------------------------------------------------
 
     async def tick(self, market: MarketState, now: datetime | None = None) -> AIResponse | None:
@@ -129,7 +189,7 @@ class SessionRuntime:
             return None
 
         trace_id = uuid4().hex[:12]
-        result = await self._generate_non_repetitive(decision, market)
+        result = await self._generate_non_repetitive(decision, market, now)
         if result is None:
             return None
 
@@ -167,7 +227,9 @@ class SessionRuntime:
         self.transcript.append(response)
         return response
 
-    async def _generate_non_repetitive(self, decision: Decision, market: MarketState):
+    async def _generate_non_repetitive(
+        self, decision: Decision, market: MarketState, now: datetime
+    ):
         """Generate, then gate on repetition of the GENERATED text.
 
         The Director's pre-generation check scores the trigger (a comment, an
@@ -187,6 +249,13 @@ class SessionRuntime:
         priority = decision.intent.priority
         attempts = 2 if priority >= Priority.HIGH else 1
 
+        # The longer we have been silent, the more repetition we tolerate.
+        # Without this the repetition gate can starve the stream completely --
+        # a 48-hour weekend where every candidate is rejected produces 44 hours
+        # of dead air, which is far worse than repeating a topic.
+        quiet_s = self.memory.seconds_since_last_utterance(now)
+        threshold = self.memory.repetition_threshold_for_silence(quiet_s)
+
         last = None
         for attempt in range(attempts):
             result = await self.generator.generate(
@@ -196,16 +265,17 @@ class SessionRuntime:
                 transcript=self.memory.recent_transcript(),
             )
             last = result
-            repetitive, similarity = self.memory.is_repetitive(result.text)
+            repetitive, similarity = self.memory.is_repetitive(result.text, threshold)
             if not repetitive:
                 return result
             log.info(
-                "[%s] repetitive (sim=%.2f, attempt %d/%d, %s)",
-                self.state.session_id, similarity, attempt + 1, attempts, priority.name,
+                "[%s] repetitive (sim=%.2f > %.2f, attempt %d/%d, %s)",
+                self.state.session_id, similarity, threshold, attempt + 1, attempts,
+                priority.name,
             )
 
         assert last is not None
-        _, similarity = self.memory.is_repetitive(last.text)
+        _, similarity = self.memory.is_repetitive(last.text, threshold)
         if priority is Priority.CRITICAL:
             log.warning(
                 "[%s] speaking a repetitive utterance anyway - CRITICAL event "

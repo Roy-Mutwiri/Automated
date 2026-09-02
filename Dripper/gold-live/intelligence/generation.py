@@ -123,7 +123,16 @@ def build_turn_context(intent: SpeechIntent, market: MarketState, transcript: li
         lines.append("  It has been quiet. Move the conversation somewhere useful "
                      "rather than restating the current price action.")
     elif intent.trigger is TriggerType.EDUCATION:
-        lines.append(f"  Teaching moment: {intent.topic}. Keep it concrete and short.")
+        instruction = intent.payload.get("instruction", intent.topic)
+        lines.append(f"  Planned segment: {instruction}")
+        if market.confidence.value != "live":
+            lines.append(
+                "  The market is closed or the feed is not live, so this is the "
+                "main content right now. Give it proper room rather than "
+                "treating it as filler between price updates."
+            )
+        lines.append("  Keep it concrete. One idea, well explained, beats three "
+                     "mentioned in passing.")
     else:
         lines.append(f"  {intent.topic}")
 
@@ -256,6 +265,15 @@ class OfflineGenerator(Generator):
                 f"{hint} If that holds, the scenario I'm watching is continuation; "
                 "if we close back inside the range, that idea is invalidated."
             )
+        elif intent.trigger is TriggerType.EDUCATION:
+            # Both halves vary: the angle instruction (8 variants) leads, the
+            # item seed (46 variants) follows. Templates can never reach the
+            # variety a real model produces -- offline repetition numbers are
+            # pessimistic by construction and are a plumbing signal, not a
+            # content-quality signal. Run the soak with --live to judge content.
+            seed = intent.payload.get("seed", "")
+            angle_text = intent.payload.get("angle_instruction", "")
+            body = f"{seed} {angle_text}".strip() or intent.topic
         elif intent.trigger is TriggerType.SILENCE:
             body = (
                 "While it's quiet - risk per trade is the thing beginners get wrong "

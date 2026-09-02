@@ -80,6 +80,34 @@ with character n-gram cosine (no dependencies); swap in embeddings behind
 namespace, `session_id` on every record, and a runtime assertion in the comment
 pipeline. `tests/test_isolation.py` includes the adversarial vocabulary test.
 
+## Soak testing — the test that actually matters
+
+Ten minutes of good output proves nothing. The failures that kill a 24/7 product
+only appear over days: content exhaustion, repetition drift, dead air, and the
+~48 hours a week that spot gold is closed.
+
+```bash
+PYTHONPATH=. .venv/Scripts/python -m runtime.soak --hours 24
+PYTHONPATH=. .venv/Scripts/python -m runtime.soak --hours 72 --start-friday
+```
+
+Runs on a simulated clock, so 72 hours takes about a minute. Current results:
+
+| Run | Utterances | Longest silence | Drift | Result |
+|-----|-----------:|----------------:|-------|--------|
+| 24h weekday | 401 (16.7/h) | 6.0 min | 337 -> 332 | PASS |
+| 72h with weekend | 920 (12.8/h) | 9.3 min | 2641 -> 1813 | content exhausted |
+
+The weekend run still reports exhaustion, and that is accurate rather than a
+bug: 46 topics x 8 angles = 368 beats cannot fill a 49-hour close without
+reuse. The planner degrades rather than falling silent (see `degraded_level`),
+but **the inventory needs to be roughly 3x larger** — target ~120 topics, so
+nothing repeats inside 6-8 hours. That is writing, not engineering.
+
+Offline soak numbers understate throughput badly: templates cannot produce
+hundreds of distinct utterances, so most planned content is correctly blocked
+as repetitive. Offline runs validate STRUCTURE. Use `--live` to judge content.
+
 ## Two behaviours worth knowing
 
 **Repetition policy is priority-dependent.** A severity-5 market event

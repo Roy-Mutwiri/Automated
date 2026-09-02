@@ -146,11 +146,19 @@ class Director:
             reasons.append("topic_cooldown x0.30")
 
         # Semantic repetition against what we have actually said.
+        #
+        # This is a DEPRIORITISATION, not a veto. The seed is a trigger (a
+        # comment, an event hint, a content brief) and only loosely predicts
+        # the wording that will come out, so a hard penalty here vetoes
+        # material that would have been perfectly fresh once generated. The
+        # real enforcement is the post-generation gate in SessionRuntime,
+        # which sees the actual text. A 0.25 multiplier here pushed planned
+        # content below the score floor and left it queued but never spoken.
         if intent.seed_text:
             repetitive, sim = self.memory.is_repetitive(intent.seed_text)
             if repetitive:
-                s *= 0.25
-                reasons.append(f"repetitive x0.25 (sim={sim:.2f})")
+                s *= 0.6
+                reasons.append(f"repetitive x0.60 (sim={sim:.2f})")
 
         # Silence boost: dead air is its own problem, and it compounds. The cap
         # is deliberately high enough that a LOW-priority filler can clear the
@@ -212,6 +220,15 @@ class Director:
     @property
     def queue_depth(self) -> int:
         return len(self._queue)
+
+    def has_pending(self, trigger: TriggerType) -> bool:
+        """Is there already an unspoken intent of this kind waiting?
+
+        Used to stop the content planner spending its inventory faster than the
+        Director can actually speak it -- the bug that burned 368 planned beats
+        in 21 minutes and then left 23 hours of silence.
+        """
+        return any(i.trigger is trigger for i in self._queue)
 
     @property
     def spoken_count(self) -> int:

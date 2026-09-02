@@ -1,0 +1,258 @@
+# Content inventory. Each item x 8 angles = 8 distinct beats.
+#
+# Adding an item adds EIGHT things to say, not one. That multiplier is what
+# makes 24/7 viable -- see intelligence/content.py.
+#
+# difficulty: 1 beginner, 2 intermediate, 3 advanced
+# requires_live_market: true means it needs live price action (skipped weekends)
+
+items:
+  # --- market structure -----------------------------------------------
+  - item_id: break_of_structure
+    category: structure
+    title: Break of structure
+    seed: "Break of structure: price taking out a prior swing point and what that implies about control."
+    difficulty: 2
+  - item_id: change_of_character
+    category: structure
+    title: Change of character
+    seed: "Change of character: the first sign that the prevailing move is losing its grip."
+    difficulty: 3
+  - item_id: swing_points
+    category: structure
+    title: Swing highs and lows
+    seed: "Swing highs and lows: how to identify them consistently instead of by eye."
+    difficulty: 1
+  - item_id: higher_timeframe_bias
+    category: structure
+    title: Higher timeframe bias
+    seed: "Why the timeframe you take a signal on should not be the timeframe you form a bias on."
+    difficulty: 2
+  - item_id: ranges_and_expansion
+    category: structure
+    title: Ranges and expansion
+    seed: "Markets alternate between compression and expansion, and how to tell which you are in."
+    difficulty: 2
+  - item_id: retest_vs_break
+    category: structure
+    title: Break versus retest
+    seed: "The difference between a level breaking and a level being accepted through."
+    difficulty: 2
+
+  # --- liquidity -------------------------------------------------------
+  - item_id: liquidity_pools
+    category: liquidity
+    title: Liquidity pools
+    seed: "Why resting orders cluster above obvious highs and below obvious lows."
+    difficulty: 2
+  - item_id: stop_hunts
+    category: liquidity
+    title: Stop runs
+    seed: "What a stop run actually is, mechanically, and why it is not a conspiracy."
+    difficulty: 2
+  - item_id: equal_highs_lows
+    category: liquidity
+    title: Equal highs and lows
+    seed: "Equal highs and lows as an obvious target, and why obvious is the point."
+    difficulty: 2
+  - item_id: session_liquidity
+    category: liquidity
+    title: Session highs and lows
+    seed: "How Asian range highs and lows become reference points for London."
+    difficulty: 2
+  - item_id: fair_value_gaps
+    category: liquidity
+    title: Imbalance and gaps
+    seed: "Imbalance left behind by fast moves, and whether price really has to return to it."
+    difficulty: 3
+
+  # --- risk ------------------------------------------------------------
+  - item_id: position_sizing
+    category: risk
+    title: Position sizing
+    seed: "Position sizing as a decision made before you are emotionally involved."
+    difficulty: 1
+  - item_id: risk_per_trade
+    category: risk
+    title: Risk per trade
+    seed: "Fixed fractional risk and why the percentage matters more than the setup."
+    difficulty: 1
+  - item_id: stop_placement
+    category: risk
+    title: Stop placement
+    seed: "Placing a stop where the idea is wrong, not where the loss feels tolerable."
+    difficulty: 1
+  - item_id: r_multiples
+    category: risk
+    title: Thinking in R
+    seed: "Measuring outcomes in R rather than currency, and what that changes."
+    difficulty: 2
+  - item_id: drawdown_math
+    category: risk
+    title: Drawdown mathematics
+    seed: "Why a 50 percent drawdown needs a 100 percent gain to recover."
+    difficulty: 1
+  - item_id: correlation_risk
+    category: risk
+    title: Correlated exposure
+    seed: "Taking three positions that are really one position."
+    difficulty: 3
+  - item_id: leverage_reality
+    category: risk
+    title: What leverage actually does
+    seed: "Leverage does not increase edge; it increases the speed of the outcome."
+    difficulty: 1
+
+  # --- psychology ------------------------------------------------------
+  - item_id: revenge_trading
+    category: psychology
+    title: Revenge trading
+    seed: "The trade taken to undo the last one, and why it is usually the worst one."
+    difficulty: 1
+  - item_id: outcome_bias
+    category: psychology
+    title: Outcome bias
+    seed: "Judging a decision by its result rather than by the process behind it."
+    difficulty: 2
+  - item_id: overtrading
+    category: psychology
+    title: Overtrading
+    seed: "Confusing activity with productivity when the market is not offering anything."
+    difficulty: 1
+  - item_id: fomo
+    category: psychology
+    title: Chasing a move
+    seed: "Entering late because the move already happened, and what it costs."
+    difficulty: 1
+  - item_id: patience_as_edge
+    category: psychology
+    title: Patience as edge
+    seed: "Most of trading is waiting, and why that is genuinely hard."
+    difficulty: 2
+  - item_id: journaling
+    category: psychology
+    title: Keeping a journal
+    seed: "What to actually record, beyond entry and exit."
+    difficulty: 1
+
+  # --- gold specifics --------------------------------------------------
+  - item_id: gold_dollar_relationship
+    category: gold
+    title: Gold and the dollar
+    seed: "The inverse relationship between gold and the dollar, and when it breaks down."
+    difficulty: 2
+  - item_id: real_yields
+    category: gold
+    title: Gold and real yields
+    seed: "Why real yields matter more to gold than nominal rates do."
+    difficulty: 3
+  - item_id: gold_as_hedge
+    category: gold
+    title: Gold as a hedge
+    seed: "What gold is actually hedging against, and what it is not."
+    difficulty: 2
+  - item_id: central_bank_demand
+    category: gold
+    title: Central bank demand
+    seed: "Official sector buying as a slow, structural source of demand."
+    difficulty: 3
+  - item_id: gold_sessions
+    category: gold
+    title: How gold trades by session
+    seed: "The character difference between Asian, London and New York gold."
+    difficulty: 2
+  - item_id: spread_and_hours
+    category: gold
+    title: Spreads and trading hours
+    seed: "Why spreads widen at the rollover and what that means for stops."
+    difficulty: 1
+  - item_id: xau_vs_futures
+    category: gold
+    title: Spot gold versus futures
+    seed: "The difference between spot XAUUSD and gold futures, and why quotes differ."
+    difficulty: 2
+
+  # --- macro -----------------------------------------------------------
+  - item_id: cpi_reaction
+    category: macro
+    title: How gold reacts to CPI
+    seed: "Inflation prints and why the reaction is about expectations, not the number."
+    difficulty: 2
+  - item_id: fed_policy
+    category: macro
+    title: Policy expectations
+    seed: "Gold responds to the expected path of policy, not the current setting."
+    difficulty: 3
+  - item_id: nfp
+    category: macro
+    title: Employment data
+    seed: "Why an employment print moves gold at all."
+    difficulty: 2
+  - item_id: risk_sentiment
+    category: macro
+    title: Risk on and risk off
+    seed: "What people mean by risk sentiment and where gold sits in it."
+    difficulty: 2
+  - item_id: calendar_discipline
+    category: macro
+    title: Trading around the calendar
+    seed: "Knowing what is scheduled and deciding in advance whether to be in the market."
+    difficulty: 1
+
+  # --- process ---------------------------------------------------------
+  - item_id: backtesting
+    category: process
+    title: Testing an idea
+    seed: "Checking whether an idea has ever worked before risking money on it."
+    difficulty: 2
+  - item_id: sample_size
+    category: process
+    title: Sample size
+    seed: "Ten trades tell you almost nothing, and why that is uncomfortable."
+    difficulty: 2
+  - item_id: expectancy
+    category: process
+    title: Expectancy
+    seed: "Win rate alone is meaningless without the size of wins and losses."
+    difficulty: 2
+  - item_id: rules_vs_discretion
+    category: process
+    title: Rules versus discretion
+    seed: "Where discretion helps and where it is just an excuse."
+    difficulty: 3
+  - item_id: routine
+    category: process
+    title: Building a routine
+    seed: "What a repeatable pre-session routine actually contains."
+    difficulty: 1
+  - item_id: review_cadence
+    category: process
+    title: Reviewing your trading
+    seed: "Reviewing on a schedule rather than after every loss."
+    difficulty: 2
+
+  # --- live market only ------------------------------------------------
+  - item_id: reading_current_range
+    category: live
+    title: Reading the current range
+    seed: "Walk through where price is sitting inside today's range right now."
+    difficulty: 1
+    requires_live_market: true
+  - item_id: current_structure_read
+    category: live
+    title: Current structure
+    seed: "Read the structure on the chart as it stands at this moment."
+    difficulty: 2
+    requires_live_market: true
+  - item_id: volatility_now
+    category: live
+    title: Volatility right now
+    seed: "Whether current volatility is normal for this session or unusual."
+    difficulty: 2
+    requires_live_market: true
+  - item_id: session_transition
+    category: live
+    title: Session handover
+    seed: "What changes as one trading session hands over to the next."
+    difficulty: 2
+    requires_live_market: true

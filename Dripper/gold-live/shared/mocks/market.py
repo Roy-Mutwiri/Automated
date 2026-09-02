@@ -40,9 +40,15 @@ class MockMarketEngine:
       17+    recovery, back to live
     """
 
-    def __init__(self, seed: int = 7, base_price: float = 3652.40) -> None:
+    #: Beats before the scenario repeats. Soak runs need continuous event flow;
+    #: a one-shot script produces three events and then 24 hours of nothing,
+    #: which tells you nothing about sustained behaviour.
+    CYCLE = 18
+
+    def __init__(self, seed: int = 7, base_price: float = 3652.40, cyclic: bool = False) -> None:
         self.rng = random.Random(seed)
         self.base = base_price
+        self.cyclic = cyclic
         self.beat = 0
         self.t0 = datetime.now(timezone.utc)
         self.session_low = base_price - 6.0
@@ -51,15 +57,21 @@ class MockMarketEngine:
 
     # -- helpers ----------------------------------------------------------
 
+    @property
+    def phase_beat(self) -> int:
+        """Position within the scenario. Wraps when cyclic."""
+        return self.beat % self.CYCLE if self.cyclic else self.beat
+
     def _confidence(self) -> MarketConfidence:
-        if self.beat in (14, 15):
+        b = self.phase_beat
+        if b in (14, 15):
             return MarketConfidence.DELAYED
-        if self.beat == 16:
+        if b == 16:
             return MarketConfidence.STALE
         return MarketConfidence.LIVE
 
     def _drift(self) -> float:
-        b = self.beat
+        b = self.phase_beat
         if b <= 4:
             return self.rng.uniform(-0.6, 0.6)
         if b == 5:
@@ -89,20 +101,21 @@ class MockMarketEngine:
         self.session_low = min(self.session_low, self.base)
         self.session_high = max(self.session_high, self.base)
 
+        pb = self.phase_beat
         trend = (
             Trend.RANGING
-            if self.beat <= 4
+            if pb <= 4
             else Trend.BEARISH
-            if self.beat in (5, 6)
+            if pb in (5, 6)
             else Trend.BULLISH
         )
         structure = (
             Structure.CONSOLIDATION
-            if self.beat <= 4
+            if pb <= 4
             else Structure.LOWER_LOW
-            if self.beat in (5, 6)
+            if pb in (5, 6)
             else Structure.HIGHER_LOW
-            if self.beat <= 9
+            if pb <= 9
             else Structure.HIGHER_HIGH
         )
 
@@ -116,7 +129,10 @@ class MockMarketEngine:
             structure=structure,
             swing_high=round(self.session_high, 2),
             swing_low=round(self.session_low, 2),
-            atr=round(2.1 + (1.9 if self.beat >= 5 else 0), 2),
+            # Deliberately crosses the quiet/active threshold so a soak run
+            # exercises both phases rather than assuming the market is always
+            # interesting. Consolidation beats sit below it.
+            atr=1.35 if pb <= 4 else (4.0 if pb <= 13 else 1.6),
         )
 
         detections: list[Detection] = []
@@ -167,7 +183,7 @@ class MockMarketEngine:
         return state
 
     def _queue_events(self, state: MarketState) -> None:
-        b = self.beat
+        b = self.phase_beat
         if b == 5:
             self._pending.append(
                 MarketEvent(

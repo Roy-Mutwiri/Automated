@@ -30,9 +30,25 @@ from shared.contracts import utcnow
 
 _WORD = re.compile(r"[a-z0-9]+")
 
+# Stripped before similarity is computed. A host with a consistent verbal style
+# reuses these constantly; leaving them in means two utterances about completely
+# different topics score as near-duplicates purely because they share sentence
+# scaffolding. Similarity must be driven by what is being SAID, not how.
+_STOPWORDS = frozenset("""
+a about above after again against all am an and any are as at be because been
+before being below between both but by can did do does doing down during each
+few for from further had has have having he her here hers him his how i if in
+into is it its itself just let lets me more most my no nor not now of off on
+once only or other our out over own re s same she should so some such t than
+that the their them then there these they this those through to too under
+until up very was we were what when where which while who whom why will with
+you your thing things get gets got going want lot actually really quite bit
+second one two three
+""".split())
+
 
 def _norm(text: str) -> str:
-    return " ".join(_WORD.findall(text.lower()))
+    return " ".join(w for w in _WORD.findall(text.lower()) if w not in _STOPWORDS)
 
 
 def _ngrams(text: str, n: int = 4) -> Counter[str]:
@@ -61,9 +77,17 @@ class SimilarityIndex(ABC):
 
 
 class NGramIndex(SimilarityIndex):
-    """Character n-gram cosine over a rolling window. No model, no network."""
+    """Character n-gram cosine over a rolling window. No model, no network.
 
-    def __init__(self, window: int = 40) -> None:
+    Window sizing matters more than it looks. At roughly 90 utterances an hour,
+    a 40-item window forgets everything older than ~25 minutes -- it catches
+    local repetition and is completely blind to "you explained this at 3am".
+    The default here holds ~24 hours. Cost is a dict comparison per stored
+    vector per candidate, which measures in single-digit milliseconds at this
+    size; the soak run reports it.
+    """
+
+    def __init__(self, window: int = 2200) -> None:
         self._vecs: deque[Counter[str]] = deque(maxlen=window)
 
     def add(self, text: str) -> None:
@@ -94,6 +118,7 @@ class SessionMemory:
         short_term_size: int = 12,
         repetition_threshold: float = 0.38,
         topic_cooldown: timedelta = timedelta(minutes=6),
+        similarity_window: int = 2200,
     ) -> None:
         self.session_id = session_id
         self.repetition_threshold = repetition_threshold
@@ -102,7 +127,8 @@ class SessionMemory:
         self.short_term: deque[Utterance] = deque(maxlen=short_term_size)
         self.topics_last_seen: dict[str, datetime] = {}
         self.audience_questions: Counter[str] = Counter()
-        self._index: SimilarityIndex = NGramIndex()
+        self._index: SimilarityIndex = NGramIndex(window=similarity_window)
+        self.utterance_count = 0
 
     # -- writes -----------------------------------------------------------
 
@@ -111,15 +137,30 @@ class SessionMemory:
         self.short_term.append(Utterance(text=text, topic=topic, at=at))
         self.topics_last_seen[topic] = at
         self._index.add(text)
+        self.utterance_count += 1
 
     def record_question(self, normalised_text: str) -> None:
         self.audience_questions[normalised_text] += 1
 
     # -- reads ------------------------------------------------------------
 
-    def is_repetitive(self, candidate: str) -> tuple[bool, float]:
+    def is_repetitive(self, candidate: str, threshold: float | None = None) -> tuple[bool, float]:
         score = self._index.max_similarity(candidate)
-        return score >= self.repetition_threshold, score
+        return score >= (self.repetition_threshold if threshold is None else threshold), score
+
+    def repetition_threshold_for_silence(self, quiet_s: float) -> float:
+        """Relax the repetition bar the longer we have been silent.
+
+        Anti-repetition must never be allowed to starve the stream. If every
+        candidate is being rejected, the correct outcome is to say something
+        the audience may have heard before -- not to broadcast dead air. The
+        bar rises from the base threshold toward 1.0 (accept anything) over a
+        few minutes of silence.
+        """
+        if quiet_s <= 60:
+            return self.repetition_threshold
+        relaxed = self.repetition_threshold + (quiet_s - 60) / 60.0 * 0.12
+        return min(0.99, relaxed)
 
     def topic_on_cooldown(self, topic: str, now: datetime | None = None) -> bool:
         last = self.topics_last_seen.get(topic)
