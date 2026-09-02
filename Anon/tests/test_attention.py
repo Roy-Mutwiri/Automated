@@ -54,31 +54,31 @@ def test_head_returns_to_neutral_when_gaze_returns_to_lens():
     assert statistics.median(hist) < 0.6
 
 
-def test_head_yaw_does_not_drift_over_time():
-    """The same failure seen from outside: no secular trend in head yaw.
+def test_head_yaw_has_no_long_run_offset():
+    """No ratchet: the resting head position stays centred over the long run.
 
-    Conditioned on looking at the lens. An unconditioned mean is not a drift
-    measurement - the head legitimately sits off-centre for as long as he is
-    attending to something off-centre, so a two-minute average moves by degrees
-    for entirely correct reasons. Comparing like with like isolates the thing
-    that would actually be a bug: a resting position that wanders.
+    Measured as the mean settled yaw while looking at the lens, over twenty
+    minutes and several seeds. Not as first-third against last-third: the head
+    system's idle sway is a slow Ornstein-Uhlenbeck process, so its mean over a
+    six-minute window legitimately wanders by a degree or two and comparing
+    windows measures that wander rather than any drift. A person's resting head
+    position does move around; what it must not do is walk steadily away from
+    centre, which is what the ratchet bug did.
+
+    The tight guarantee lives in the test above, which pins the settled head to
+    within 0.6 degrees whenever he is on the lens.
     """
-    engine = BehaviorEngine(seed=11)
-    first, last = [], []
-    n = 30 * 60 * 10
-    for i in range(n):
-        p = engine.update(1.0 / 30.0)
-        # Settled, not merely arrived: the neck eases home over about 1.4 s,
-        # so samples taken just after a shift still carry residual yaw. Whether
-        # those land in one third or another is noise, and comparing thirds
-        # without excluding them measures the noise.
-        settled = engine.now - engine.attention.last_change > 3.0
-        if (engine.attention.current != "LENS" or engine.attention.is_shifting
-                or not settled):
-            continue
-        (first if i < n // 3 else last if i > n * 2 // 3 else []).append(p.yaw)
-    assert len(first) > 200 and len(last) > 200
-    assert abs(statistics.fmean(last) - statistics.fmean(first)) < 0.8
+    for seed in (11, 5, 29):
+        engine = BehaviorEngine(seed=seed)
+        vals = []
+        for _ in range(30 * 60 * 20):
+            pose = engine.update(1.0 / 30.0)
+            if (engine.attention.current == "LENS"
+                    and not engine.attention.is_shifting
+                    and engine.now - engine.attention.last_change > 3.0):
+                vals.append(pose.yaw)
+        assert len(vals) > 2000
+        assert abs(statistics.fmean(vals)) < 1.0, f"seed {seed} settled off-centre"
 
 
 # --- world space -------------------------------------------------------------
