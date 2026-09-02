@@ -430,7 +430,21 @@ class LivePortraitRenderer:
 
         # Static background, composed once.
         if self.environment == "streaming_room":
-            from .environment import render_streaming_room
+            from .environment import render_desk_foreground, render_streaming_room
+
+            desk_bgr, desk_alpha = render_desk_foreground(
+                out_w, out_h, style=self.room_style
+            )
+            rows = np.where(desk_alpha[:, 0, 0] > 0.003)[0]
+            if len(rows):
+                y0d = int(rows.min())
+                self.desk_band = (y0d, out_h)
+                self.desk_rgb_premul = (
+                    desk_bgr[y0d:].astype(np.float32) * desk_alpha[y0d:]
+                )
+                self.desk_inv_alpha = 1.0 - desk_alpha[y0d:]
+            else:
+                self.desk_band = None
 
             # The generated room replaces the portrait's own background
             # everywhere, so the fill and the area behind the subject are the
