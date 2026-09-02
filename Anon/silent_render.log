@@ -1,0 +1,28 @@
+[19:37:33] Load appearance_feature_extractor from   live_portrait_wrapper.py:46
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\base_models\appearance_                            
+           feature_extractor.pth done.                                         
+           Load motion_extractor from               live_portrait_wrapper.py:49
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\base_models\motion_extr                            
+           actor.pth done.                                                     
+           Load warping_module from                 live_portrait_wrapper.py:52
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\base_models\warping_mod                            
+           ule.pth done.                                                       
+[19:37:34] Load spade_generator from                live_portrait_wrapper.py:55
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\base_models\spade_gener                            
+           ator.pth done.                                                      
+           Load stitching_retargeting_module from   live_portrait_wrapper.py:59
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\retargeting_models\stit                            
+           ching_retargeting_module.pth done.                                  
+           LandmarkRunner warmup time: 0.065s       human_landmark_runner.py:95
+[silent] 300/9000 frames  10.07 fps  eta 14.4 min
+[silent] 600/9000 frames  10.06 fps  eta 13.9 min
