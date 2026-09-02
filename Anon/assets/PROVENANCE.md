@@ -65,3 +65,23 @@ belongs here too.
 **Never recolour a face to change apparent ethnicity.** Skin tone is not a
 colour shift - it changes subsurface scattering, shadow density and highlight
 response, so the result looks wrong. Generate or source a different person.
+
+## Streaming pose
+
+The portrait is generated with `--style streaming` rather than `studio`, because
+posture is baked into the source: the behaviour engine applies only a few
+degrees of head delta, so it cannot lean a body forward or put headphones on
+someone. A squared-off studio headshot reads as a corporate portrait no matter
+what the face does afterwards.
+
+The streaming style asks for a forward lean, relaxed asymmetric shoulders,
+over-ear headphones, and webcam-height framing on a shorter lens.
+
+**The microphone is deliberately not in the prompt.** A boom mic is clamped to
+the desk, not to the presenter - baking one into the portrait would weld it to
+his head so it swung whenever he turned. It is a static foreground layer
+(`render_mic_foreground`) instead.
+
+Trade-off worth knowing: streaming framing pulls back, which shrinks the face
+and costs animation resolution. Candidates were compared on face size as well
+as pose for exactly this reason.
