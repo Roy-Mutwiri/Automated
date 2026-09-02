@@ -203,13 +203,96 @@ class LivePortraitRenderer:
             calc_eye_close_ratio(self.lmk_crop[None])[0].mean()
         )
 
-        if self.paste_back:
-            from src.utils.crop import prepare_paste_back
+        self._prepare_compositing(img_bgr, lmk, crop)
 
-            self.mask_ori = prepare_paste_back(
-                self.cfg.mask_crop, crop["M_c2o"],
-                dsize=(img_bgr.shape[1], img_bgr.shape[0]),
+    # -- output framing and compositing -------------------------------------
+    def _prepare_compositing(self, img_bgr, lmk, crop) -> None:
+        """Precompute a single affine from the 512 crop straight to the output.
+
+        The naive path - paste the crop back into the full 1024x1024 source,
+        then letterbox that into 1280x720 - measured **44 ms per frame**, more
+        than a third of the total budget, and every millisecond of it is spent
+        recomputing a composite whose background never changes.
+
+        Two things are wrong with it. It warps and alpha-blends the full
+        1024x1024 frame when only the face region changes, and it then throws
+        most of those pixels away: a square source letterboxed into 16:9 leaves
+        the picture as bars either side.
+
+        Instead: choose a 16:9 framing rectangle in source coordinates with
+        proper headroom and eyeline, compose the *static* background into the
+        output canvas once, and per frame warp only the generated crop directly
+        into output space with a precomputed mask. One warp, one blend, no
+        wasted pixels - and it fixes the composition requirement at the same
+        time.
+        """
+        from src.utils.crop import prepare_paste_back
+
+        h, w = img_bgr.shape[:2]
+        out_w, out_h = self.output_size
+
+        # Eyeline: place the eyes on the upper third, which is where a portrait
+        # lens at eye level naturally puts them. Landmark set is LivePortrait's
+        # 203-point format; the eye region is its first ~48 points.
+        eye_y = float(np.mean(lmk[:48, 1]))
+        face_w = float(lmk[:, 0].max() - lmk[:, 0].min())
+        face_cx = float((lmk[:, 0].max() + lmk[:, 0].min()) * 0.5)
+
+        # Head-and-shoulders: frame width about 3.4 face widths.
+        frame_w = min(float(w), face_w * 3.4)
+        frame_h = frame_w * out_h / out_w
+        if frame_h > h:
+            frame_h = float(h)
+            frame_w = frame_h * out_w / out_h
+
+        left = face_cx - frame_w * 0.5
+        top = eye_y - frame_h * 0.38          # eyes above centre -> headroom
+        left = float(np.clip(left, 0, w - frame_w))
+        top = float(np.clip(top, 0, h - frame_h))
+        self.frame_rect = (left, top, frame_w, frame_h)
+
+        s = out_w / frame_w
+        # Source pixels -> output canvas.
+        M_src2out = np.array([[s, 0.0, -s * left], [0.0, s, -s * top]], np.float32)
+        # Crop pixels -> source pixels (LivePortrait gives a 3x3).
+        M_c2o = crop["M_c2o"][:2, :] if crop["M_c2o"].shape[0] == 3 else crop["M_c2o"]
+        M_c2o_h = np.vstack([M_c2o, [0.0, 0.0, 1.0]]).astype(np.float32)
+        M_src2out_h = np.vstack([M_src2out, [0.0, 0.0, 1.0]]).astype(np.float32)
+        self.M_crop2out = (M_src2out_h @ M_c2o_h)[:2, :].astype(np.float32)
+
+        # Static background, composed once.
+        self.background = cv2.warpAffine(
+            img_bgr, M_src2out, (out_w, out_h), flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+
+        # Feather mask in output space, also once.
+        mask = prepare_paste_back(
+            self.cfg.mask_crop, crop["M_c2o"], dsize=(w, h)
+        )
+        mask_out = cv2.warpAffine(mask, M_src2out, (out_w, out_h))
+        if mask_out.ndim == 2:
+            mask_out = mask_out[..., None]
+        self.mask_out = mask_out.astype(np.float32)
+        if self.mask_out.max() > 1.5:
+            self.mask_out /= 255.0
+
+        # Blend only inside the mask's bounding box - outside it the output is
+        # exactly the precomputed background, so those pixels never need
+        # touching again.
+        ys, xs = np.where(self.mask_out[:, :, 0] > 0.003)
+        if len(xs):
+            self.blend_box = (
+                int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
             )
+        else:
+            self.blend_box = (0, 0, out_w, out_h)
+        x0, y0, x1, y1 = self.blend_box
+        self.mask_box = np.ascontiguousarray(self.mask_out[y0:y1, x0:x1])
+        self.inv_mask_box = 1.0 - self.mask_box
+        self.bg_box_premul = (
+            self.background[y0:y1, x0:x1].astype(np.float32) * self.inv_mask_box
+        )
 
     # -- per-frame ----------------------------------------------------------
     def _build_driving_keypoints(self, pose: AvatarPose) -> torch.Tensor:
