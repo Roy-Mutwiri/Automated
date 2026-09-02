@@ -314,7 +314,7 @@ class LivePortraitRenderer:
             largest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
             matte = (labels == largest).astype(np.float32)
 
-        grow = max(int(0.012 * min(h, w)), 3)
+        grow = max(int(0.005 * min(h, w)), 3)
         matte = cv2.dilate(matte, np.ones((grow, grow), np.uint8))
         feather = max(int(0.016 * min(h, w)) | 1, 5)
         matte = cv2.GaussianBlur(matte, (feather, feather), 0)
