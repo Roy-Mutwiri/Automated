@@ -412,8 +412,15 @@ def main() -> int:
             out = body
             head_item = w.headwear[head]
             if head_item.edits:
+                seed = args.seed + ci * 17 + hi * 3
                 out = inpaint(body, headwear_mask(g, drape=head_item.drape),
-                              head_item, args.seed + ci * 17 + hi * 3, head=True)
+                              head_item, seed, head=True)
+                if head_item.agal:
+                    # A third pass, over the crown only, once the cloth is
+                    # there for the cord to sit on.
+                    out = inpaint(out, agal_mask(g), head_item, seed + 1,
+                                  head=True,
+                                  prompt=f"{head_item.agal}, {w.look}")
             cv2.imwrite(str(path), out)
             written.append(path)
             print(f"[wardrobe] {path.name}")
