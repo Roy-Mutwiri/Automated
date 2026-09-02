@@ -121,15 +121,48 @@ def _poses(seed, frames=900):
 # --- eye/head division -------------------------------------------------------
 
 def test_small_shifts_are_eyes_only():
-    """Below the ocular threshold the neck should not move at all."""
-    profile = PROFILES["PRESENTER_CALM"]
-    a = AttentionSystem(profile)
+    """Below the ocular threshold the neck should not move at all.
+
+    Written against the constant rather than a hardcoded 11 degrees. The
+    threshold moved to 8 when the review found the recruitment too eye-heavy,
+    and a test that pins the number instead of the principle fails for the
+    wrong reason every time the number is tuned.
+    """
+    from presenter.behavior.attention import EYE_ONLY_DEG, HEAD_SHARE_MAX
+
+    a = AttentionSystem(PROFILES["PRESENTER_CALM"])
     assert a._hold_share(0.0) == 0.0
-    assert a._hold_share(8.0) == 0.0
-    assert a._hold_share(10.9) == 0.0
-    assert a._hold_share(21.0) > 0.0
+    assert a._hold_share(EYE_ONLY_DEG * 0.5) == 0.0
+    assert a._hold_share(EYE_ONLY_DEG - 0.1) == 0.0
+    assert a._hold_share(EYE_ONLY_DEG + 6.0) > 0.0
     # The head never takes the whole of it; the eyes keep some eccentricity.
-    assert a._hold_share(90.0) <= 0.63
+    assert a._hold_share(90.0, dwell=30.0) <= 0.90
+
+
+def test_recruitment_depends_on_intent_not_only_geometry():
+    """A glance and a read at the same angle must not move the head equally.
+
+    This is the fix for the side-eye the review found: at a fixed 17.5 degrees
+    the old ratio gave 2.6 degrees of head whatever he was doing, so a
+    sustained read looked like a shifty glance.
+    """
+    a = AttentionSystem(PROFILES["PRESENTER_CALM"])
+    glance = a._hold_share(17.5, dwell=0.6, state="IDLE_ATTENTIVE", el=-5.5)
+    normal = a._hold_share(17.5, dwell=3.3, state="IDLE_ATTENTIVE", el=-5.5)
+    read = a._hold_share(17.5, dwell=5.0, state="READING", el=-5.5)
+    assert glance < normal < read
+    assert read > 2.0 * glance
+
+
+def test_looking_down_recruits_the_head():
+    """Regression: elevation was ignored, so the desk moved no head at all.
+
+    The desk sits 6 degrees across but 17 down. Sharing on azimuth alone made
+    that an eyes-only move, and people do not look at their own hands by
+    rolling their eyes down.
+    """
+    a = AttentionSystem(PROFILES["PRESENTER_CALM"])
+    assert a._hold_share(-6.0, dwell=2.0, el=-17.0) > 0.15
 
 
 def test_head_share_grows_with_eccentricity():

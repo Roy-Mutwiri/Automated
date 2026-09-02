@@ -127,15 +127,34 @@ def test_genuine_stillness_occurs():
 
 
 def test_involuntary_motion_never_stops():
-    """Still must not mean frozen: eyes and breath run even during quiet."""
+    """Still must not mean frozen: eyes and breath run even during quiet.
+
+    Breathing is asserted on the **chest**, not on frame scale. It used to be
+    written into `pose.scale` - the head grew and shrank - and this test checked
+    for exactly that. The anatomy was wrong: breathing does not change the size
+    of a head. `pose.scale` is now deliberately constant and the breath lives in
+    the rib cage, so the assertion had to move with it.
+
+    The honest cost is visible here: through a face-only renderer this breath
+    produces almost nothing, because a rib cage is outside the animated crop.
+    """
     engine = BehaviorEngine(profile="PRESENTER_FOCUSED", seed=3)
-    gaze_positions, scales = [], []
+    gaze_positions, scales, chest, clav = [], [], [], []
     for _ in range(600):  # 20 s
         pose = engine.update(1.0 / 30.0)
         gaze_positions.append((pose.gaze_x, pose.gaze_y))
         scales.append(pose.scale)
+        chest.append(engine.motion.chest.rx)
+        clav.append(engine.motion.clavicle_l.rz)
     assert len(set(gaze_positions)) > 500, "gaze is frozen"
-    assert max(scales) - min(scales) > 1e-4, "breathing is not moving the frame"
+
+    assert max(scales) - min(scales) == 0.0, "breathing must not scale the head"
+    assert max(chest) - min(chest) > 0.5, "the chest is not breathing"
+    # The shoulder follows the chest, an order of magnitude smaller. If a
+    # viewer can see the shoulders pumping, the coupling is wrong.
+    clav_range = max(clav) - min(clav)
+    assert 0.02 < clav_range < 0.5 * (max(chest) - min(chest)), (
+        f"clavicle response {clav_range:.3f} deg is not a subtle follow")
 
 
 def test_face_is_never_perfectly_symmetric_during_a_blink():
