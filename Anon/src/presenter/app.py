@@ -426,6 +426,13 @@ def main() -> int:
                 return
             outfit = want
             bar.set_menus(build_menus())
+            # An outfit and a camera are two different master frames and only
+            # one can be on screen. Picking an outfit means leaving whichever
+            # camera was live, so stop highlighting it.
+            if cam_row is not None:
+                cam_row.selected = None
+                camera = None
+                still_frame = None
             print(f"[app] outfit -> {outfit[0]}/{outfit[1]} "
                   f"({'prepared' if fresh else 'cached'} in "
                   f"{time.perf_counter() - t0:.2f}s)")
