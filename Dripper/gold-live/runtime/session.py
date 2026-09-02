@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -55,6 +55,7 @@ class SessionRuntime:
         out_dir: Path,
         planner: ContentPlanner | None = None,
         proposer: TopicProposer | None = None,
+        max_silence_s: float | None = None,
     ) -> None:
         self.state = state
         self.persona = persona
@@ -69,7 +70,20 @@ class SessionRuntime:
         self.fallback_used = 0
 
         self.memory = SessionMemory(state.session_id)
-        self.director = Director(state.session_id, self.memory)
+        self.director = Director(
+            state.session_id, self.memory, max_silence_s=max_silence_s
+        )
+        self.max_silence_s = max_silence_s
+
+        if max_silence_s is not None and planner is not None:
+            # The planner paces itself to make an inventory last, which is right
+            # when the host speaks every few minutes and wrong when it must
+            # speak every few seconds. Continuous mode needs a beat ready
+            # whenever the queue empties, so the offer interval tracks the
+            # silence budget rather than a fixed 40s.
+            planner.config.min_offer_interval = timedelta(
+                seconds=max(2.0, max_silence_s / 3)
+            )
         self.pipeline = CommentPipeline(state.session_id)
 
         self.transcript: list[AIResponse] = []
@@ -314,6 +328,27 @@ class SessionRuntime:
                 "[%s] saved state could not be restored (%s); starting fresh",
                 self.state.session_id, exc,
             )
+
+    async def keep_fed(
+        self, phase: MarketPhase, market: MarketState, now: datetime | None = None
+    ) -> None:
+        """Make sure the Director always has something to choose from.
+
+        Continuous mode waives the score floor when the host has been quiet too
+        long, but that does nothing if the queue is empty -- tick() returns
+        early with no candidates. So in continuous mode the queue is topped up
+        proactively rather than only when a market event or comment arrives.
+        Quiet markets are exactly when this matters and exactly when nothing
+        arrives on its own.
+        """
+        if self.max_silence_s is None:
+            return
+        now = now or utcnow()
+        # One spare candidate is enough: more just ages in the queue and gets
+        # dropped as expired.
+        if self.director.queue_depth >= 2:
+            return
+        await self.offer_next_topic(phase, market, now)
 
     # -- the speak cycle --------------------------------------------------
 

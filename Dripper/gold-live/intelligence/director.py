@@ -81,11 +81,18 @@ class Director:
         min_gap_s: float = 8.0,
         silence_boost_after_s: float = 25.0,
         max_queue: int = 64,
+        max_silence_s: float | None = None,
     ) -> None:
         self.session_id = session_id
         self.memory = memory
         self.min_gap_s = min_gap_s
         self.silence_boost_after_s = silence_boost_after_s
+        #: Continuous mode. When set, the host will never be silent longer than
+        #: this: past it the score floor and minimum gap are waived and the best
+        #: available candidate is spoken. None keeps the original behaviour,
+        #: where silence is an acceptable outcome and the host speaks only when
+        #: something clears the bar.
+        self.max_silence_s = max_silence_s
         self._queue: list[SpeechIntent] = []
         self._max_queue = max_queue
         self._speaking: SpeechIntent | None = None
@@ -194,17 +201,27 @@ class Director:
         scored.sort(key=lambda pair: pair[0][0], reverse=True)
         (best_score, reasons), best = scored[0]
 
-        if best_score < self.SCORE_FLOOR:
+        speaking = self.is_speaking(now)
+        quiet_s = self.memory.seconds_since_last_utterance(now)
+
+        # Continuous mode: a live host does not go quiet for three minutes
+        # because nothing scored well. Past max_silence_s the floor and the
+        # minimum gap are both waived -- say the best available thing rather
+        # than broadcasting dead air. Interruption rules still apply, because
+        # talking over yourself is worse than a pause.
+        overdue = self.max_silence_s is not None and quiet_s >= self.max_silence_s
+        if overdue:
+            reasons.append(f"OVERDUE ({quiet_s:.0f}s silent)")
+
+        if not overdue and best_score < self.SCORE_FLOOR:
             return None
 
-        speaking = self.is_speaking(now)
         if speaking and not self._may_interrupt(best):
             return None
 
-        # Minimum gap between utterances, unless this is critical.
-        if not speaking and best.priority is not Priority.CRITICAL:
-            quiet = self.memory.seconds_since_last_utterance(now)
-            if quiet < self.min_gap_s:
+        # Minimum gap between utterances, unless critical or overdue.
+        if not speaking and best.priority is not Priority.CRITICAL and not overdue:
+            if quiet_s < self.min_gap_s:
                 return None
 
         self._queue.remove(best)

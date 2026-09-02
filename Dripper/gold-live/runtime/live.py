@@ -351,6 +351,7 @@ class LiveSession:
 
             view = state.timeframes.get("5m")
             phase = classify_phase(now, atr=view.atr if view else None)
+            await self.runtime.keep_fed(phase, state, now)
             await self.runtime.offer_next_topic(phase, state, now)
 
             before_unsafe = len(self.runtime.dropped_unsafe)
@@ -411,6 +412,11 @@ class LiveSession:
         spec = load_session_config(self.session_id)
         personas = load_personas(config_dir("personas"))
         persona = personas[spec["persona_id"]]
+        if self.args.voice:
+            from dataclasses import replace
+
+            persona = replace(persona, voice_id=self.args.voice)
+            log.info("voice overridden to %s", self.args.voice)
 
         await self.store.start()
 
@@ -471,6 +477,7 @@ class LiveSession:
             out_dir=Path(self.args.out),
             planner=planner,
             proposer=proposer,
+            max_silence_s=None if self.args.max_silence <= 0 else self.args.max_silence,
         )
         if classifier is not None:
             self.runtime.pipeline.classifier = classifier
@@ -599,6 +606,13 @@ def main() -> None:
                     choices=["mock", "screen", "youtube"])
     ap.add_argument("--tts", default="file", choices=["file", "piper"])
     ap.add_argument("--voices", default=str(data_path("voices", create_parent=False)))
+    ap.add_argument("--voice", help="override the persona's voice for this run")
+    ap.add_argument(
+        "--max-silence", type=float, default=12.0,
+        help="never go quiet longer than this, in seconds. 0 disables "
+             "continuous mode and lets the host stay silent when nothing "
+             "clears the bar.",
+    )
     ap.add_argument("--out", default=str(data_path("out", create_parent=False)))
     ap.add_argument("--db", default=str(data_path("data", "gold-live.db", create_parent=False)))
     ap.add_argument("--health-port", type=int, default=9101)

@@ -71,7 +71,8 @@ def synth_state(now: datetime, engine: MockMarketEngine, closed: bool) -> Market
     return state.model_copy(update={"computed_at": now, "as_of": now - timedelta(seconds=0.4)})
 
 
-async def soak(hours: int, start: datetime, persona_id: str) -> dict:
+async def soak(hours: int, start: datetime, persona_id: str,
+               max_silence_s: float | None = None) -> dict:
     personas = load_personas(config_dir("personas"))
     items = load_content(config_path("content.yaml"))
     planner = ContentPlanner(items, seed=3)
@@ -88,6 +89,7 @@ async def soak(hours: int, start: datetime, persona_id: str) -> dict:
         tts=MockTTS(),
         out_dir=data_path("out-soak", create_parent=False),
         planner=planner,
+        max_silence_s=max_silence_s,
     )
 
     engine = MockMarketEngine(cyclic=True)
@@ -118,6 +120,8 @@ async def soak(hours: int, start: datetime, persona_id: str) -> dict:
         # material. This is the mechanism that fills closed markets.
         if rt.director.queue_depth < 2:
             rt.offer_planned_content(phase, now)
+        if max_silence_s:
+            await rt.keep_fed(phase, state, now)
         # Only genuine exhaustion counts -- next_beat() also returns None when
         # merely rate-limited, which is normal and not a failure.
         if planner.is_exhausted(phase, now):
@@ -229,6 +233,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Gold Live soak test")
     ap.add_argument("--hours", type=int, default=24)
     ap.add_argument("--persona", default="educator")
+    ap.add_argument("--max-silence", type=float, default=0.0,
+                    help="continuous mode: never quiet longer than this")
     ap.add_argument(
         "--start-friday",
         action="store_true",
@@ -241,7 +247,8 @@ def main() -> None:
     else:
         start = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc)  # a Tuesday
 
-    result = asyncio.run(soak(args.hours, start, args.persona))
+    result = asyncio.run(soak(args.hours, start, args.persona,
+                              args.max_silence or None))
     raise SystemExit(1 if report(result) else 0)
 
 
