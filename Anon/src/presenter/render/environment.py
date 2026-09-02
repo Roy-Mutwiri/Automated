@@ -109,6 +109,18 @@ class RoomStyle:
     vignette: float = 0.42
     grain: float = 3.0             # sensor noise; without it the gradients band
 
+    # Exposure relative to the subject's face, as a luminance ratio. The
+    # broadcast convention is a background 1-2 stops under the key; 0.35 is
+    # 1.5 stops. Below this band the subject floats in a void, above it the
+    # image goes flat no matter how good the key light is.
+    exposure_ratio: float = 0.35
+    exposure_limits: tuple[float, float] = (0.45, 1.9)
+
+    # Light wrap: how far the plate's light bleeds back onto the silhouette,
+    # as a fraction of the short side, and how strongly.
+    wrap_width: float = 0.022
+    wrap_strength: float = 0.55
+
 
 def _radial_sprite(size: int) -> np.ndarray:
     """A soft disc with a slightly brighter rim - a defocused point light.
