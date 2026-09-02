@@ -487,15 +487,31 @@ class LivePortraitRenderer:
             desk_bgr, desk_alpha = render_desk_foreground(
                 out_w, out_h, style=self.room_style
             )
+            mic_bgr, mic_alpha = render_mic_foreground(
+                out_w, out_h, style=self.room_style
+            )
             desk_bgr = np.clip(
                 desk_bgr.astype(np.float32) * exposure_scale, 0, 255
             )
-            rows = np.where(desk_alpha[:, 0, 0] > 0.003)[0]
+            mic_bgr = np.clip(
+                mic_bgr.astype(np.float32) * exposure_scale, 0, 255
+            )
+
+            # Flatten desk and mic into one foreground plane at startup. Both
+            # are in front of the presenter and both are static, so blending
+            # them separately every frame would cost twice for no difference.
+            # The mic goes over the desk - it hangs in front of it.
+            fg = desk_bgr * desk_alpha
+            fg_alpha = desk_alpha.copy()
+            fg = fg * (1.0 - mic_alpha) + mic_bgr * mic_alpha
+            fg_alpha = fg_alpha * (1.0 - mic_alpha) + mic_alpha
+
+            rows = np.where(fg_alpha[:, :, 0].max(axis=1) > 0.003)[0]
             if len(rows):
                 y0d = int(rows.min())
                 self.desk_band = (y0d, out_h)
-                self.desk_rgb_premul = desk_bgr[y0d:] * desk_alpha[y0d:]
-                self.desk_inv_alpha = 1.0 - desk_alpha[y0d:]
+                self.desk_rgb_premul = fg[y0d:]
+                self.desk_inv_alpha = 1.0 - fg_alpha[y0d:]
             else:
                 self.desk_band = None
 
