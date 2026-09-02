@@ -489,11 +489,22 @@ class LivePortraitRenderer:
         head_top = float(lmk[:, 1].min())
 
         if self.framing == "full":
-            # Master-frame mode. The source is already a composed 16:9
-            # photograph of the presenter in his room, so there is nothing to
-            # reframe: any anatomical crop would throw away the room that is
-            # the whole point of the image. Use the frame as shot.
-            frame_w, frame_h = float(w), float(h)
+            # Master-frame mode. The source is already a composed photograph of
+            # the presenter in his room, so there is nothing to reframe: any
+            # anatomical crop would throw away the room that is the whole point
+            # of the image.
+            #
+            # Take the largest centred rectangle matching the *output* aspect
+            # rather than fitting the whole frame. SDXL's nearest 16:9 bucket is
+            # 1344x768 (1.75), a hair squarer than 16:9, and fitting that would
+            # pillarbox by a few pixels and expose the blurred fill down both
+            # edges - a visible border on an image that should be full-bleed.
+            # Trimming ~6 px off the top and bottom instead costs nothing.
+            frame_w = min(float(w), float(h) * out_w / out_h)
+            frame_h = frame_w * out_h / out_w
+            if frame_h > h:
+                frame_h = float(h)
+                frame_w = frame_h * out_w / out_h
         elif self.framing == "close":
             frame_w = min(float(w), face_w * 3.4)
             frame_h = frame_w * out_h / out_w
