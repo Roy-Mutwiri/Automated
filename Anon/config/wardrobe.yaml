@@ -1,0 +1,101 @@
+# Wardrobe: what the presenter can be wearing.
+#
+# This file is the single source of truth for both halves of the feature.
+# `tools/generate_wardrobe.py` reads the prompts from here to produce the
+# variant portraits, and `presenter/render/wardrobe.py` reads the same entries
+# to populate the dropdowns. Keeping the prompt next to the label is what stops
+# the generator and the UI drifting apart - previously the prompts lived in the
+# tool and nothing tied a generated file to a menu entry.
+#
+# Each combination is one prepared source portrait, because a garment cannot be
+# an overlay in this pipeline: the torso in the output is static pixels from the
+# source, and the head is warped from source appearance features. See the
+# generator's module docstring.
+#
+# Filenames are `<clothing>__<headwear>.png` inside `directory`.
+
+base: assets/presenter_source.png
+directory: assets/wardrobe
+
+# Shared photographic direction, appended to every prompt. Kept short on
+# purpose: CLIP truncates at 77 tokens without warning, and an earlier revision
+# lost this entire block off the end of every prompt while appearing to work.
+look: >-
+  photorealistic raw photo, natural fabric texture, soft warm key light,
+  50mm lens, natural cloth folds, high detail
+
+negative: >-
+  cartoon, illustration, 3d render, costume, cosplay, plastic,
+  distorted fabric, melted cloth, extra arms, hands, fingers,
+  text, logo, watermark, low quality, blurry
+
+# Headwear has a specific failure mode: asked for a ghutra, a diffusion model
+# reaches for a turban, because wound cloth dominates its training data for
+# "Arab headdress". A ghutra is the opposite - a square of cloth laid *over* the
+# head, weighted by the agal, hanging free past the ears. Naming the wrong
+# outcomes is the most effective lever available.
+headwear_negative: >-
+  turban, wound cloth, wrapped around head, bandana, tied headscarf,
+  hijab, veil, hat, cap, hood, long hair, blonde hair, visible hairline
+
+clothing:
+  tee:
+    label: Grey tee
+    prompt: null            # the base portrait, unedited
+  thobe_white:
+    label: White thobe
+    prompt: >-
+      wearing a crisp white thobe kandura, plain round collar,
+      narrow buttoned placket, long sleeves, pressed white cotton
+  thobe_beige:
+    label: Beige thobe
+    prompt: >-
+      wearing a light beige thobe kandura, plain round collar,
+      long sleeves, soft matte cotton
+  polo_navy:
+    label: Navy polo
+    prompt: >-
+      wearing a navy blue cotton polo shirt, ribbed collar,
+      short sleeves, soft knit texture
+  hoodie_charcoal:
+    label: Charcoal hoodie
+    prompt: >-
+      wearing a charcoal grey hoodie, hood down behind the neck,
+      heavy cotton fleece, drawstrings
+  shirt_linen:
+    label: Linen shirt
+    prompt: >-
+      wearing an oatmeal linen button-down shirt, open collar,
+      rolled sleeves, natural linen slub texture
+
+headwear:
+  none:
+    label: Bare head
+    prompt: null            # keeps the headphones
+  ghutra_white:
+    label: White ghutra + agal
+    drape: 0.9
+    prompt: >-
+      a thick black agal rope ring resting on top of a white ghutra,
+      the white cloth laid over his head hanging loose past his ears
+      onto his shoulders, Gulf Arab headdress
+  shemagh_red:
+    label: Red shemagh + agal
+    drape: 0.9
+    prompt: >-
+      a thick black agal rope ring resting on top of a red and white
+      checkered shemagh, the cloth laid over his head hanging loose
+      past his ears onto his shoulders, Arab headdress
+  ghutra_loose:
+    label: Ghutra, no agal
+    drape: 0.9
+    prompt: >-
+      a plain white ghutra cloth laid over his head without any cord,
+      hanging loose past his ears onto his shoulders, one end thrown
+      back over the shoulder, Arab headdress
+  taqiyah:
+    label: Taqiyah
+    drape: 0.0             # a skullcap does not fall past the ears
+    prompt: >-
+      a white embroidered taqiyah kufi skullcap fitted close to the
+      crown of his head, fine tonal embroidery, cotton
