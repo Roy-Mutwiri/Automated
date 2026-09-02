@@ -86,6 +86,8 @@ def check_all(rig: CameraRig, concept: str) -> list[str]:
     tok = CLIPTokenizer.from_pretrained(MODEL, subfolder="tokenizer")
     problems = []
     for cam in rig.ordered():
+        if cam.derive:
+            continue          # no prompt: this camera reframes the master
         for label, text in zip(
             ("subject", "room", "negative", "negative_2"),
             texts(rig, cam, concept),
