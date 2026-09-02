@@ -173,6 +173,9 @@ def main() -> int:
                          "source = keep the portrait's own background")
     ap.add_argument("--room-seed", type=int, default=7,
                     help="changes the generated room's light placement")
+    ap.add_argument("--neutralize-pose", type=float, default=0.85,
+                    help="0 keeps the portrait's own head angle, 1 squares it "
+                         "to the lens; a little residual is left on purpose")
     ap.add_argument("--compile", action="store_true",
                     help="torch.compile the warping/generator modules; large "
                          "first-run cost, needed because the workload is "
