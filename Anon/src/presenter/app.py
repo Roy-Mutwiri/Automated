@@ -332,7 +332,7 @@ def main() -> int:
 
         def cut_to(key: str) -> None:
             """Switch cameras. Blocks while a live camera is prepared."""
-            nonlocal camera, still_frame, outfit
+            nonlocal camera, still_frame
             if key == camera or not rig.exists(key):
                 return
             cam = rig.cameras[key]
