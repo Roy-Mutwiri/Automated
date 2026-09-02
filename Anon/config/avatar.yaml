@@ -1,0 +1,57 @@
+# Avatar configuration.
+#
+# These are the tuning knobs, not a complete parameter dump: the full set lives
+# in `MotionProfile` (src/presenter/behavior/state.py) and anything set here
+# overrides the named profile's default. Values omitted here keep the profile
+# default, so this file stays readable.
+#
+# Every timing value is a MEDIAN in seconds, not a fixed interval. Nothing in
+# this system fires on a fixed period.
+
+render:
+  width: 1280
+  height: 720
+  target_fps: 30
+  # realtime | balanced | ultra. Currently only affects renderer settings that
+  # exist; it is not a placeholder that changes nothing.
+  quality_mode: balanced
+  debug: false
+
+behavior:
+  profile: PRESENTER_CALM        # PRESENTER_CALM | PRESENTER_ENERGETIC | PRESENTER_FOCUSED
+  state: IDLE_ATTENTIVE
+  seed: null                     # integer for reproducible behaviour, null for random
+
+  # --- overrides ---------------------------------------------------------
+  # Uncomment to override the profile. Shown with their PRESENTER_CALM values.
+  #
+  # blink_median_interval: 4.0       # ~15 blinks/min. Lower = more nervous.
+  # double_blink_probability: 0.09
+  # blink_partial_probability: 0.12
+  # blink_asymmetry: 0.06            # keep small; large reads as a wink
+  #
+  # microsaccade_rate: 1.4           # Hz. Do not set to 0 - fixed pupils look dead.
+  # saccade_median_interval: 7.0     # voluntary gaze shifts
+  # gaze_return_probability: 0.62    # higher = more camera eye contact
+  #
+  # head_median_interval: 15.0
+  # head_yaw_amplitude: 1.5          # degrees per move; 3+ starts to look like bobbing
+  # head_sway_amplitude: 0.22        # involuntary; never set to 0
+  #
+  # breath_period: 4.1               # ~14.6 breaths/min
+  # breath_scale_amount: 0.0028      # if breathing is *visible*, this is too high
+  #
+  # expression_median_interval: 21.0
+  # expression_strength: 0.16        # conservative on purpose
+  #
+  # activity: 1.0                    # global multiplier on discretionary behaviour
+  # arousal_amplitude: 0.28          # slow liveliness variation; 0 = uniform density
+
+avatar:
+  # Path to the source portrait. REQUIRED before the photoreal renderer can
+  # run, and must be either a synthetic identity created for this project or a
+  # real person's likeness used with explicit documented permission.
+  source_image: null
+  # Recorded alongside the image so provenance is not lost.
+  identity_kind: null            # synthetic | licensed | permitted
+  identity_note: null            # provenance, licence, or permission reference
