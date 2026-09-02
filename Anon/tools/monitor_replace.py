@@ -73,6 +73,17 @@ MAX_SCREEN_SAT = 70.0
 # Highlight roll-off knee, in 0-255 luma. Above this the curve compresses.
 KNEE = 200.0
 
+# Weight on the preserved specular layer. Zero, deliberately.
+#
+# The idea is sound in general - a reflection of a room light is achromatic
+# while screen content is not - but measured against this plate it selected two
+# bright blobs from the old game content's graffiti and a streak on a headphone
+# edge, and carried them onto the new interface as ghosts. These panels are
+# matte and nothing bright faces them, so there is no genuine specular here to
+# preserve; the low-frequency envelope alone carries the panel's light. The
+# layer is still computed and reported so the decision stays visible.
+SPECULAR_WEIGHT = 0.0
+
 # Below this colour distance the subject and the screen behind him cannot be
 # separated, and the matte falls back to the segmentation probability.
 SEPARATION_MIN = 14.0
@@ -200,10 +211,19 @@ def local_blur_sigma(img, sel) -> float:
 
 
 def grain_sigma(img, sel) -> float:
-    if sel.sum() < 400:
+    """High-frequency energy over the screen interior only.
+
+    `sel` is eroded first. Measured over the raw screen mask the figure is
+    dominated by the subject's hair edge, which is the highest-frequency thing
+    in the region and has nothing to do with sensor grain - it read 3.8 against
+    a true panel grain nearer 1.5, and the matching step then injected roughly
+    twice the noise the plate actually has.
+    """
+    inner = cv2.erode(sel.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+    if inner.sum() < 400:
         return 0.0
     g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    return float((g - cv2.GaussianBlur(g, (0, 0), 1.6))[sel].std())
+    return float((g - cv2.GaussianBlur(g, (0, 0), 1.6))[inner].std())
 
 
 def reflection_layers(img, sel):
@@ -300,7 +320,7 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
     # 5. Reflections: keep the panel's light, drop its picture.
     env, spec, spec_frac = reflection_layers(frame, sel)
     warped *= env[..., None]
-    warped += spec[..., None] * 0.85
+    warped += spec[..., None] * SPECULAR_WEIGHT
 
     # 4. Defocus to the plate's own softness in this region.
     sigma = local_blur_sigma(frame, sel)
