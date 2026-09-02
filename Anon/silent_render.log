@@ -27,3 +27,6 @@
 [silent] 300/9000 frames  10.07 fps  eta 14.4 min
 [silent] 600/9000 frames  10.06 fps  eta 13.9 min
 [silent] 900/9000 frames  9.87 fps  eta 13.7 min
+[silent] 1200/9000 frames  9.73 fps  eta 13.4 min
+[silent] 1500/9000 frames  9.70 fps  eta 12.9 min
+[silent] 1800/9000 frames  9.67 fps  eta 12.4 min
