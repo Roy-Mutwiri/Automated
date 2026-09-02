@@ -138,12 +138,18 @@ class LivePortraitRenderer:
 
         self._prepare_source(Path(source_image))
 
+        notes = f"source={Path(source_image).name}"
+        if self.background_stops is not None:
+            # Worth surfacing rather than burying: it is the one property of
+            # the background that is measured, and the number that says whether
+            # the subject actually separates from the room.
+            notes += f" bg=-{self.background_stops:.2f} stops"
         self._info = RendererInfo(
             name="liveportrait",
             resolution=output_size,
             device=f"{device}{' fp16' if use_half else ' fp32'}",
             photoreal=True,
-            notes=f"source={Path(source_image).name}",
+            notes=notes,
         )
 
     # -- one-time identity preparation --------------------------------------
