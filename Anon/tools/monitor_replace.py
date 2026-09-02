@@ -73,6 +73,10 @@ MAX_SCREEN_SAT = 70.0
 # Highlight roll-off knee, in 0-255 luma. Above this the curve compresses.
 KNEE = 200.0
 
+# Radius used to extend the plate's own screen content under the occluder, so
+# the old background can be subtracted at the subject's soft edges.
+BG_FILL_SIGMA = 22.0
+
 # Softness of the screen boundary, in plate pixels.
 EDGE_FEATHER_PX = 1.2
 
@@ -277,8 +281,32 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
         rng = np.random.default_rng(int(abs(hash(mon["id"]))) % (2 ** 31))
         warped += rng.normal(0.0, added, (h, w)).astype(np.float32)[..., None]
 
-    out = frame.astype(np.float32) * (1 - screen[..., None]) + \
-        np.clip(warped, 0, 255) * screen[..., None]
+    # Composite by *replacing the background contribution*, not by blending
+    # over the plate.
+    #
+    #     out = plate + visibility * (new - old)
+    #
+    # At the subject's silhouette the plate is not hair OR screen, it is a
+    # blend of both: a semi-transparent hair edge carries the colour of
+    # whatever was behind it. Blending the new content over that plate left the
+    # old bright blue screen inside the hair's soft edge, and against a dark
+    # charcoal interface it showed as a vivid cyan halo tracing the hairline -
+    # by far the worst artefact in the frame.
+    #
+    # Subtracting the old background instead is exact rather than cosmetic. A
+    # pixel that is 30% screen loses 30% of the old screen's colour and gains
+    # 30% of the new one; a pixel that is pure hair is untouched, because its
+    # visibility is zero. `old_bg` is the plate's own screen content extended
+    # under the occluder by normalised convolution - it only has to be right
+    # where the subject partially covers it, and the panel is defocused there.
+    w = screen[..., None]
+    num = cv2.GaussianBlur(frame.astype(np.float32) * w, (0, 0), BG_FILL_SIGMA)
+    den = cv2.GaussianBlur(screen, (0, 0), BG_FILL_SIGMA)[..., None]
+    filled = num / np.maximum(den, 1e-4)
+    solid = (screen > 0.92)[..., None]
+    old_bg = np.where(solid, frame.astype(np.float32), filled)
+
+    out = frame.astype(np.float32) + w * (np.clip(warped, 0, 255) - old_bg)
     out = np.clip(out, 0, 255).astype(np.uint8)
 
     # Section 20: keep saturation low. The lift can only ever push chroma up, so
