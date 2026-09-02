@@ -380,10 +380,13 @@ def main() -> int:
 
             if not args.headless:
                 shown = frame
-                if debug:
+                if debug or bar is not None:
                     shown = frame.copy()
+                if debug:
                     draw_debug(shown, engine, pose, timer, render_ms, failures,
                                renderer.info.name)
+                if bar is not None:
+                    bar.draw(shown)
                 cv2.imshow(WINDOW, shown)
 
                 key = cv2.waitKey(1) & 0xFF
@@ -393,11 +396,29 @@ def main() -> int:
                     debug = not debug
                 if key == ord("s"):
                     path = Path(f"screenshot_{int(time.time())}.png")
+                    # The screenshot is the frame, not what is on screen: the
+                    # dropdowns and the debug readout are instrumentation.
                     cv2.imwrite(str(path), frame)
                     print(f"[app] wrote {path}")
                 if key in _STATE_KEYS:
                     engine.set_state(_STATE_KEYS[key])
                     print(f"[app] state -> {_STATE_KEYS[key].value}")
+
+                if bar is not None:
+                    # Keyboard shortcuts alongside the menus. The window is
+                    # usually driven from the keyboard already, and cycling is
+                    # faster than aiming at a list.
+                    if key == ord("c"):
+                        nxt = bar.cycle("clothing")
+                        if nxt:
+                            wear("clothing", nxt)
+                    elif key == ord("h"):
+                        nxt = bar.cycle("headwear")
+                        if nxt:
+                            wear("headwear", nxt)
+                    choice = bar.take_selection()
+                    if choice is not None:
+                        wear(*choice)
 
             if args.duration and elapsed >= args.duration:
                 break
