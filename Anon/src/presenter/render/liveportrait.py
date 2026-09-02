@@ -231,29 +231,53 @@ class LivePortraitRenderer:
         h, w = img_bgr.shape[:2]
         out_w, out_h = self.output_size
 
-        # Eyeline: place the eyes on the upper third, which is where a portrait
-        # lens at eye level naturally puts them. Landmark set is LivePortrait's
-        # 203-point format; the eye region is its first ~48 points.
+        # Landmark set is LivePortrait's 203-point format; the eye region is
+        # its first ~48 points.
         eye_y = float(np.mean(lmk[:48, 1]))
         face_w = float(lmk[:, 0].max() - lmk[:, 0].min())
+        face_h = float(lmk[:, 1].max() - lmk[:, 1].min())
         face_cx = float((lmk[:, 0].max() + lmk[:, 0].min()) * 0.5)
+        head_top = float(lmk[:, 1].min())
 
-        # Head-and-shoulders: frame width about 3.4 face widths.
-        frame_w = min(float(w), face_w * 3.4)
-        frame_h = frame_w * out_h / out_w
-        if frame_h > h:
-            frame_h = float(h)
-            frame_w = frame_h * out_w / out_h
+        if self.framing == "close":
+            frame_w = min(float(w), face_w * 3.4)
+            frame_h = frame_w * out_h / out_w
+        else:
+            # Head and shoulders. Forcing a 16:9 rectangle out of a square
+            # source is what produced the tight close-up: the aspect ratio can
+            # only be satisfied by discarding vertical extent, and the
+            # shoulders are the first thing to go.
+            #
+            # So choose the framing from anatomy instead of from the output
+            # aspect, and let it be taller than 16:9. Headroom above the crown,
+            # and far enough below the eyeline to include the shoulder line.
+            top = head_top - face_h * 0.42
+            bottom = eye_y + face_h * 2.9
+            frame_h = min(float(h), bottom - top)
+            frame_w = min(float(w), frame_h * out_w / out_h)
 
         left = face_cx - frame_w * 0.5
-        top = eye_y - frame_h * 0.38          # eyes above centre -> headroom
-        left = float(np.clip(left, 0, w - frame_w))
-        top = float(np.clip(top, 0, h - frame_h))
+        if self.framing == "close":
+            top = eye_y - frame_h * 0.38      # eyes above centre -> headroom
+        else:
+            top = head_top - face_h * 0.42
+        left = float(np.clip(left, 0, max(w - frame_w, 0)))
+        top = float(np.clip(top, 0, max(h - frame_h, 0)))
         self.frame_rect = (left, top, frame_w, frame_h)
 
-        s = out_w / frame_w
+        # Fit the framing inside the output, preserving aspect. When it is
+        # taller than 16:9 the sides are filled rather than left black - see
+        # _build_fill.
+        s = min(out_w / frame_w, out_h / frame_h)
+        content_w, content_h = frame_w * s, frame_h * s
+        off_x = (out_w - content_w) * 0.5
+        off_y = (out_h - content_h) * 0.5
+        self.content_rect = (off_x, off_y, content_w, content_h)
+
         # Source pixels -> output canvas.
-        M_src2out = np.array([[s, 0.0, -s * left], [0.0, s, -s * top]], np.float32)
+        M_src2out = np.array(
+            [[s, 0.0, off_x - s * left], [0.0, s, off_y - s * top]], np.float32
+        )
         # Crop pixels -> source pixels (LivePortrait gives a 3x3).
         M_c2o = crop["M_c2o"][:2, :] if crop["M_c2o"].shape[0] == 3 else crop["M_c2o"]
         M_c2o_h = np.vstack([M_c2o, [0.0, 0.0, 1.0]]).astype(np.float32)
