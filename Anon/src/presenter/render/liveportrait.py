@@ -165,21 +165,82 @@ class LivePortraitRenderer:
         )
         self.landmark_runner.warmup()
 
-        self._prepare_source(Path(source_image))
+        # Prepared sources, keyed by path. Preparing one costs a DeepLabV3
+        # forward pass, an appearance-feature extraction and a full recompose,
+        # so an outfit the presenter has already worn should come back
+        # instantly rather than being rebuilt.
+        self._source_cache: dict[str, dict] = {}
+        self.source_path = Path(source_image).resolve()
 
-        notes = f"source={Path(source_image).name}"
-        if self.background_stops is not None:
-            # Worth surfacing rather than burying: it is the one property of
-            # the background that is measured, and the number that says whether
-            # the subject actually separates from the room.
-            notes += f" bg=-{self.background_stops:.2f} stops"
+        self._prepare_source(Path(source_image))
+        self._source_cache[str(self.source_path)] = self._capture_source_state()
+
         self._info = RendererInfo(
             name="liveportrait",
             resolution=output_size,
             device=f"{device}{' fp16' if use_half else ' fp32'}",
             photoreal=True,
-            notes=notes,
+            notes=self._describe_source(),
         )
+
+    # -- wardrobe -----------------------------------------------------------
+    def _describe_source(self) -> str:
+        notes = f"source={self.source_path.name}"
+        if self.background_stops is not None:
+            # Worth surfacing rather than burying: it is the one property of
+            # the background that is measured, and the number that says whether
+            # the subject actually separates from the room.
+            notes += f" bg=-{self.background_stops:.2f} stops"
+        return notes
+
+    def _capture_source_state(self) -> dict:
+        return {k: getattr(self, k, None) for k in _SOURCE_STATE}
+
+    def set_source(self, source_image: str | Path, cache_limit: int = 8) -> bool:
+        """Switch the presenter to a different source portrait.
+
+        This is how the wardrobe works. An outfit cannot be composited on at
+        runtime - the torso is static source pixels and the head is warped from
+        source appearance features - so changing clothes means changing the
+        image the whole pipeline was prepared from. See `render/wardrobe.py`.
+
+        Returns True if the source had to be prepared, False if it came back
+        from cache. A fresh preparation runs a DeepLabV3 matte and an appearance
+        extraction and takes a noticeable moment; a cached one is a dict copy,
+        which is why switching back and forth is free after the first visit.
+
+        `cache_limit` bounds the memory: each entry holds a composited
+        background, a matte and a light-wrap layer, on the order of tens of
+        megabytes, so an unbounded cache would grow without limit across a long
+        session of outfit changes. Eviction is oldest-first and the *current*
+        source is never evicted.
+        """
+        path = Path(source_image).resolve()
+        if path == self.source_path:
+            return False
+        if not path.exists():
+            raise FileNotFoundError(f"no portrait for this outfit: {path}")
+
+        key = str(path)
+        cached = self._source_cache.get(key)
+        if cached is not None:
+            for name, value in cached.items():
+                setattr(self, name, value)
+        else:
+            self._prepare_source(path)
+            self._source_cache[key] = self._capture_source_state()
+
+        self.source_path = path
+        self._info.notes = self._describe_source()
+
+        while len(self._source_cache) > max(cache_limit, 1):
+            for stale in list(self._source_cache):
+                if stale != key:
+                    del self._source_cache[stale]
+                    break
+            else:
+                break
+        return cached is None
 
     # -- one-time identity preparation --------------------------------------
     def _detect_landmarks(self, img_rgb: np.ndarray) -> np.ndarray:
