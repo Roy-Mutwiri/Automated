@@ -175,8 +175,20 @@ class MotionProfile:
     blink_interval_shape: float = 0.55   # log-normal sigma; tail length
     blink_min_interval: float = 0.9      # physiological refractory floor
     blink_max_interval: float = 22.0     # forced blink; eyes do not stay open
-    blink_duration_mean: float = 0.145   # s, lid closed-to-open
-    blink_duration_sigma: float = 0.025
+    # Spontaneous blinks are reported anywhere from 100 to 400 ms. 145 ms sat
+    # at the fast end and, sampled at a low render rate, produced a
+    # single-frame flash rather than a movement. 0.21 s is mid-range, still
+    # physiological, and survives sampling far better.
+    blink_duration_mean: float = 0.21    # s, lid closed-to-open
+    blink_duration_sigma: float = 0.04
+    # Minimum number of *rendered frames* a blink must span to read as motion
+    # rather than as a jump. See the note in blinking.py: this is a sampling
+    # accommodation for low frame rates, and stops binding above ~25 FPS.
+    blink_min_frames: float = 4.5
+    blink_max_duration: float = 0.40     # physiological ceiling
+    # How much the brow follows the lid down. Orbicularis oculi wraps the whole
+    # socket, so an isolated eyelid reads as a shutter, not a blink.
+    blink_brow_coupling: float = 0.18
     double_blink_probability: float = 0.09
     blink_asymmetry: float = 0.06        # per-eye timing/closure difference
     blink_partial_probability: float = 0.12  # incomplete closure
