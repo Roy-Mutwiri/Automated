@@ -112,6 +112,21 @@ async def build_adapter(kind: str, session_id: str, salt: str):
         )
         await adapter.connect()
         return adapter
+    if kind == "youtube":
+        from platform_.adapters.youtube import YouTubeLiveAdapter
+
+        video_id = os.environ.get("YOUTUBE_VIDEO_ID")
+        if not video_id:
+            raise SystemExit(
+                "--adapter youtube needs YOUTUBE_VIDEO_ID (the live broadcast's "
+                "video id) and YOUTUBE_API_KEY"
+            )
+        adapter = YouTubeLiveAdapter(
+            session_id=session_id, video_id=video_id, author_salt=salt,
+            daily_quota=int(os.environ.get("YOUTUBE_DAILY_QUOTA", "10000")),
+        )
+        await adapter.connect()
+        return adapter
     raise SystemExit(f"unknown adapter: {kind}")
 
 
@@ -539,7 +554,8 @@ def main() -> None:
     ap.add_argument("--market", default="synthetic",
                     choices=["synthetic", "replay", "websocket"])
     ap.add_argument("--market-path")
-    ap.add_argument("--adapter", default="mock", choices=["mock", "screen"])
+    ap.add_argument("--adapter", default="mock",
+                    choices=["mock", "screen", "youtube"])
     ap.add_argument("--tts", default="file", choices=["file", "piper"])
     ap.add_argument("--voices", default=str(data_path("voices", create_parent=False)))
     ap.add_argument("--out", default=str(data_path("out", create_parent=False)))
