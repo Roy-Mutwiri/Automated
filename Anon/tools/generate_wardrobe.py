@@ -377,9 +377,10 @@ def main() -> int:
     print(f"[wardrobe] UNet takes {pipe.unet.config.in_channels} channels "
           f"({'mask-conditioned' if pipe.unet.config.in_channels > 4 else 'NOT mask-conditioned'})")
 
-    def inpaint(bgr, mask, item: Item, seed: int, *, head: bool):
+    def inpaint(bgr, mask, item: Item, seed: int, *, head: bool,
+                prompt: str | None = None):
         result = pipe(
-            prompt=w.prompt_for(item),
+            prompt=prompt if prompt is not None else w.prompt_for(item),
             negative_prompt=w.negative_for(headwear=head),
             image=Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)),
             mask_image=Image.fromarray(mask),
