@@ -27,12 +27,14 @@ import yaml
 
 from shared.store import TraceStore
 
+from shared.paths import config_path, data_path
+
 ROOT = Path(__file__).resolve().parent.parent
 log = logging.getLogger("dashboard")
 
 
 def session_ports() -> dict[str, int]:
-    cfg = yaml.safe_load((ROOT / "configs" / "sessions.yaml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load(config_path("sessions.yaml").read_text(encoding="utf-8"))
     return {s["session_id"]: 9101 + i for i, s in enumerate(cfg["sessions"])}
 
 
@@ -226,7 +228,7 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--host", default="127.0.0.1",
                     help="keep on localhost; there is no authentication")
-    ap.add_argument("--db", default="data/gold-live.db")
+    ap.add_argument("--db", default=str(data_path("data", "gold-live.db", create_parent=False)))
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")

@@ -47,6 +47,8 @@ from shared.contracts import (
 from shared.mocks.market import MockMarketEngine
 from shared.mocks.tts import MockTTS
 
+from shared.paths import config_dir, config_path, data_path
+
 ROOT = Path(__file__).resolve().parent.parent
 TICK_SECONDS = 20
 
@@ -69,8 +71,8 @@ def synth_state(now: datetime, engine: MockMarketEngine, closed: bool) -> Market
 
 
 async def soak(hours: int, start: datetime, persona_id: str) -> dict:
-    personas = load_personas(ROOT / "configs" / "personas")
-    items = load_content(ROOT / "configs" / "content.yaml")
+    personas = load_personas(config_dir("personas"))
+    items = load_content(config_path("content.yaml"))
     planner = ContentPlanner(items, seed=3)
 
     rt = SessionRuntime(
@@ -83,7 +85,7 @@ async def soak(hours: int, start: datetime, persona_id: str) -> dict:
         persona=personas[persona_id],
         generator=OfflineGenerator(),
         tts=MockTTS(),
-        out_dir=Path("out-soak"),
+        out_dir=data_path("out-soak", create_parent=False),
         planner=planner,
     )
 

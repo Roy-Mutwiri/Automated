@@ -49,12 +49,14 @@ from shared.contracts import (
 )
 from shared.store import TraceStore
 
+from shared.paths import config_dir, config_path, data_path
+
 ROOT = Path(__file__).resolve().parent.parent
 log = logging.getLogger("live")
 
 
 def load_session_config(session_id: str) -> dict:
-    cfg = yaml.safe_load((ROOT / "configs" / "sessions.yaml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load(config_path("sessions.yaml").read_text(encoding="utf-8"))
     for spec in cfg["sessions"]:
         if spec["session_id"] == session_id:
             return spec
@@ -86,7 +88,7 @@ async def build_adapter(kind: str, session_id: str, salt: str):
         from platform_.adapters.screen import ScreenCaptureAdapter
         from shared.contracts import CaptureCalibration
 
-        devices_path = ROOT / "configs" / "devices.json"
+        devices_path = data_path("configs", "devices.json", create_parent=False)
         if not devices_path.exists():
             raise SystemExit(
                 "No configs/devices.json. Run scripts/calibrate_capture.py "
@@ -278,7 +280,7 @@ class LiveSession:
 
     async def run(self) -> int:
         spec = load_session_config(self.session_id)
-        personas = load_personas(ROOT / "configs" / "personas")
+        personas = load_personas(config_dir("personas"))
         persona = personas[spec["persona_id"]]
 
         await self.store.start()
@@ -292,7 +294,7 @@ class LiveSession:
         # moment -- seven accounts posting identical commentary simultaneously,
         # which is both the clone problem and a coordinated-behaviour signal.
         planner = ContentPlanner(
-            load_content(ROOT / "configs" / "content.yaml"),
+            load_content(config_path("content.yaml")),
             seed=abs(hash(self.session_id)) % 100_000,
         )
 
@@ -393,9 +395,9 @@ def main() -> None:
     ap.add_argument("--market-path")
     ap.add_argument("--adapter", default="mock", choices=["mock", "screen"])
     ap.add_argument("--tts", default="file", choices=["file", "piper"])
-    ap.add_argument("--voices", default="voices")
-    ap.add_argument("--out", default="out")
-    ap.add_argument("--db", default="data/gold-live.db")
+    ap.add_argument("--voices", default=str(data_path("voices", create_parent=False)))
+    ap.add_argument("--out", default=str(data_path("out", create_parent=False)))
+    ap.add_argument("--db", default=str(data_path("data", "gold-live.db", create_parent=False)))
     ap.add_argument("--health-port", type=int, default=9101)
     ap.add_argument("--tick-s", type=float, default=2.0)
     ap.add_argument("-v", "--verbose", action="store_true")

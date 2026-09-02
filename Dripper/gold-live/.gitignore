@@ -12,3 +12,8 @@ build/
 # dry-run output
 out/
 *.wav
+
+# packaging
+dist/
+build/
+build_tools/version_info.txt

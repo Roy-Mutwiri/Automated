@@ -36,6 +36,8 @@ from pathlib import Path
 
 import yaml
 
+from shared.paths import config_path
+
 ROOT = Path(__file__).resolve().parent.parent
 log = logging.getLogger("supervisor")
 
@@ -229,7 +231,7 @@ class Supervisor:
 
 
 def build_sessions(only: list[str] | None, passthrough: list[str]) -> list[ManagedSession]:
-    cfg = yaml.safe_load((ROOT / "configs" / "sessions.yaml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load(config_path("sessions.yaml").read_text(encoding="utf-8"))
     sessions = []
     for i, spec in enumerate(cfg["sessions"]):
         if only and spec["session_id"] not in only:

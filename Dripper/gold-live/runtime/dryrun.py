@@ -35,6 +35,8 @@ from shared.contracts import (
 )
 from shared.mocks import FileTTS, MockCommentSource, MockMarketEngine
 
+from shared.paths import config_dir, config_path, data_path
+
 ROOT = Path(__file__).resolve().parent.parent
 FILLER_TOPICS = [
     "position sizing",
@@ -45,12 +47,12 @@ FILLER_TOPICS = [
 
 
 def load_sessions(n: int) -> list[dict]:
-    cfg = yaml.safe_load((ROOT / "configs" / "sessions.yaml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load(config_path("sessions.yaml").read_text(encoding="utf-8"))
     return cfg["sessions"][:n]
 
 
 async def run(beats: int, n_sessions: int, mode: str, out_dir: Path) -> int:
-    personas = load_personas(ROOT / "configs" / "personas")
+    personas = load_personas(config_dir("personas"))
     generator, _llm = await build_generator(mode)
     tts = FileTTS()
     market = MockMarketEngine()
@@ -159,7 +161,8 @@ def main() -> None:
     ap.add_argument("--sessions", type=int, default=1, help="concurrent sessions")
     ap.add_argument("--mode", default="auto", choices=["auto","local","api","offline"],
                     help="generator backend (default: local if running, else offline)")
-    ap.add_argument("--out", default=str(ROOT / "out"), help="output directory")
+    ap.add_argument("--out", default=str(data_path("out", create_parent=False)),
+                    help="output directory")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 

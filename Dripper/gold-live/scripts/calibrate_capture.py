@@ -32,8 +32,10 @@ from platform_.adapters.ocr import build_ocr
 from platform_.adapters.screen import FrameSource, parse_row
 from shared.contracts import CaptureCalibration
 
+from shared.paths import data_path
+
 ROOT = Path(__file__).resolve().parent.parent
-DEVICES = ROOT / "configs" / "devices.json"
+DEVICES = data_path("configs", "devices.json", create_parent=False)
 
 
 def load_devices() -> dict:
