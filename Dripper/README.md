@@ -33,3 +33,4 @@ Dripper\Anon  ->  C:\Users\mutwi\Documents\Automated\Anon
 
   Never delete it with a recursive delete that follows reparse points —
   that would empty the real `Anon` folder.
+dripper test line
