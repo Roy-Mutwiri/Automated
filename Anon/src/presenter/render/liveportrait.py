@@ -197,7 +197,9 @@ class LivePortraitRenderer:
     def _capture_source_state(self) -> dict:
         return {k: getattr(self, k, None) for k in _SOURCE_STATE}
 
-    def set_source(self, source_image: str | Path, cache_limit: int = 8) -> bool:
+    def set_source(self, source_image: str | Path, cache_limit: int = 8,
+                   framing: str | None = None,
+                   environment: str | None = None) -> bool:
         """Switch the presenter to a different source portrait.
 
         This is how the wardrobe works. An outfit cannot be composited on at
