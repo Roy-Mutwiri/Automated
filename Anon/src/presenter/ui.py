@@ -240,6 +240,125 @@ class DropdownBar:
                             FONT, 0.32, TEXT_DIM, 1, cv2.LINE_AA)
 
 
+@dataclass
+class Button:
+    key: str
+    label: str
+    enabled: bool = True
+    # Stills get a different treatment from live cameras: a locked-off camera
+    # cut to a photograph has no moving subject, and the operator has to be able
+    # to see which is which before pressing it, not after.
+    live: bool = True
+    x: int = 0
+    y: int = 0
+    w: int = 92
+    h: int = 34
+
+    def rect(self) -> tuple[int, int, int, int]:
+        return self.x, self.y, self.w, self.h
+
+
+class ButtonRow:
+    """A row of latching buttons - the camera selector.
+
+    Shares `DropdownBar`'s two design decisions for the same reasons: window
+    coordinates are corrected to frame coordinates so hit tests survive a
+    resize, and the press is recorded for the render loop to poll rather than
+    acted on inside the callback, because switching a camera takes seconds and
+    blocking OpenCV's UI thread freezes the window mid-redraw.
+    """
+
+    def __init__(self, buttons: list[Button], origin: tuple[int, int] = (14, 14),
+                 gap: int = 6, title: str = "CAMERA") -> None:
+        self.origin = origin
+        self.gap = gap
+        self.title = title
+        self.buttons: list[Button] = []
+        self.selected: str | None = None
+        self._pending: str | None = None
+        self._window: str | None = None
+        self._frame_size = (0, 0)
+        self.set_buttons(buttons)
+
+    def set_buttons(self, buttons: list[Button]) -> None:
+        x, y = self.origin
+        for b in buttons:
+            b.x, b.y = x, y
+            x += b.w + self.gap
+        self.buttons = buttons
+        if self.selected is None and buttons:
+            self.selected = next((b.key for b in buttons if b.enabled), None)
+
+    @property
+    def width(self) -> int:
+        if not self.buttons:
+            return 0
+        last = self.buttons[-1]
+        return last.x + last.w - self.origin[0]
+
+    # -- input --------------------------------------------------------------
+    def attach(self, window: str, frame_size: tuple[int, int]) -> None:
+        self._window = window
+        self._frame_size = frame_size
+
+    def _to_image(self, x: int, y: int) -> tuple[int, int]:
+        try:
+            _, _, ww, wh = cv2.getWindowImageRect(self._window)
+        except cv2.error:
+            return x, y
+        fw, fh = self._frame_size
+        if ww <= 0 or wh <= 0 or not fw or not fh:
+            return x, y
+        return int(x * fw / ww), int(y * fh / wh)
+
+    def on_mouse(self, event, x, y) -> bool:
+        """Returns True if the click landed on this row."""
+        if event != cv2.EVENT_LBUTTONDOWN:
+            return False
+        x, y = self._to_image(x, y)
+        for b in self.buttons:
+            if _inside(b.rect(), x, y):
+                if b.enabled:
+                    self._pending = b.key
+                return True
+        return False
+
+    def take_selection(self) -> str | None:
+        pending, self._pending = self._pending, None
+        return pending
+
+    def step(self, delta: int) -> str | None:
+        """Next enabled button, for keyboard use."""
+        usable = [b.key for b in self.buttons if b.enabled]
+        if not usable:
+            return None
+        i = usable.index(self.selected) if self.selected in usable else -delta
+        return usable[(i + delta) % len(usable)]
+
+    # -- drawing ------------------------------------------------------------
+    def draw(self, frame: np.ndarray) -> None:
+        x0, y0 = self.origin
+        cv2.putText(frame, self.title, (x0 + 2, y0 - 5), FONT, 0.32,
+                    TITLE, 1, cv2.LINE_AA)
+        for b in self.buttons:
+            bx, by, bw, bh = b.rect()
+            chosen = b.key == self.selected
+            _panel(frame, (bx, by, bw, bh), BG_OPEN if chosen else BG,
+                   0.9 if chosen else 0.82)
+            cv2.rectangle(frame, (bx, by), (bx + bw - 1, by + bh - 1),
+                          HILITE if chosen else EDGE, 1, cv2.LINE_AA)
+            colour = TEXT if b.enabled else TEXT_DIM
+            size = cv2.getTextSize(b.label, FONT, 0.42, 1)[0]
+            cv2.putText(frame, b.label, (bx + (bw - size[0]) // 2, by + 22),
+                        FONT, 0.42, colour, 1, cv2.LINE_AA)
+            if not b.live:
+                # A dot, not the word "still": there is no room for text at this
+                # size and the operator only needs to know it is a different
+                # kind of shot.
+                cv2.circle(frame, (bx + bw - 9, by + 9), 3,
+                           TEXT_DIM if b.enabled else EDGE, -1, cv2.LINE_AA)
+
+
 def draw_busy(frame: np.ndarray, message: str) -> None:
     """Centre banner for the seconds an outfit change takes to prepare."""
     h, w = frame.shape[:2]
