@@ -82,7 +82,9 @@ class HandPose:
     first. The adapter distributes each curl across that finger's joints.
     """
 
-    curl: list[float] = field(default_factory=lambda: [0.18, 0.22, 0.20, 0.24, 0.30])
+    # Resting curls for a hand lying on a desk: never straight, never equal.
+    # Perfectly straight fingers are the clearest mannequin tell there is.
+    curl: list[float] = field(default_factory=lambda: [0.26, 0.34, 0.31, 0.36, 0.42])
     spread: float = 0.0          # abduction, + = fingers apart
     # What the hand is resting on. The adapter turns this into an IK target;
     # None means the hand is posed by its joint chain alone.

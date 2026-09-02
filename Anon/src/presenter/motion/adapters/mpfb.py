@@ -69,6 +69,10 @@ AXIS_MAP: dict[str, tuple[str, tuple[int, int, int], tuple[float, float, float]]
 # upper bone is the rib cage proper and carries most of it.
 CHEST_TOP_SHARE = 0.62
 
+# Finger local axes, measured by driving each in turn on this rig.
+FINGER_CURL_AXIS = 0
+FINGER_SPREAD_AXIS = 2
+
 D2R = math.pi / 180.0
 
 
@@ -140,9 +144,14 @@ class MPFBAdapter:
                         continue
                     amount = curl * share[seg - 1] * 78.0 * D2R
                     e = [0.0, 0.0, 0.0]
-                    e[2] = amount * (1.0 if side == "l" else -1.0)
+                    # Local X. Established by driving each axis in turn and
+                    # looking: X curls toward the palm, Y twists the finger and
+                    # Z splays it sideways. Z was the first guess and produced a
+                    # hand with its fingers fanned apart rather than closed.
+                    e[FINGER_CURL_AXIS] = amount * (1.0 if side == "l" else -1.0)
                     if seg == 1:
-                        e[1] = hand.spread * 9.0 * D2R * (1 if side == "l" else -1)
+                        e[FINGER_SPREAD_AXIS] = (
+                            hand.spread * 9.0 * D2R * (1 if side == "l" else -1))
                     bone.rotation_euler = e
 
     def _apply_contacts(self, motion: HumanMotionState) -> None:
