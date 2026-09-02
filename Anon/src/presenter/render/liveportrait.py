@@ -348,28 +348,27 @@ class LivePortraitRenderer:
             frame = self.wrapper.parse_output(out["out"])[0]  # RGB uint8
 
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        return self._composite(frame_bgr)
 
-        if self.paste_back:
-            from src.utils.crop import paste_back
+    def _composite(self, generated: np.ndarray) -> np.ndarray:
+        """Warp the generated crop into the output canvas and blend.
 
-            frame_bgr = paste_back(
-                frame_bgr, self.crop_info["M_c2o"], self.source_full, self.mask_ori
-            )
+        One warpAffine straight into output space and one alpha blend confined
+        to the mask's bounding box. Everything else was precomputed at startup.
+        """
+        out_w, out_h = self.output_size
+        x0, y0, x1, y1 = self.blend_box
 
-        return self._fit_output(frame_bgr)
+        warped = cv2.warpAffine(
+            generated, self.M_crop2out, (out_w, out_h),
+            flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+        )
 
-    def _fit_output(self, frame: np.ndarray) -> np.ndarray:
-        """Letterbox into the target 16:9 output without distorting the face."""
-        target_w, target_h = self.output_size
-        h, w = frame.shape[:2]
-        scale = min(target_w / w, target_h / h)
-        new_w, new_h = int(w * scale), int(h * scale)
-        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
-        canvas = np.zeros((target_h, target_w, 3), np.uint8)
-        y0 = (target_h - new_h) // 2
-        x0 = (target_w - new_w) // 2
-        canvas[y0:y0 + new_h, x0:x0 + new_w] = resized
-        return canvas
+        frame = self.background.copy()
+        blended = warped[y0:y1, x0:x1].astype(np.float32) * self.mask_box
+        blended += self.bg_box_premul
+        frame[y0:y1, x0:x1] = np.clip(blended, 0, 255).astype(np.uint8)
+        return frame
 
     @property
     def info(self) -> RendererInfo:
