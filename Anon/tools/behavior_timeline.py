@@ -36,6 +36,19 @@ from presenter.types import BehaviorEvent  # noqa: E402
 BLINK_RATE_RANGE = (7.0, 30.0)     # per minute; spans reported reading (~5-11)
                                    # through conversation (~32) rates
 SACCADE_RATE_RANGE = (6.0, 40.0)    # voluntary gaze shifts per minute
+
+# Voluntary gaze shifts.
+#
+# The gaze system used to choose its own targets and emit `gaze_left`,
+# `gaze_return` and friends. It no longer does: the attention system decides
+# what he is looking at and emits one `attention` event per shift, while the
+# gaze system keeps only microsaccades and drift. The old names are retained so
+# this audit still reads archived timelines, but a run against the current
+# engine that matched only those names measured a gaze interval CV of exactly
+# 0.000 - not a suspiciously regular presenter, an analyser looking for events
+# that are no longer emitted.
+GAZE_KINDS = ("attention", "gaze_shift", "gaze_left", "gaze_right",
+              "gaze_down", "gaze_return")
 HEAD_MOVE_RANGE = (2.0, 20.0)       # deliberate head adjustments per minute
 EXPRESSION_RANGE = (1.0, 14.0)      # per minute
 
@@ -80,7 +93,7 @@ def cv(values: list[float]) -> float:
 
 
 VOLUNTARY_KINDS = {
-    "gaze_shift", "gaze_left", "gaze_right", "gaze_down", "gaze_return",
+    GAZE_KINDS,
     "head_yaw", "head_pitch", "head_roll", "expression", "posture_shift",
 }
 
@@ -119,7 +132,7 @@ def stillness_analysis(events: list[BehaviorEvent], total: float) -> dict:
     about genuine periods of not-doing-anything.
     """
     voluntary = {
-        "gaze_shift", "gaze_left", "gaze_right", "gaze_down", "gaze_return",
+        GAZE_KINDS,
         "head_yaw", "head_pitch", "head_roll", "expression", "posture_shift",
     }
     times = [e.time for e in events if e.kind in voluntary]
@@ -183,7 +196,7 @@ def report(minutes: float, profile: str, seed: int | None, fps: float,
     print("\n-- interval variability (CV; 0 = metronome, ~1 = memoryless) --")
     blink_iv = intervals_of(events, {"blink", "blink_partial", "double_blink_second"})
     gaze_iv = intervals_of(
-        events, {"gaze_shift", "gaze_left", "gaze_right", "gaze_down", "gaze_return"}
+        events, {GAZE_KINDS}
     )
     head_iv = intervals_of(events, {"head_yaw", "head_pitch", "head_roll"})
 
