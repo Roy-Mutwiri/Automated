@@ -138,8 +138,26 @@ NEGATIVE = (
 )
 
 
+# Shot-size language, and it is load-bearing.
+#
+# The first attempt led with the room, on the theory that describing the space
+# first would make SDXL build a space and then put someone in it. It does not:
+# all eight candidates came back as empty interior-design renders with no human
+# in them at all. The room description simply consumed the whole prompt.
+#
+# The person has to be the grammatical subject to be rendered. But making him
+# the subject without qualification produces a headshot, which is the failure
+# in the other direction. So he leads *and* the shot size is stated explicitly
+# and repeatedly - "medium shot", "waist up", a stated camera distance - which
+# is the only reliable lever on framing.
+SHOT = (
+    "medium shot photograph, waist up, camera two metres away, "
+    "the man occupies the middle of the frame with the room visible around him"
+)
+
+
 def build_prompt(concept: str) -> str:
-    return f"{CONCEPTS[concept]}, {SUBJECT}, {LIGHT_AND_CAMERA}"
+    return f"{SHOT}, {SUBJECT}, {CONCEPTS[concept]}, {LIGHT_AND_CAMERA}"
 
 
 def _person_coverage(img_bgr: np.ndarray) -> float:
