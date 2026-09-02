@@ -8,16 +8,16 @@
 | Origin | **Generated locally**, not sampled from a dataset |
 | Model | `stabilityai/stable-diffusion-xl-base-1.0` (SDXL 1.0) |
 | Model / output licence | **CreativeML Open RAIL++-M** — permits commercial use |
-| Seed | 45 |
+| Seed | 65 |
 | Resolution | 1024 × 1024 |
-| Tool | `tools/generate_presenter.py` (prompt and negative prompt live in that file) |
+| Tool | `tools/generate_presenter.py --style streaming` (prompts live in that file) |
 | Generated | 2026-09-02 |
 
 Reproduce with:
 
 ```
-python tools/generate_presenter.py --count 8 --seed 40
-# the chosen frame is candidate_05_seed45
+python tools/generate_presenter.py --count 8 --seed 60 --style streaming
+# the chosen frame is candidate_05_seed65
 ```
 
 ## Why generated rather than sampled
