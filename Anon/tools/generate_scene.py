@@ -82,27 +82,29 @@ WIDTH, HEIGHT = 1344, 768
 # the topic.
 _ANCHOR = "one adult male streamer seated close to camera"
 
-# Encoder A: who, how framed, what lens.
-#
-# The camera has moved from 2.2 m to ~1.4 m. At the previous distance the room
-# looked superb and the head measured 94 px - unusable. Head height is the
-# quantity being targeted now (240-280 px at 1344x768), and camera distance is
-# the lever that actually moves it.
+# Encoder A: WHO + composition + camera. The chair is named here as well as in
+# encoder B, because it kept disappearing when it lived in only one.
 SUBJECT_PROMPT = (
     "livestream camera frame, " + _ANCHOR + ", "
     "a brown-skinned Arab man in his 30s, short dark beard, "
-    "in a matte black high-back gaming chair, facing directly at camera, "
-    "head and upper torso large in frame, frontal face, looking into the lens, "
-    "calm neutral expression, eyes open, 40mm, natural skin"
+    "in a matte black high-back gaming chair, headrest behind his shoulders, "
+    "facing directly at camera, head and upper torso large in frame, "
+    "frontal face, looking into the lens, calm neutral, 40mm, natural skin"
 )
 
-# Encoder B: the same man, then the room he is in.
+# Encoder B: same subject, then a MODERN room.
+#
+# "walnut" alone is dangerous: SDXL reads it as "rustic wooden room" and
+# returns a cabin - the last cycle produced an antique den with a bare lamp and
+# a vintage camera. Walnut has to be named as a *slat panel accent* against
+# charcoal, with matte black and monitors carrying the rest, or the whole room
+# turns brown. Roughly charcoal 35 / walnut 25 / black tech 25 / light 15.
 ROOM = (
-    "photo of " + _ANCHOR + " in his luxury streamer man cave at night, "
-    "behind him a wall of narrow vertical dark walnut wood slats with real "
-    "wood grain, dark walnut desk, monitor, broadcast microphone on a boom "
-    "arm, matte black and charcoal, warm amber practical lights, "
-    "shallow depth of field, photograph"
+    "photo of " + _ANCHOR + " in a modern luxury streaming room at night, "
+    "charcoal grey walls, dark walnut vertical acoustic slat panel accent "
+    "behind him, matte black desk, two modern monitors glowing, broadcast "
+    "microphone on a black boom arm, hidden warm LED strip lighting, "
+    "minimal contemporary, shallow depth of field, photograph"
 )
 
 CONCEPTS = {
@@ -119,19 +121,18 @@ CONCEPTS = {
 # tokens, so two thirds of it - every geometry and look term - was discarded
 # before the model saw it.
 NEGATIVE = (
-    "wide room shot, tiny person, distant person, full body, far away, "
-    "empty room, no people, unoccupied, interior only, "
-    "architectural visualization, interior design render, showroom, "
-    "curtains, drapes, fabric wall, cloth wall, pleated textile, "
-    "piano, midi keyboard, synthesizer, musical instrument, mixing console"
+    "rustic, cabin, log cabin, antique, vintage, traditional study, library, "
+    "country house, wooden room, all wood interior, brown room, farmhouse, "
+    "bare table lamp, old camera, antique furniture, ornate frames, "
+    "music studio, midi keyboard, piano, mixing console, podcast only"
 )
 
 NEGATIVE_2 = (
-    "office chair, mesh chair, executive chair, corporate office, "
-    "rgb lighting, rainbow, neon, purple, cyberpunk, gamer bedroom, "
-    "text, letters, signage, logo, watermark, screen text, numbers, "
-    "cgi, 3d render, illustration, cartoon, sketch, plastic skin, "
-    "deformed hands, two people, blurry face, overexposed"
+    "wide room shot, tiny person, distant person, empty room, no people, "
+    "office chair, mesh chair, executive chair, corporate office, bedroom, "
+    "rgb lighting, rainbow, neon, purple, cyberpunk, "
+    "text, letters, signage, logo, watermark, screen text, "
+    "cgi, 3d render, illustration, plastic skin, deformed hands, blurry face"
 )
 
 
