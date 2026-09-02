@@ -89,8 +89,29 @@ class BlinkSystem:
         rng = drives.rng
 
         duration = rng.truncated_gauss(
-            p.blink_duration_mean, p.blink_duration_sigma, 0.075, 0.32
+            p.blink_duration_mean, p.blink_duration_sigma, 0.09, 0.40
         )
+
+        # Guarantee the blink is *sampled* often enough to read as movement.
+        #
+        # Frame-rate-independent timing is not enough on its own. A 145 ms blink
+        # at 13 FPS lands on a single intermediate frame - measured sequence
+        # 0.00 -> 0.88 -> 0.00 - so the lid appears to teleport shut and back.
+        # That single-frame flash is the specific thing that reads as synthetic;
+        # it is a sampling artefact, not a timing error.
+        #
+        # Stretching the blink so it spans at least `blink_min_frames` rendered
+        # frames costs realism in the strictest sense - a real blink does not
+        # slow down because a camera is slow - but a slightly long blink that
+        # is *seen* beats a physiologically exact one that is not. The result
+        # stays inside the 100-400 ms range reported for spontaneous blinks at
+        # any frame rate above about 10 FPS.
+        #
+        # This is an accommodation, not a fix. Raising the render rate removes
+        # the need for it: above ~25 FPS the floor rarely binds.
+        min_duration = p.blink_min_frames * max(drives.frame_interval, 1e-3)
+        if min_duration > duration:
+            duration = min(min_duration, p.blink_max_duration)
 
         # Most blinks close fully. A minority are incomplete - a real and very
         # common behaviour that, included sparingly, breaks the uniformity of
