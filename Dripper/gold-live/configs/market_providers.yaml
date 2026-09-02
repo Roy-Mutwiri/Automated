@@ -1,0 +1,98 @@
+# XAUUSD price providers.
+#
+# Adding one is an edit here, never a code change. Response shape is described
+# by dotted paths, which is where providers actually differ.
+#
+# BEFORE PICKING A PLAN, do the arithmetic. The system self-paces to make an
+# allowance last the whole month, so the plan decides the cadence:
+#
+#     1,000 requests/month  -> one poll every ~45 minutes
+#    10,000 requests/month  -> one poll every ~4.5 minutes
+#   100,000 requests/month  -> one poll every ~26 seconds
+#   per-minute plans        -> set min_interval_s instead
+#
+# Anything slower than ~30s is not live commentary. The staleness machine will
+# correctly mark the data delayed or stale and the host will stop quoting
+# levels -- working as designed, but a worse stream. Match the plan to the
+# cadence you want.
+#
+# LICENSING: most feeds licence for internal display only. Broadcasting a live
+# price to a public audience is redistribution and usually needs a different,
+# pricier tier. Read the contract before launch, not after.
+#
+# Verify a provider before trusting it:
+#   python -m scripts.check_feed --provider <name>
+
+providers:
+
+  # --- REST, gold-specific -------------------------------------------------
+
+  goldapi:
+    url: "https://www.goldapi.io/api/XAU/USD"
+    price_path: "price"
+    bid_path: "bid"
+    ask_path: "ask"
+    timestamp_path: "timestamp"
+    auth_style: "header"
+    auth_name: "x-access-token"
+    headers: {"Content-Type": "application/json"}
+    monthly_limit: 100
+    notes: >
+      goldapi.io. Quotes bid and ask directly, which is unusual and useful.
+      The free allowance is small -- check your plan and raise monthly_limit
+      to match, or the feed will pace itself to a crawl.
+
+  metalprice:
+    url: "https://api.metalpriceapi.com/v1/latest?base=USD&currencies=XAU"
+    price_path: "rates.USDXAU"
+    timestamp_path: "timestamp"
+    auth_style: "query"
+    auth_name: "api_key"
+    monthly_limit: 100
+    notes: >
+      metalpriceapi.com. Returns a rate rather than a bid/ask, so a spread is
+      synthesised. Confirm whether rates.USDXAU or rates.XAU is the dollar
+      price on your plan -- run scripts/check_feed and look at the number.
+
+  unirate:
+    url: "https://api.unirateapi.com/api/rates?from=XAU&to=USD"
+    price_path: "rate"
+    auth_style: "query"
+    auth_name: "api_key"
+    monthly_limit: 1000
+    notes: "unirateapi.com. LBMA-sourced. Single rate; spread synthesised."
+
+  # --- REST, general market data ------------------------------------------
+
+  twelvedata:
+    url: "https://api.twelvedata.com/price?symbol=XAU/USD"
+    price_path: "price"
+    auth_style: "query"
+    auth_name: "apikey"
+    monthly_limit: 24000
+    notes: >
+      twelvedata.com. Free tier is REST only (800 credits/day); websocket
+      streaming needs a paid plan. 800/day is roughly a poll every 108s.
+
+  # --- Streaming ----------------------------------------------------------
+  # These are websocket rather than REST. Use --market websocket with
+  # MARKET_WS_URL rather than this file; listed here so the options are in
+  # one place.
+  #
+  #   tradermade    marketdata.tradermade.com/feedadv -- XAUUSD supported,
+  #                 free trial, then paid. The best low-latency option found.
+  #   itick         websocket with a free tier, ~80ms claimed.
+  #   alltick       websocket streaming, key required.
+  #
+  # A broker feed you already have (MT4/MT5 bridge, cTrader, FIX) is usually
+  # better than any of these: real tick data, already licensed to you, and no
+  # extra bill.
+
+  # --- Testing ------------------------------------------------------------
+
+  echo:
+    url: "http://127.0.0.1:9/price"
+    price_path: "price"
+    min_interval_s: 1.0
+    monthly_limit: 999999999
+    notes: "Points nowhere. Used by tests with an injected transport."

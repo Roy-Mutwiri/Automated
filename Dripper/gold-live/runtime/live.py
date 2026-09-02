@@ -73,6 +73,18 @@ def build_feed(kind: str, path: str | None) -> Feed:
         if not path:
             raise SystemExit("--market replay needs --market-path")
         return ReplayFeed(path, speed=0.0)
+    if kind == "rest":
+        from platform_.market.rest_feed import RestPollingFeed, load_providers
+
+        name = os.environ.get("MARKET_PROVIDER", "")
+        providers = load_providers(config_path("market_providers.yaml"))
+        if name not in providers:
+            raise SystemExit(
+                f"--market rest needs MARKET_PROVIDER set to one of: "
+                f"{', '.join(sorted(providers))}. Verify it first with "
+                f"python -m scripts.check_feed --provider <name>"
+            )
+        return RestPollingFeed(providers[name])
     if kind == "websocket":
         from platform_.market.feeds import WebSocketFeed
 
@@ -552,7 +564,7 @@ def main() -> None:
     ap.add_argument("--session", required=True)
     ap.add_argument("--mode", default="auto", choices=["auto", "local", "api", "offline"])
     ap.add_argument("--market", default="synthetic",
-                    choices=["synthetic", "replay", "websocket"])
+                    choices=["synthetic", "replay", "rest", "websocket"])
     ap.add_argument("--market-path")
     ap.add_argument("--adapter", default="mock",
                     choices=["mock", "screen", "youtube"])
