@@ -634,8 +634,13 @@ def build_world(pose, geometry_path="config/room_geometry.yaml",
     world.build_desk_and_props()
     # The fitted CC0 mesh if one has been built, otherwise the debug proxy.
     # The proxy proved the camera system and is explicitly not the product.
-    if not (human_mesh and world.build_fitted_human(pose, human_mesh)):
+    fitted = world.build_fitted_human(pose, human_mesh) if human_mesh else None
+    if not fitted:
         world.build_human(pose)
     world.build_lighting()
     world.cameras = world.build_cameras()
+    # Texturing needs the cameras to exist, because it projects through one.
+    if fitted:
+        plate = ROOT / "assets/reference/avatar_identity_camera1.png"
+        world.project_identity_texture(fitted, plate)
     return world
