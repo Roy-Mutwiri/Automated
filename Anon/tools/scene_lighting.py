@@ -131,10 +131,12 @@ VARIANTS = {
     "C": dict(scale=1.55, warm=0.68, haze=0.15),   # maximum acceptable
 }
 
-# A black surface under a practical is not perfectly black. Small on purpose:
-# this is the only term that can lift the felt, so it is the only term that can
-# turn the gaps grey.
-AMBIENT_ADD = 0.05
+# A black surface under a practical is not perfectly black. Tiny on purpose:
+# this is the only term that can lift the felt independently of the wood, so it
+# is the only term that can turn the gaps grey. At 0.05 it did exactly that -
+# felt +27% against battens +6% - because 0.05 x E is larger than the felt's own
+# linear value. At 0.0025 both move together and the ratio survives.
+AMBIENT_ADD = 0.0025
 
 
 # --- Fields -----------------------------------------------------------------

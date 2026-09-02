@@ -12,11 +12,11 @@
     },
     "byte_lock": 0,
     "wall_before": 47.969085693359375,
-    "wall_after": 51.2552375793457,
+    "wall_after": 48.70098876953125,
     "batten_before": 67.85655212402344,
-    "batten_after": 69.97329711914062,
+    "batten_after": 68.79338073730469,
     "felt_before": 27.717737197875977,
-    "felt_after": 32.1946907043457
+    "felt_after": 28.240962982177734
   },
   "B": {
     "params": {
@@ -31,11 +31,11 @@
     },
     "byte_lock": 0,
     "wall_before": 47.969085693359375,
-    "wall_after": 53.69778823852539,
+    "wall_after": 49.52645492553711,
     "batten_before": 67.85655212402344,
-    "batten_after": 71.82669067382812,
+    "batten_after": 69.74757385253906,
     "felt_before": 27.717737197875977,
-    "felt_after": 35.2371826171875
+    "felt_after": 28.935340881347656
   },
   "C": {
     "params": {
@@ -50,10 +50,10 @@
     },
     "byte_lock": 0,
     "wall_before": 47.969085693359375,
-    "wall_after": 56.491214752197266,
+    "wall_after": 50.5421257019043,
     "batten_before": 67.85655212402344,
-    "batten_after": 74.06119537353516,
+    "batten_after": 70.95125579833984,
     "felt_before": 27.717737197875977,
-    "felt_after": 38.59974670410156
+    "felt_after": 29.759572982788086
   }
 }
