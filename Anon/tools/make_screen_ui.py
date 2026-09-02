@@ -31,15 +31,22 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-# Charcoal through to a single muted cyan accent. Nothing saturated.
-BG        = (19, 16, 13)        # BGR, near-black charcoal
-GRID      = (32, 26, 22)
-PANEL     = (29, 24, 20)
-PANEL_HI  = (38, 32, 27)
-EDGE      = (52, 44, 37)
-INK       = (128, 116, 104)     # dim neutral text/marks
-ACCENT    = (156, 140, 78)      # muted cyan-teal
-ACCENT_DIM = (96, 86, 52)
+# Charcoal through to a single muted cyan accent.
+#
+# The greys are exactly neutral (B == G == R) on purpose. The exposure fit in
+# monitor_replace.py lifts this template with a gain around 4-6 and a negative
+# offset, and any tint in the base is multiplied by that gain: an earlier
+# palette that was only three units bluer than neutral came back as a navy
+# panel. Neutral greys mean the accent is the only thing on screen carrying
+# colour, which is what section 20 asks for.
+BG        = (17, 17, 17)        # BGR, near-black charcoal
+GRID      = (26, 26, 26)
+PANEL     = (25, 25, 26)
+PANEL_HI  = (34, 34, 35)
+EDGE      = (46, 46, 47)
+INK       = (112, 112, 112)     # dim neutral marks
+ACCENT    = (146, 124, 74)      # muted cyan-teal, the single cool accent
+ACCENT_DIM = (92, 80, 50)
 
 
 def rr(img, p0, p1, colour, r=8, thickness=-1):
@@ -122,8 +129,8 @@ def sparkline(img, box, seed, colour, fill=True, points=90):
     if fill:
         poly = np.vstack([pts, [[x1, y1], [x0, y1]]]).astype(np.int32)
         layer = img.copy()
-        cv2.fillPoly(layer, [poly], tuple(int(c * 0.45) for c in colour))
-        cv2.addWeighted(layer, 0.55, img, 0.45, 0, img)
+        cv2.fillPoly(layer, [poly], tuple(int(c * 0.30) for c in colour))
+        cv2.addWeighted(layer, 0.5, img, 0.5, 0, img)
     cv2.polylines(img, [pts], False, colour, 2, cv2.LINE_AA)
 
 

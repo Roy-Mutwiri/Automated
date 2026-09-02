@@ -68,7 +68,7 @@ import numpy as np
 LUMA_TARGET_FRAC = 0.75
 
 # Ceiling on screen chroma, in OpenCV's 0-255 saturation units.
-MAX_SCREEN_SAT = 96.0
+MAX_SCREEN_SAT = 70.0
 
 # Highlight roll-off knee, in 0-255 luma. Above this the curve compresses.
 KNEE = 200.0
