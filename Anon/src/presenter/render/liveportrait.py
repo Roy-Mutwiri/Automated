@@ -438,11 +438,14 @@ class LivePortraitRenderer:
             frame_h = min(float(h), bottom - top)
             frame_w = min(float(w), frame_h * out_w / out_h)
 
-        left = face_cx - frame_w * 0.5
-        if self.framing == "close":
-            top = eye_y - frame_h * 0.38      # eyes above centre -> headroom
+        if self.framing == "full":
+            left = top = 0.0
         else:
-            top = head_top - face_h * 0.42
+            left = face_cx - frame_w * 0.5
+            if self.framing == "close":
+                top = eye_y - frame_h * 0.38  # eyes above centre -> headroom
+            else:
+                top = head_top - face_h * 0.42
         left = float(np.clip(left, 0, max(w - frame_w, 0)))
         top = float(np.clip(top, 0, max(h - frame_h, 0)))
         self.frame_rect = (left, top, frame_w, frame_h)
