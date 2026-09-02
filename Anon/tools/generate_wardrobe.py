@@ -360,7 +360,7 @@ def main() -> int:
             if HEADWEAR[head] is not None:
                 # A skullcap sits on the crown; a ghutra falls to the
                 # shoulders. Same mask function, different drape.
-                drape = 0.15 if head == "taqiyah" else 1.5
+                drape = 0.0 if head == "taqiyah" else 0.9
                 out = inpaint(body, headwear_mask(g, drape=drape),
                               HEADWEAR[head], args.seed + ci * 17 + hi * 3)
             cv2.imwrite(str(path), out)
