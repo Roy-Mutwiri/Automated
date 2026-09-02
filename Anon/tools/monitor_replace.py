@@ -73,9 +73,9 @@ MAX_SCREEN_SAT = 70.0
 # Highlight roll-off knee, in 0-255 luma. Above this the curve compresses.
 KNEE = 200.0
 
-# Radius used to extend the plate's own screen content under the occluder, so
-# the old background can be subtracted at the subject's soft edges.
-BG_FILL_SIGMA = 22.0
+# Below this colour distance the subject and the screen behind him cannot be
+# separated, and the matte falls back to the segmentation probability.
+SEPARATION_MIN = 14.0
 
 # Softness of the screen boundary, in plate pixels.
 EDGE_FEATHER_PX = 1.2
@@ -106,47 +106,85 @@ def quad_mask(shape, quad, feather: float = EDGE_FEATHER_PX) -> np.ndarray:
     return np.clip(m, 0.0, 1.0)
 
 
-def occlusion_mask(img, quad_m, protect, dark_v: int = 62) -> np.ndarray:
-    """What sits in front of this screen. Authoritative over the quad.
+def _normconv(img: np.ndarray, weight: np.ndarray, sigma: float) -> np.ndarray:
+    """Extend `img`'s values, weighted by `weight`, across the whole frame."""
+    w = weight[..., None] if img.ndim == 3 else weight
+    num = cv2.GaussianBlur(img.astype(np.float32) * w, (0, 0), sigma)
+    den = cv2.GaussianBlur(weight, (0, 0), sigma)
+    den = den[..., None] if img.ndim == 3 else den
+    return num / np.maximum(den, 1e-4)
 
-    The segmented human, plus dark pixels **connected to** the human. The
-    darkness test exists because segmentation under-covers black headphones and
-    flyaway hair against a lit panel - but it cannot stand alone. A first
-    version took every dark pixel inside the quad, which promptly classified the
-    dark regions of the *old screen content* as occluders and punched the
-    previous picture's silhouette straight through the new interface.
 
-    Connectivity is what separates the two cases. Headphones and hair touch the
-    head; a dark patch in a photograph on the monitor touches nothing. So the
-    dark mask is split into components and only those overlapping the segmented
-    human survive. On a panel the subject does not overlap at all, the test
-    correctly contributes nothing.
+def screen_alpha(img, quad_m, prob, dark_v: int = 62):
+    """How much of each pixel inside the panel is screen. A real alpha, not a mask.
+
+    Returns `(alpha, background_colour)`.
+
+    Three approaches were tried here and the first two are worth recording,
+    because both look correct until you zoom in.
+
+    *A darkness test over the whole quad* classified the dark regions of the old
+    screen content as occluders and punched the previous picture's silhouette
+    through the new interface.
+
+    *A dilated binary mask* (segmentation, grown to cover headphones and hair)
+    kept a ring of plate several pixels wide outside the true silhouette. That
+    plate is the old bright blue screen, so the finished frame carried a vivid
+    cyan halo tracing the hairline - worse than the problem it solved, because a
+    halo reads as a compositing error while a soft edge reads as hair.
+
+    What actually works: the subject's edge pixels are a linear blend of the
+    subject and the screen behind him, and here *both endpoints are knowable*.
+    The screen colour is extended under the occluder from confident screen
+    pixels, the subject colour from confident subject pixels, and alpha is the
+    projection of the observed pixel onto the line between them. A strand that
+    is 40% hair yields 0.6, and the composite then removes exactly 60% of the
+    old screen and adds exactly 60% of the new one.
+
+    Where the two endpoints are too close to separate - dark hair over the dark
+    part of a panel - the projection is ill-conditioned and the segmentation
+    probability is used instead. That fallback is reported.
     """
     v = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)[:, :, 2]
     dark = ((v < dark_v) & (quad_m > 0.5)).astype(np.uint8)
     dark = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
     dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 
-    # Two conditions, both required. Connectivity alone was still too
-    # permissive: the old game content had a dark band along the bottom of the
-    # panel that touched the subject's shoulder, so a single component flooded
-    # from his head across the whole screen and left 62% of the old picture in
-    # place. A proximity band alone would clip long flyaway hair. Together they
-    # describe what actually occludes a screen - something attached to the
-    # subject and close to him.
-    seed = cv2.dilate((protect > 0.5).astype(np.uint8), np.ones((9, 9), np.uint8))
+    # Dark pixels count as subject only if they are both connected to the
+    # segmented human and close to him: connectivity alone let a dark band in
+    # the old game content bridge from his shoulder across the whole panel.
+    seed = cv2.dilate((prob > 0.5).astype(np.uint8), np.ones((9, 9), np.uint8))
     near = cv2.dilate(seed, np.ones((OCCLUDER_REACH_PX, OCCLUDER_REACH_PX), np.uint8))
     n, labels = cv2.connectedComponents(dark, 8)
-    keep = np.zeros_like(dark)
+    dark_fg = np.zeros_like(dark)
     for i in range(1, n):
         comp = labels == i
         if (comp & (seed > 0)).any():
-            keep[comp] = 1
-    keep &= (near > 0)
-    keep = cv2.dilate(keep, np.ones((5, 5), np.uint8))
+            dark_fg[comp] = 1
+    dark_fg &= (near > 0)
 
-    occ = np.maximum(protect, keep.astype(np.float32))
-    return np.clip(cv2.GaussianBlur(occ, (0, 0), 1.6), 0.0, 1.0)
+    core_fg = ((prob > 0.80) | (dark_fg > 0)).astype(np.float32)
+    core_fg = cv2.erode(core_fg, np.ones((3, 3), np.uint8))
+    core_bg = (((prob < 0.10) & (dark_fg == 0)) * (quad_m > 0.5)).astype(np.float32)
+    core_bg = cv2.erode(core_bg, np.ones((3, 3), np.uint8))
+
+    fg_col = _normconv(img, core_fg, 11.0)
+    bg_col = _normconv(img, core_bg, 16.0)
+
+    d = bg_col - fg_col
+    denom = (d * d).sum(axis=2)
+    proj = ((img.astype(np.float32) - fg_col) * d).sum(axis=2)
+    alpha = np.clip(proj / np.maximum(denom, 1e-3), 0.0, 1.0)
+
+    weak = denom < SEPARATION_MIN ** 2          # endpoints too close to separate
+    alpha = np.where(weak, np.clip(1.0 - prob, 0.0, 1.0), alpha)
+
+    alpha = np.where(core_fg > 0.5, 0.0, alpha)
+    alpha = np.where(core_bg > 0.5, 1.0, alpha)
+    alpha = cv2.GaussianBlur(alpha.astype(np.float32), (0, 0), 0.8)
+
+    frac_weak = float((weak & (quad_m > 0.5)).mean())
+    return np.clip(alpha, 0.0, 1.0), bg_col, frac_weak
 
 
 # --- Plate measurements -----------------------------------------------------
@@ -340,7 +378,13 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
     return out, info
 
 
-def human_protection(img: np.ndarray, grow: float = 0.012) -> np.ndarray:
+def human_protection(img: np.ndarray) -> np.ndarray:
+    """Soft person probability for the real subject only.
+
+    Returned as a probability rather than a dilated binary mask on purpose: the
+    screen composite needs a genuine alpha at the hair edge, and a grown binary
+    mask is precisely what produced the cyan halo it replaces.
+    """
     import torch
     import torchvision
 
@@ -355,20 +399,18 @@ def human_protection(img: np.ndarray, grow: float = 0.012) -> np.ndarray:
     h, w = img.shape[:2]
     p = cv2.resize(p.astype(np.float32), (w, h))
 
-    # Keep only the largest component. Semantic segmentation cannot tell a
-    # person in the room from a *picture* of a person on a screen, and the right
-    # monitor displays exactly that - it was being reported as 33% occluded by
-    # its own content, which would have left the old figure's silhouette
-    # untouched under the new interface. The real subject is an order of
-    # magnitude larger than anything shown on a panel behind him.
+    # Keep only the largest component's neighbourhood. Semantic segmentation
+    # cannot tell a person in the room from a *picture* of a person on a screen,
+    # and the right monitor displays exactly that - it was being reported as 33%
+    # occluded by its own content.
     binm = (p > 0.4).astype(np.uint8)
     n, labels, st, _ = cv2.connectedComponentsWithStats(binm, 8)
     if n > 1:
         biggest = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
-        binm = (labels == biggest).astype(np.uint8)
-
-    g = max(int(grow * min(h, w)) | 1, 5)
-    return cv2.dilate(binm.astype(np.float32), np.ones((g, g), np.uint8))
+        keep = cv2.dilate((labels == biggest).astype(np.uint8),
+                          np.ones((41, 41), np.uint8))
+        p = p * keep
+    return p
 
 
 def main() -> int:
