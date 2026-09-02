@@ -41,9 +41,9 @@ uv pip install --python .venv/Scripts/python.exe -e .
 .venv/Scripts/python.exe -m pytest tests/ -q
 ```
 
-Controls: `1`–`9` behaviour state · `c` clothing · `h` head attire · `d` debug
-overlay · `s` screenshot ·
-`q` quit.
+Controls: `1`–`9` behaviour state · `c` clothing · `h` head attire ·
+`d` debug overlay · `s` screenshot · `q` quit. Clothing and head attire are
+also dropdowns in the top right of the window — see [Wardrobe](#wardrobe).
 
 ## GPU requirements — read this before installing anything
 
