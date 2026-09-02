@@ -108,6 +108,51 @@ def largest_component(binary: np.ndarray) -> np.ndarray:
     return (labels == biggest).astype(np.float32)
 
 
+def remove_mic(img_bgr, matte, top_y_frac=0.52, kernel=21, contrast=26):
+    """Erase the boom arm and its cable from the torso, and fill behind them.
+
+    The mic overlaps him, so it survives any silhouette-based matte - it is
+    *inside* the person. Cutting a hole would be worse than leaving it: a
+    reconstruction model fed a torso with a tube-shaped void invents geometry to
+    fill it. So the mic is detected, removed, and the shirt behind it is
+    inpainted, giving the model a plausible complete human.
+
+    Detection is structural rather than by colour. The boom is bright specular
+    metal and its cable is near-black, so no single threshold finds both - but
+    both are *thin*, and a median filter wide enough to swallow a thin structure
+    leaves broad shading and fabric folds untouched. The difference between the
+    image and its median is therefore exactly the thin structures, whichever
+    direction their contrast runs.
+
+    Restricted to below `top_y_frac` of the frame so it can never touch the
+    face, beard, hair or headphones - the features identity is judged on.
+    """
+    h, w = img_bgr.shape[:2]
+    grey = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    smooth = cv2.medianBlur(grey, kernel | 1)
+    thin = cv2.absdiff(grey, smooth)
+
+    band = np.zeros((h, w), np.uint8)
+    band[int(h * top_y_frac):, :] = 1
+    hits = ((thin > contrast) & (matte > 0.5) & (band > 0)).astype(np.uint8)
+
+    # Keep only elongated components: fabric noise is blobby, a boom is not.
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(hits, connectivity=8)
+    keep = np.zeros_like(hits)
+    for i in range(1, n):
+        bw, bh = stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT]
+        area = stats[i, cv2.CC_STAT_AREA]
+        if area < 120:
+            continue
+        extent = area / float(max(bw * bh, 1))
+        if max(bw, bh) > 60 and extent < 0.45:      # long, and mostly not filled
+            keep[labels == i] = 1
+
+    keep = cv2.dilate(keep, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+    filled = cv2.inpaint(img_bgr, keep, 6, cv2.INPAINT_TELEA)
+    return filled, keep
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--plate", default="assets/reference/avatar_identity_camera1.png")
