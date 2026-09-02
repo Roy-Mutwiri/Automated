@@ -205,6 +205,35 @@ class LivePortraitRenderer:
 
         self._prepare_compositing(img_bgr, lmk, crop)
 
+    def _build_fill(self, img_bgr: np.ndarray, out_w: int, out_h: int) -> np.ndarray:
+        """Fill the 16:9 canvas either side of a taller-than-16:9 framing.
+
+        Keeping the shoulders means the framing is taller than the output
+        aspect, which leaves margins. Black bars would waste a third of the
+        frame and look like a mistake; the broadcast convention is a blurred,
+        over-scaled copy of the same image behind the sharp one.
+
+        It suits this pipeline particularly well: the fill is derived from the
+        source's own out-of-focus background, so the colour and lighting match
+        exactly, and being computed once it is perfectly static - it cannot
+        introduce the background wobble the brief rules out.
+        """
+        h, w = img_bgr.shape[:2]
+        cover = max(out_w / w, out_h / h) * 1.18   # over-scale, then crop
+        fw, fh = int(w * cover), int(h * cover)
+        filled = cv2.resize(img_bgr, (fw, fh), interpolation=cv2.INTER_LINEAR)
+        x0 = max((fw - out_w) // 2, 0)
+        y0 = max((fh - out_h) // 2, 0)
+        filled = filled[y0:y0 + out_h, x0:x0 + out_w]
+        if filled.shape[0] != out_h or filled.shape[1] != out_w:
+            filled = cv2.resize(filled, (out_w, out_h))
+
+        # Heavy blur so no edge in the fill competes with the face, then darken
+        # slightly so the sharp content reads as the subject.
+        k = max(31, (min(out_w, out_h) // 12) | 1)
+        filled = cv2.GaussianBlur(filled, (k, k), 0)
+        return cv2.convertScaleAbs(filled, alpha=0.72, beta=0)
+
     # -- output framing and compositing -------------------------------------
     def _prepare_compositing(self, img_bgr, lmk, crop) -> None:
         """Precompute a single affine from the 512 crop straight to the output.
