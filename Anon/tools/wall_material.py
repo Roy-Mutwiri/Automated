@@ -91,7 +91,7 @@ def wood_grain(h: int, w: int, seed: int) -> np.ndarray:
         amp *= 0.55
     acc /= max(total, 1e-6)
     acc = cv2.GaussianBlur(acc, (0, 0), sigmaX=0.6, sigmaY=6.0)
-    return np.clip((acc - acc.min()) / (acc.ptp() + 1e-6), 0, 1)
+    return np.clip((acc - acc.min()) / (np.ptp(acc) + 1e-6), 0, 1)
 
 
 def build_material(h: int, w: int, pitch: int, gap_frac: float,
