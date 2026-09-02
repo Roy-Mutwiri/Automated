@@ -135,7 +135,9 @@ def draw_debug(frame: np.ndarray, engine: BehaviorEngine, pose: AvatarPose,
                     colour, 1, cv2.LINE_AA)
         y += 19
 
-    cv2.putText(frame, "1-9 state   d debug   s screenshot   q quit",
+    cv2.putText(frame,
+                "1-9 state   c clothing   h head attire   d debug   "
+                "s screenshot   q quit",
                 (14, frame.shape[0] - 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                 (150, 160, 175), 1, cv2.LINE_AA)
 
