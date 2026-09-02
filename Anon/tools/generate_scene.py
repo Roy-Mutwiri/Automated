@@ -24,9 +24,11 @@ is what makes the hard requirements free rather than hand-built:
 
 Every clause is defending against a specific failure:
 
-* **Room described before the person.** Lead with the subject and SDXL returns
-  a portrait with a hint of room. Lead with the room and it builds a space and
-  puts someone in it - which is the composition actually wanted.
+* **Person first, shot size stated explicitly.** Leading with the room was
+  tried and failed outright: all eight candidates came back as empty interior
+  renders with no human in them. The person must be the grammatical subject to
+  be rendered at all - and the shot size must then be forced with "medium
+  shot" / "waist up" / a camera distance, or it collapses to a headshot.
 * **No text anywhere.** Nothing in the scene may require the model to spell.
   Signage, book spines, chart labels and screen UI all come back as gibberish.
   Screens are prompted dark and out of focus for this reason alone.
@@ -289,9 +291,12 @@ def main() -> int:
 
     print("\n[scene] face width (design gate: >= 120 px)")
     for i, p in enumerate(paths):
-        face = -1.0 if args.no_measure else measure_face(p, root)
-        verdict = "n/a" if face < 0 else ("PASS" if face >= 120 else "reject")
-        print(f"  {p.name:<26} {face:6.0f} px  {verdict}")
+        if args.no_measure:
+            face, verdict, cover = -1.0, "n/a", -1.0
+        else:
+            cover = _person_coverage(cv2.imread(str(p)))
+            face, verdict = measure_scene(p, root, cover)
+        print(f"  {p.name:<26} person {cover * 100:5.1f}%  face {face:6.0f} px  {verdict}")
         im = cv2.imread(str(p))
         im = cv2.resize(im, (cell_w - 6, cell_h - 6))
         r, c = divmod(i, cols)
