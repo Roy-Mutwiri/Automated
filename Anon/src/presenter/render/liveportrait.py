@@ -415,7 +415,7 @@ class LivePortraitRenderer:
             # original background, and letting that through would paint the old
             # bokeh back over the room in a rectangle around the head.
             self.subject_alpha_out = alpha_out.astype(np.float32)
-            self._finish_blend_setup(crop, w, h, out_w, out_h)
+            self._finish_blend_setup(crop, M_src2out, w, h, out_w, out_h)
             return
 
         self.person_matte = None
