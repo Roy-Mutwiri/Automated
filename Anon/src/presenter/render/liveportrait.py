@@ -523,7 +523,8 @@ class LivePortraitRenderer:
             frame_w = min(float(w), frame_h * out_w / out_h)
 
         if self.framing == "full":
-            left = top = 0.0
+            left = (w - frame_w) * 0.5
+            top = (h - frame_h) * 0.5
         else:
             left = face_cx - frame_w * 0.5
             if self.framing == "close":
