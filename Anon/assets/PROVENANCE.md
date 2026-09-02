@@ -5,13 +5,13 @@
 | | |
 |---|---|
 | Depicts | **A synthetic person. No real individual.** |
-| File | `SDXL_image_0000227.jpg` (renamed) |
+| File | `SDXL_image_0001002.jpg` (renamed) |
 | Resolution | 1024 × 1024 |
 | Dataset | [SFHQ-T2I](https://github.com/SelfishGene/SFHQ-T2I-dataset) — Synthetic Faces High Quality, Text2Image (122,726 curated synthetic faces) |
 | Dataset licence | **MIT** |
 | Generating model | **SDXL** (encoded in the filename prefix) |
 | Model output licence | **CreativeML Open RAIL++-M** — permits commercial use |
-| Obtained from | HF mirror `bitmind/SyntheticFacesHighQuality-T2I`, `tiny-sample.zip` |
+| Obtained from | HF mirror `bitmind/SyntheticFacesHighQuality-T2I`, `small-sample.zip` |
 | Retrieved | 2026-09-02 |
 
 ## Why this image specifically
@@ -38,7 +38,7 @@ than assumed.
 **Suitability as a presenter.** Requested identity: an Arab man. Selected from
 the licence-safe SDXL subset against the visual requirements:
 
-- Middle-aged Gulf Arab man in white ghutra and black egal.
+- Gulf Arab man in white ghutra and black egal.
 - Direct camera gaze with genuine eye contact — the presenter read.
 - Front-facing, no glasses (specular reflections and occlusion complicate
   eyelid animation; a rejected candidate wore them).
@@ -51,10 +51,12 @@ the licence-safe SDXL subset against the visual requirements:
 
 **Known caveats for this source:**
 
-- His resting expression carries a **furrowed brow**, so the neutral state
-  reads as stern rather than open. That is baked into the source image; the
-  behaviour engine can only move relative to it. Fixing it means choosing a
-  different portrait, not tuning a parameter.
+- An earlier pick (`SDXL_image_0000227.jpg`) was rejected after seeing it
+  animated: its resting expression carried a furrowed brow, so the neutral
+  state read as stern rather than open. Resting expression is baked into the
+  source - the behaviour engine can only move relative to it - so this is a
+  portrait-selection problem, not a tuning one. Worth checking on any
+  replacement.
 - Head pose in the source is yaw −10°, pitch +8°. The renderer neutralises 85 %
   of that (`neutralize_pose`) so he addresses the lens; a little residual is
   left deliberately, since a perfectly square head is itself unnatural.
