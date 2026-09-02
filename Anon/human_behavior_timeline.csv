@@ -1,186 +1,165 @@
 t_seconds,timestamp,kind,detail,magnitude
 0.033,00:00.033,attention,CHAT az=+19.0 el=-7.7 share=0.16,20.7301
-1.767,00:01.767,attention,LENS az=+0.4 el=+0.2 share=0.00,20.1808
+2.500,00:02.500,attention,LENS az=-0.1 el=+0.1 share=0.00,20.5948
 4.067,00:04.067,blink,dur=212ms depth=0.99,0.9867
-4.233,00:04.233,attention,DESK az=-5.5 el=-18.8 share=0.00,19.9063
-7.033,00:07.033,attention,MAIN_DISPLAY az=-1.2 el=-3.7 share=0.00,15.6949
-7.600,00:07.600,blink,dur=213ms depth=0.97,0.9661
-8.733,00:08.733,head_yaw,"to=(+1.49,+0.68,+0.80)deg dur=0.88s",1.4876
-9.500,00:09.500,attention,LENS az=+0.4 el=+0.4 share=0.00,4.4136
-12.333,00:12.333,attention,SECOND_DISPLAY az=-22.6 el=-2.7 share=0.23,23.2327
-13.533,00:13.533,attention,LENS az=-0.1 el=+0.6 share=0.00,22.7478
-14.700,00:14.700,blink,dur=241ms depth=0.98,0.9846
-16.900,00:16.900,head_roll,"to=(+1.13,+0.55,-0.44)deg dur=0.80s",1.2373
-17.600,00:17.600,blink,dur=171ms depth=0.97,0.9653
-17.900,00:17.900,blink,dur=203ms depth=1.00,0.9950
-23.667,00:23.667,head_yaw,"to=(+0.05,+0.70,-0.30)deg dur=0.75s",1.0739
-25.667,00:25.667,attention,MIDDLE_DISTANCE az=+12.0 el=+11.4 share=0.02,16.2256
-26.233,00:26.233,attention,MAIN_DISPLAY az=-1.7 el=-5.8 share=0.00,22.0088
-27.200,00:27.200,expression,mouth_settle peak=0.152 dur=2.63s,0.1517
-28.867,00:28.867,blink,dur=242ms depth=0.97,0.9657
-30.133,00:30.133,attention,LENS az=-0.3 el=+0.6 share=0.00,6.5477
-34.967,00:34.967,attention,MAIN_DISPLAY az=-2.4 el=-4.6 share=0.00,5.5944
-38.267,00:38.267,attention,CHAT az=+17.5 el=-5.5 share=0.13,19.9254
-39.167,00:39.167,blink,dur=230ms depth=0.99,0.9892
-40.800,00:40.800,attention,DESK az=-5.4 el=-15.9 share=0.00,25.2009
-41.500,00:41.500,attention,LENS az=-0.2 el=+1.0 share=0.00,17.6583
-44.867,00:44.867,attention,SECOND_DISPLAY az=-20.8 el=-3.9 share=0.20,21.1186
-45.767,00:45.767,posture_shift,"to=(+0.0120,+0.0048) dur=1.21s",0.0168
-46.033,00:46.033,attention,LENS az=+0.7 el=+0.3 share=0.00,21.8705
-46.767,00:46.767,expression,cheek_tension peak=0.110 dur=1.91s,0.1097
-48.833,00:48.833,attention,CHAT az=+17.4 el=-6.3 share=0.13,17.9772
-49.667,00:49.667,attention,DESK az=-3.1 el=-16.6 share=0.00,23.0058
-50.300,00:50.300,state_change,IDLE_ATTENTIVE -> READING,0.0000
-50.700,00:50.700,attention,MAIN_DISPLAY az=-4.5 el=-5.6 share=0.00,11.0930
-52.433,00:52.433,attention,SECOND_DISPLAY az=-22.9 el=-3.2 share=0.24,18.5614
-53.333,00:53.333,attention,MAIN_DISPLAY az=-2.1 el=-3.7 share=0.00,20.7440
-54.267,00:54.267,blink,dur=204ms depth=1.00,0.9955
-55.400,00:55.400,attention,MIDDLE_DISTANCE az=+11.4 el=+7.5 share=0.01,17.5169
-58.500,00:58.500,attention,MAIN_DISPLAY az=-1.9 el=-4.9 share=0.00,18.1438
-62.567,01:02.567,attention,DESK az=-6.7 el=-19.0 share=0.00,14.8999
-63.700,01:03.700,blink,dur=174ms depth=0.97,0.9740
-63.900,01:03.900,expression,eye_engage peak=0.155 dur=1.76s,0.1550
-63.933,01:03.933,blink,dur=150ms depth=0.99,0.9871
-64.300,01:04.300,attention,CHAT az=+17.6 el=-4.8 share=0.13,28.1481
-67.267,01:07.267,head_pitch,"to=(-1.18,-0.80,-0.62)deg dur=0.89s",1.5045
-69.900,01:09.900,state_change,READING -> IDLE_ATTENTIVE,0.0000
-70.467,01:10.467,attention,MAIN_DISPLAY az=-1.9 el=-4.5 share=0.00,19.4272
-71.633,01:11.633,attention,LENS az=+0.5 el=+1.0 share=0.00,6.0359
-76.500,01:16.500,attention,CHAT az=+17.0 el=-4.6 share=0.12,17.4493
-78.233,01:18.233,attention,LENS az=+0.2 el=+0.7 share=0.00,17.6278
-82.967,01:22.967,attention,SECOND_DISPLAY az=-21.0 el=-2.7 share=0.20,21.4940
-85.433,01:25.433,attention,MAIN_DISPLAY az=-0.7 el=-4.2 share=0.00,20.3925
-86.033,01:26.033,blink,dur=201ms depth=0.99,0.9904
-88.433,01:28.433,attention,LENS az=+0.2 el=+0.2 share=0.00,4.5002
-93.333,01:33.333,state_change,IDLE_ATTENTIVE -> THINKING,0.0000
-93.333,01:33.333,attention,DESK az=-8.4 el=-17.8 share=0.00,19.9466
-95.833,01:35.833,attention,MIDDLE_DISTANCE az=+11.2 el=+9.7 share=0.00,33.7296
-100.200,01:40.200,posture_shift,"to=(-0.0068,-0.0062) dur=2.18s",0.0297
-100.300,01:40.300,blink,dur=150ms depth=0.99,0.9927
-102.767,01:42.767,state_change,THINKING -> IDLE_ATTENTIVE,0.0000
-103.233,01:43.233,blink,dur=232ms depth=0.99,0.9912
-103.333,01:43.333,attention,LENS az=-0.5 el=+0.5 share=0.00,14.8735
-105.533,01:45.533,blink,dur=186ms depth=0.99,0.9891
-107.800,01:47.800,head_yaw,"to=(+0.04,-0.86,-0.09)deg dur=0.80s",1.2203
-108.033,01:48.033,attention,MAIN_DISPLAY az=-1.6 el=-4.5 share=0.00,5.0649
-109.900,01:49.900,expression,brow_tension peak=0.212 dur=2.24s,0.2118
-112.967,01:52.967,attention,LENS az=+0.2 el=+1.2 share=0.00,5.9023
-113.700,01:53.700,blink,dur=187ms depth=0.96,0.9615
-117.600,01:57.600,attention,CHAT az=+19.2 el=-4.5 share=0.16,19.8529
-119.100,01:59.100,attention,LENS az=+0.6 el=+0.9 share=0.00,19.4202
-120.900,02:00.900,blink,dur=153ms depth=0.99,0.9910
-125.000,02:05.000,attention,DESK az=-6.6 el=-17.5 share=0.00,19.8126
-127.433,02:07.433,attention,LENS az=+0.2 el=+0.7 share=0.00,19.4699
-129.533,02:09.533,blink_partial,dur=158ms depth=0.81,0.8068
-134.367,02:14.367,blink_partial,dur=236ms depth=0.82,0.8203
-136.500,02:16.500,blink_partial,dur=231ms depth=0.66,0.6616
-137.067,02:17.067,attention,SECOND_DISPLAY az=-18.3 el=-3.5 share=0.15,18.9806
-138.800,02:18.800,blink_partial,dur=248ms depth=0.57,0.5684
-141.267,02:21.267,attention,LENS az=+0.4 el=+1.1 share=0.00,19.2997
-145.167,02:25.167,attention,MAIN_DISPLAY az=-1.2 el=-4.4 share=0.00,5.6716
-145.667,02:25.667,blink,dur=189ms depth=0.99,0.9929
-145.967,02:25.967,double_blink_second,dur=220ms depth=1.00,0.9990
-147.333,02:27.333,expression,eye_engage peak=0.180 dur=2.31s,0.1803
-147.733,02:27.733,state_change,IDLE_ATTENTIVE -> IDLE_RELAXED,0.0000
-148.267,02:28.267,head_pitch,"to=(-0.63,+0.95,+0.58)deg dur=0.98s",1.8090
-149.033,02:29.033,attention,DESK az=-5.8 el=-16.8 share=0.00,13.2306
-152.567,02:32.567,attention,MIDDLE_DISTANCE az=+9.4 el=+7.9 share=0.00,29.0075
-152.667,02:32.667,blink,dur=185ms depth=0.99,0.9875
-154.267,02:34.267,head_roll,"to=(-0.58,+0.41,-0.39)deg dur=0.72s",0.9776
-155.467,02:35.467,blink,dur=219ms depth=0.98,0.9801
-156.867,02:36.867,attention,SECOND_DISPLAY az=-20.7 el=-5.0 share=0.19,32.7907
-158.133,02:38.133,blink,dur=150ms depth=0.98,0.9756
-159.433,02:39.433,attention,LENS az=+0.4 el=+0.3 share=0.00,21.7558
-161.867,02:41.867,expression,brow_lift peak=0.233 dur=1.39s,0.2326
-162.033,02:42.033,blink,dur=194ms depth=0.99,0.9856
-165.533,02:45.533,attention,SECOND_DISPLAY az=-20.7 el=-4.0 share=0.19,21.5114
-166.567,02:46.567,head_roll,"to=(-0.85,+0.78,-0.01)deg dur=0.53s",0.3795
-167.267,02:47.267,attention,MAIN_DISPLAY az=-1.6 el=-5.4 share=0.00,19.1764
-167.500,02:47.500,blink,dur=239ms depth=0.99,0.9902
-167.800,02:47.800,blink,dur=160ms depth=0.99,0.9949
-170.267,02:50.267,attention,LENS az=+0.6 el=+0.7 share=0.00,6.3997
-174.933,02:54.933,blink,dur=232ms depth=0.96,0.9643
-175.167,02:55.167,attention,SECOND_DISPLAY az=-20.2 el=-2.5 share=0.18,20.9971
-175.800,02:55.800,attention,LENS az=+0.5 el=+0.5 share=0.00,20.9240
-176.033,02:56.033,state_change,IDLE_RELAXED -> IDLE_ATTENTIVE,0.0000
-181.933,03:01.933,attention,DESK az=-8.7 el=-18.4 share=0.00,21.0448
-184.900,03:04.900,blink,dur=252ms depth=0.97,0.9678
-184.967,03:04.967,expression,mouth_settle peak=0.246 dur=2.10s,0.2455
-185.567,03:05.567,attention,LENS az=-0.3 el=+0.9 share=0.00,21.1004
-187.567,03:07.567,head_yaw,"to=(-1.64,+0.13,+0.48)deg dur=0.66s",0.7883
-191.467,03:11.467,attention,MAIN_DISPLAY az=-1.2 el=-4.8 share=0.00,5.8472
-195.733,03:15.733,blink,dur=193ms depth=0.98,0.9819
-198.233,03:18.233,attention,LENS az=-0.1 el=+0.7 share=0.00,5.6727
-199.200,03:19.200,blink,dur=213ms depth=1.00,0.9977
-202.733,03:22.733,blink,dur=217ms depth=0.98,0.9834
-203.700,03:23.700,attention,MAIN_DISPLAY az=-0.1 el=-5.0 share=0.00,5.7703
-204.433,03:24.433,attention,LENS az=+0.3 el=+0.8 share=0.00,5.8822
-206.433,03:26.433,blink,dur=162ms depth=0.98,0.9813
-207.733,03:27.733,attention,CHAT az=+18.4 el=-6.7 share=0.15,19.5819
-208.267,03:28.267,expression,brow_tension peak=0.122 dur=2.20s,0.1219
-208.733,03:28.733,blink,dur=178ms depth=0.97,0.9673
-209.933,03:29.933,attention,LENS az=-0.1 el=+0.8 share=0.00,19.9412
-211.333,03:31.333,head_roll,"to=(-1.09,-0.44,-0.15)deg dur=0.61s",0.6368
-213.200,03:33.200,state_change,IDLE_ATTENTIVE -> IDLE_RELAXED,0.0000
-217.333,03:37.333,blink_partial,dur=224ms depth=0.83,0.8267
-218.300,03:38.300,attention,MAIN_DISPLAY az=-2.3 el=-4.2 share=0.00,5.5233
-218.967,03:38.967,posture_shift,"to=(+0.0087,-0.0059) dur=1.82s",0.0157
-220.333,03:40.333,blink,dur=206ms depth=0.97,0.9748
-221.700,03:41.700,attention,SECOND_DISPLAY az=-23.0 el=-2.2 share=0.24,20.7974
-222.800,03:42.800,attention,CHAT az=+18.3 el=-5.6 share=0.15,41.4555
-224.433,03:44.433,attention,LENS az=+0.2 el=+0.2 share=0.00,19.0975
-226.567,03:46.567,expression,jaw_release peak=0.169 dur=1.61s,0.1695
-227.000,03:47.000,attention,DESK az=-7.2 el=-16.4 share=0.00,18.1878
-228.233,03:48.233,attention,MAIN_DISPLAY az=-1.4 el=-4.2 share=0.00,13.5067
-233.267,03:53.267,blink,dur=255ms depth=0.99,0.9931
-233.500,03:53.500,attention,DESK az=-7.4 el=-17.0 share=0.00,14.1462
-234.733,03:54.733,attention,LENS az=-0.0 el=+0.8 share=0.00,19.3255
-235.300,03:55.300,blink,dur=261ms depth=1.00,0.9981
-235.833,03:55.833,expression,brow_lift peak=0.216 dur=1.57s,0.2158
-237.567,03:57.567,attention,MIDDLE_DISTANCE az=+11.6 el=+9.2 share=0.01,14.3277
-238.100,03:58.100,blink,dur=243ms depth=1.00,0.9952
-238.400,03:58.400,blink,dur=161ms depth=0.97,0.9663
-239.200,03:59.200,attention,LENS az=-0.1 el=+0.5 share=0.00,14.5975
-241.667,04:01.667,blink,dur=217ms depth=0.98,0.9839
-243.267,04:03.267,attention,DESK az=-8.3 el=-15.2 share=0.00,17.6734
-245.833,04:05.833,blink,dur=150ms depth=0.96,0.9607
-245.867,04:05.867,attention,LENS az=+0.0 el=+1.0 share=0.00,18.1580
-248.133,04:08.133,attention,MIDDLE_DISTANCE az=+10.2 el=+6.6 share=0.00,11.5635
-249.467,04:09.467,attention,MAIN_DISPLAY az=-1.9 el=-5.9 share=0.00,17.3370
-251.000,04:11.000,blink,dur=150ms depth=0.97,0.9684
-252.067,04:12.067,attention,DESK az=-6.3 el=-14.7 share=0.00,9.8423
-252.800,04:12.800,attention,SECOND_DISPLAY az=-20.7 el=-4.4 share=0.19,17.6952
-253.200,04:13.200,expression,eye_engage peak=0.045 dur=2.72s,0.0448
-254.033,04:14.033,blink,dur=197ms depth=0.99,0.9939
-255.033,04:15.033,attention,MAIN_DISPLAY az=-1.4 el=-5.0 share=0.00,19.2862
-256.700,04:16.700,head_roll,"to=(-0.36,-0.25,+0.84)deg dur=0.73s",0.9981
-257.267,04:17.267,attention,MIDDLE_DISTANCE az=+10.2 el=+7.7 share=0.00,17.1289
-257.300,04:17.300,blink,dur=216ms depth=0.99,0.9857
-258.933,04:18.933,blink,dur=163ms depth=0.97,0.9709
-259.167,04:19.167,attention,LENS az=+0.2 el=+0.5 share=0.00,12.2748
-259.200,04:19.200,blink,dur=227ms depth=0.97,0.9724
-261.133,04:21.133,blink,dur=194ms depth=0.98,0.9844
-261.467,04:21.467,blink,dur=222ms depth=0.99,0.9925
-261.700,04:21.700,attention,MAIN_DISPLAY az=-2.6 el=-3.9 share=0.00,5.2184
-261.733,04:21.733,blink,dur=192ms depth=1.00,0.9962
-265.367,04:25.367,attention,LENS az=-0.9 el=+0.4 share=0.00,4.6431
-268.333,04:28.333,attention,DESK az=-7.5 el=-18.4 share=0.00,19.9111
-269.267,04:29.267,attention,SECOND_DISPLAY az=-20.2 el=-2.7 share=0.18,20.1701
-270.367,04:30.367,head_yaw,"to=(-1.57,+0.08,+0.85)deg dur=0.79s",1.2013
-270.933,04:30.933,attention,MIDDLE_DISTANCE az=+11.3 el=+7.2 share=0.01,33.0404
-271.500,04:31.500,posture_shift,"to=(-0.0038,+0.0086) dur=2.00s",0.0270
-271.500,04:31.500,expression,jaw_release peak=0.125 dur=2.04s,0.1248
-273.267,04:33.267,attention,MAIN_DISPLAY az=-1.8 el=-3.9 share=0.00,17.2306
-275.100,04:35.100,attention,SECOND_DISPLAY az=-19.0 el=-1.7 share=0.16,17.2911
-277.133,04:37.133,attention,LENS az=-0.3 el=+0.5 share=0.00,18.7602
-278.700,04:38.700,state_change,IDLE_RELAXED -> READING,0.0000
-278.833,04:38.833,head_yaw,"to=(-0.42,+0.43,+0.73)deg dur=0.77s",1.1468
-280.033,04:40.033,blink,dur=265ms depth=0.98,0.9806
-282.933,04:42.933,attention,DESK az=-9.2 el=-19.4 share=0.00,21.8239
-285.233,04:45.233,attention,SECOND_DISPLAY az=-19.6 el=-7.3 share=0.17,15.9363
-286.333,04:46.333,attention,MAIN_DISPLAY az=-1.9 el=-2.9 share=0.00,18.2636
-286.500,04:46.500,blink,dur=218ms depth=0.99,0.9944
-288.933,04:48.933,expression,eye_engage peak=0.183 dur=1.65s,0.1831
-290.633,04:50.633,state_change,READING -> IDLE_RELAXED,0.0000
-296.367,04:56.367,attention,LENS az=+0.4 el=+0.9 share=0.00,4.3689
-300.000,05:00.000,posture_shift,"to=(+0.0081,-0.0049) dur=2.48s",0.0254
+6.767,00:06.767,blink,dur=223ms depth=0.96,0.9638
+8.733,00:08.733,head_pitch,"to=(+1.03,+1.15,+0.37)deg dur=0.77s",1.1453
+9.600,00:09.600,attention,MAIN_DISPLAY az=-3.0 el=-4.9 share=0.00,5.7789
+9.933,00:09.933,blink,dur=289ms depth=1.00,0.9981
+14.400,00:14.400,attention,MIDDLE_DISTANCE az=+11.5 el=+9.3 share=0.01,20.2903
+16.500,00:16.500,blink,dur=150ms depth=1.00,0.9993
+17.500,00:17.500,attention,LENS az=+0.1 el=+0.6 share=0.00,14.3550
+18.233,00:18.233,blink,dur=243ms depth=0.99,0.9948
+21.800,00:21.800,attention,CHAT az=+17.7 el=-5.2 share=0.13,18.5009
+22.200,00:22.200,blink,dur=160ms depth=0.98,0.9820
+22.467,00:22.467,double_blink_second,dur=153ms depth=1.00,0.9955
+24.567,00:24.567,attention,LENS az=-0.4 el=+0.6 share=0.00,19.0168
+25.800,00:25.800,blink,dur=196ms depth=1.00,0.9994
+26.800,00:26.800,expression,brow_tension peak=0.095 dur=2.19s,0.0951
+30.367,00:30.367,blink,dur=188ms depth=0.98,0.9805
+31.233,00:31.233,attention,MAIN_DISPLAY az=-1.5 el=-3.9 share=0.00,4.6424
+31.500,00:31.500,blink,dur=255ms depth=0.98,0.9819
+37.867,00:37.867,attention,CHAT az=+16.7 el=-4.4 share=0.11,18.2070
+38.700,00:38.700,attention,MIDDLE_DISTANCE az=+6.5 el=+7.3 share=0.00,15.5787
+39.067,00:39.067,blink,dur=247ms depth=0.97,0.9685
+42.167,00:42.167,blink_partial,dur=281ms depth=0.81,0.8052
+43.333,00:43.333,blink,dur=206ms depth=0.99,0.9923
+45.200,00:45.200,blink,dur=216ms depth=0.99,0.9859
+45.767,00:45.767,posture_shift,"to=(+0.0086,-0.0094) dur=1.62s",0.0180
+48.067,00:48.067,attention,LENS az=+0.5 el=+0.5 share=0.00,9.0745
+48.900,00:48.900,blink,dur=211ms depth=0.99,0.9892
+50.300,00:50.300,state_change,IDLE_ATTENTIVE -> IDLE_RELAXED,0.0000
+53.433,00:53.433,blink,dur=222ms depth=0.96,0.9626
+56.733,00:56.733,attention,MIDDLE_DISTANCE az=+15.5 el=+9.7 share=0.09,17.5696
+57.433,00:57.433,blink,dur=184ms depth=0.97,0.9744
+58.500,00:58.500,attention,LENS az=-0.8 el=-0.2 share=0.00,19.0584
+62.300,01:02.300,blink,dur=167ms depth=0.98,0.9829
+62.600,01:02.600,blink,dur=155ms depth=1.00,0.9951
+62.900,01:02.900,expression,brow_lift peak=0.141 dur=2.45s,0.1410
+65.933,01:05.933,blink,dur=196ms depth=0.97,0.9680
+66.967,01:06.967,head_pitch,"to=(+1.84,-0.20,+0.66)deg dur=0.83s",1.3409
+69.333,01:09.333,attention,MAIN_DISPLAY az=-2.1 el=-5.1 share=0.00,5.0785
+73.033,01:13.033,blink,dur=257ms depth=0.97,0.9690
+75.167,01:15.167,blink,dur=158ms depth=0.98,0.9803
+76.000,01:16.000,attention,SECOND_DISPLAY az=-21.3 el=-4.3 share=0.21,19.1914
+76.467,01:16.467,head_yaw,"to=(+0.84,-0.86,+0.67)deg dur=0.73s",0.9928
+77.867,01:17.867,attention,LENS az=-0.3 el=+0.1 share=0.00,21.4305
+81.567,01:21.567,blink,dur=183ms depth=0.98,0.9809
+83.967,01:23.967,head_pitch,"to=(+1.07,+0.56,+0.63)deg dur=0.86s",1.4217
+85.100,01:25.100,blink,dur=153ms depth=0.96,0.9621
+85.433,01:25.433,attention,MIDDLE_DISTANCE az=+9.0 el=+9.2 share=0.00,13.0442
+88.033,01:28.033,blink,dur=252ms depth=0.98,0.9807
+88.633,01:28.633,attention,LENS az=+0.2 el=+0.6 share=0.00,12.3696
+91.767,01:31.767,head_yaw,"to=(-0.38,+0.61,+0.11)deg dur=0.87s",1.4433
+91.833,01:31.833,state_change,IDLE_RELAXED -> IDLE_ATTENTIVE,0.0000
+93.267,01:33.267,blink,dur=180ms depth=0.98,0.9758
+93.400,01:33.400,expression,brow_tension peak=0.160 dur=2.44s,0.1603
+93.600,01:33.600,posture_shift,"to=(+0.0009,+0.0006) dur=2.19s",0.0177
+94.833,01:34.833,attention,CHAT az=+20.8 el=-5.1 share=0.20,21.3904
+96.467,01:36.467,blink_partial,dur=187ms depth=0.65,0.6513
+96.800,01:36.800,attention,MAIN_DISPLAY az=-2.1 el=-5.0 share=0.00,22.9087
+100.333,01:40.333,blink,dur=213ms depth=0.99,0.9867
+101.833,01:41.833,expression,cheek_tension peak=0.186 dur=2.33s,0.1865
+106.967,01:46.967,head_yaw,"to=(-2.92,+0.37,+0.34)deg dur=1.21s",2.5414
+108.667,01:48.667,attention,LENS az=-0.2 el=+0.8 share=0.00,6.1601
+113.633,01:53.633,attention,DESK az=-5.4 el=-16.9 share=0.00,18.5222
+114.833,01:54.833,attention,LENS az=-0.3 el=+1.0 share=0.00,18.6499
+116.533,01:56.533,expression,jaw_release peak=0.305 dur=2.00s,0.3051
+122.233,02:02.233,attention,CHAT az=+18.6 el=-5.9 share=0.15,20.1029
+122.533,02:02.533,blink,dur=170ms depth=0.96,0.9645
+125.867,02:05.867,attention,MAIN_DISPLAY az=-2.6 el=-4.2 share=0.00,21.2340
+128.633,02:08.633,blink,dur=165ms depth=0.98,0.9765
+131.600,02:11.600,attention,LENS az=+0.2 el=+0.8 share=0.00,5.7300
+132.267,02:12.267,blink,dur=202ms depth=0.98,0.9845
+132.467,02:12.467,expression,brow_tension peak=0.173 dur=2.30s,0.1733
+134.600,02:14.600,attention,SECOND_DISPLAY az=-22.5 el=-4.7 share=0.23,23.3015
+134.967,02:14.967,head_yaw,"to=(+0.20,+1.90,+0.33)deg dur=1.39s",3.1144
+135.967,02:15.967,blink,dur=248ms depth=0.97,0.9718
+136.100,02:16.100,attention,MIDDLE_DISTANCE az=+10.0 el=+6.8 share=0.00,34.4927
+136.300,02:16.300,double_blink_second,dur=202ms depth=0.97,0.9726
+138.733,02:18.733,blink,dur=155ms depth=0.97,0.9702
+145.000,02:25.000,attention,LENS az=-1.2 el=+0.3 share=0.00,12.9576
+145.033,02:25.033,blink,dur=209ms depth=0.98,0.9837
+151.567,02:31.567,head_yaw,"to=(+2.98,+1.56,-0.16)deg dur=1.29s",2.7860
+153.433,02:33.433,attention,MAIN_DISPLAY az=-2.0 el=-6.1 share=0.00,6.4444
+154.533,02:34.533,blink,dur=189ms depth=0.96,0.9640
+157.433,02:37.433,attention,LENS az=-0.9 el=-0.0 share=0.00,6.1614
+157.700,02:37.700,expression,eye_engage peak=0.123 dur=1.78s,0.1229
+164.300,02:44.300,posture_shift,"to=(-0.0055,+0.0053) dur=2.21s",0.0111
+164.700,02:44.700,attention,DESK az=-6.2 el=-18.8 share=0.00,19.5578
+165.567,02:45.567,blink,dur=196ms depth=0.97,0.9658
+167.467,02:47.467,attention,LENS az=-0.6 el=+0.6 share=0.00,20.2537
+170.667,02:50.667,attention,MIDDLE_DISTANCE az=+10.6 el=+8.7 share=0.00,13.8126
+170.933,02:50.933,blink,dur=214ms depth=0.99,0.9875
+171.133,02:51.133,head_yaw,"to=(+0.78,+0.77,-0.35)deg dur=1.11s",2.2011
+175.567,02:55.567,expression,mouth_settle peak=0.218 dur=2.13s,0.2177
+175.633,02:55.633,blink,dur=160ms depth=1.00,0.9977
+175.900,02:55.900,double_blink_second,dur=221ms depth=0.99,0.9926
+177.533,02:57.533,blink,dur=250ms depth=1.00,0.9969
+178.567,02:58.567,blink_partial,dur=190ms depth=0.67,0.6747
+179.000,02:59.000,attention,MAIN_DISPLAY az=-1.6 el=-4.0 share=0.00,17.6197
+179.700,02:59.700,blink,dur=212ms depth=0.99,0.9944
+180.267,03:00.267,attention,LENS az=+0.4 el=+0.6 share=0.00,5.0144
+182.600,03:02.600,head_yaw,"to=(-1.07,+1.10,-0.17)deg dur=0.99s",1.8491
+185.067,03:05.067,blink,dur=250ms depth=0.98,0.9813
+185.300,03:05.300,head_yaw,"to=(-0.18,+0.56,+0.00)deg dur=0.69s",0.8852
+186.833,03:06.833,state_change,IDLE_ATTENTIVE -> FOCUSED,0.0000
+190.800,03:10.800,blink,dur=185ms depth=0.96,0.9627
+191.367,03:11.367,attention,SECOND_DISPLAY az=-19.1 el=-1.9 share=0.16,19.6279
+193.567,03:13.567,expression,brow_tension peak=0.149 dur=1.46s,0.1490
+194.133,03:14.133,blink,dur=261ms depth=0.96,0.9614
+194.767,03:14.767,state_change,FOCUSED -> IDLE_ATTENTIVE,0.0000
+195.300,03:15.300,attention,LENS az=-0.3 el=+0.2 share=0.00,18.8917
+196.667,03:16.667,posture_shift,"to=(-0.0108,+0.0028) dur=1.34s",0.0078
+202.967,03:22.967,attention,MAIN_DISPLAY az=-2.9 el=-5.7 share=0.00,6.4416
+206.000,03:26.000,expression,mouth_settle peak=0.272 dur=1.67s,0.2718
+208.500,03:28.500,attention,CHAT az=+16.6 el=-5.6 share=0.11,19.4604
+208.767,03:28.767,head_yaw,"to=(+1.49,+0.56,-1.13)deg dur=0.94s",1.6696
+210.400,03:30.400,attention,MIDDLE_DISTANCE az=+11.7 el=+9.1 share=0.01,15.4386
+214.800,03:34.800,blink,dur=151ms depth=0.97,0.9712
+214.867,03:34.867,attention,LENS az=+0.2 el=-0.3 share=0.00,14.8847
+216.400,03:36.400,head_roll,"to=(+0.83,+1.22,-0.31)deg dur=0.67s",0.8210
+219.000,03:39.000,posture_shift,"to=(+0.0154,+0.0049) dur=2.12s",0.0283
+221.467,03:41.467,blink_partial,dur=338ms depth=0.84,0.8428
+222.433,03:42.433,attention,MAIN_DISPLAY az=-2.0 el=-4.3 share=0.00,4.5859
+224.367,03:44.367,blink,dur=217ms depth=0.99,0.9866
+225.400,03:45.400,expression,cheek_tension peak=0.129 dur=1.43s,0.1288
+227.533,03:47.533,attention,LENS az=+0.7 el=+0.5 share=0.00,5.5066
+228.333,03:48.333,blink,dur=207ms depth=0.99,0.9915
+230.933,03:50.933,attention,CHAT az=+15.0 el=-5.4 share=0.08,15.5032
+231.533,03:51.533,head_pitch,"to=(+0.62,-2.00,+0.64)deg dur=1.43s",3.2196
+231.600,03:51.600,blink,dur=178ms depth=0.98,0.9839
+233.933,03:53.933,blink,dur=229ms depth=0.97,0.9660
+236.300,03:56.300,attention,MAIN_DISPLAY az=-3.5 el=-4.0 share=0.00,18.5987
+238.033,03:58.033,blink,dur=219ms depth=0.99,0.9948
+241.500,04:01.500,head_yaw,"to=(+2.54,-1.35,+0.04)deg dur=1.02s",1.9276
+242.767,04:02.767,attention,LENS az=+0.4 el=+0.7 share=0.00,6.1256
+246.567,04:06.567,state_change,IDLE_ATTENTIVE -> MILD_POSITIVE,0.0000
+248.900,04:08.900,blink_partial,dur=242ms depth=0.74,0.7444
+249.233,04:09.233,state_change,MILD_POSITIVE -> IDLE_ATTENTIVE,0.0000
+249.567,04:09.567,attention,SECOND_DISPLAY az=-19.7 el=-4.1 share=0.17,20.6650
+250.967,04:10.967,blink,dur=172ms depth=1.00,0.9997
+253.833,04:13.833,attention,LENS az=-0.7 el=+0.7 share=0.00,19.6445
+253.933,04:13.933,blink,dur=211ms depth=0.99,0.9851
+256.433,04:16.433,blink_partial,dur=207ms depth=0.79,0.7919
+257.567,04:17.567,head_yaw,"to=(+1.45,-0.54,-0.26)deg dur=0.76s",1.0920
+261.633,04:21.633,blink,dur=176ms depth=0.97,0.9734
+261.700,04:21.700,attention,MAIN_DISPLAY az=-0.6 el=-3.9 share=0.00,4.5863
+263.167,04:23.167,expression,eye_engage peak=0.144 dur=1.15s,0.1439
+264.867,04:24.867,posture_shift,"to=(-0.0124,-0.0063) dur=2.37s",0.0390
+266.100,04:26.100,head_yaw,"to=(-1.26,-1.10,-0.44)deg dur=1.27s",2.7149
+266.667,04:26.667,blink,dur=184ms depth=1.00,0.9962
+268.933,04:28.933,attention,MIDDLE_DISTANCE az=+10.6 el=+7.9 share=0.00,16.2285
+271.767,04:31.767,state_change,IDLE_ATTENTIVE -> THINKING,0.0000
+274.700,04:34.700,attention,LENS az=-0.2 el=+0.7 share=0.00,12.9133
+274.967,04:34.967,blink,dur=250ms depth=0.97,0.9681
+277.000,04:37.000,state_change,THINKING -> IDLE_ATTENTIVE,0.0000
+278.200,04:38.200,blink,dur=196ms depth=0.99,0.9910
+281.667,04:41.667,blink_partial,dur=181ms depth=0.73,0.7300
+283.600,04:43.600,blink,dur=191ms depth=0.96,0.9642
+283.733,04:43.733,head_pitch,"to=(-0.37,+0.40,-0.73)deg dur=0.89s",1.5068
+286.500,04:46.500,blink_partial,dur=223ms depth=0.72,0.7238
+291.333,04:51.333,expression,brow_tension peak=0.229 dur=2.96s,0.2288
+293.233,04:53.233,blink_partial,dur=229ms depth=0.60,0.6008
+296.833,04:56.833,blink,dur=217ms depth=0.97,0.9748
+298.700,04:58.700,blink,dur=257ms depth=0.98,0.9776

@@ -2,162 +2,162 @@
   "minutes": 5.0,
   "events": {
     "attention": {
-      "count": 92,
-      "per_minute": 18.4,
-      "mean_interval": 3.2564102564104775,
-      "median_interval": 2.599999999999852,
-      "sd_interval": 2.1785988277899,
-      "cv": 0.6690185376677192,
-      "min_interval": 0.5666666666666949,
-      "max_interval": 12.133333333333805
+      "count": 52,
+      "per_minute": 10.4,
+      "mean_interval": 5.385620915032736,
+      "median_interval": 5.366666666666362,
+      "sd_interval": 2.7379305743847686,
+      "cv": 0.508377885777749,
+      "min_interval": 0.833333333333286,
+      "max_interval": 11.866666666665992
     },
     "blink": {
-      "count": 47,
-      "per_minute": 9.4,
-      "mean_interval": 6.1398550724640355,
-      "median_interval": 3.6166666666665552,
-      "sd_interval": 5.730407155043598,
-      "cv": 0.9333130973633684,
-      "min_interval": 0.23333333333332007,
-      "max_interval": 24.766666666665273
+      "count": 55,
+      "per_minute": 11.0,
+      "mean_interval": 5.45617283950658,
+      "median_interval": 4.1833333333330955,
+      "sd_interval": 4.146528242271535,
+      "cv": 0.7599701043646776,
+      "min_interval": 0.29999999999998295,
+      "max_interval": 22.199999999998738
     },
     "blink_all": {
-      "count": 53,
-      "per_minute": 10.6,
-      "mean_interval": 5.4314102564104925,
-      "median_interval": 3.5333333333332266,
-      "sd_interval": 4.7968268244571215,
-      "cv": 0.8831641503779989,
-      "min_interval": 0.23333333333332007,
-      "max_interval": 22.09999999999875
+      "count": 67,
+      "per_minute": 13.4,
+      "mean_interval": 4.464141414141747,
+      "median_interval": 3.5666666666679987,
+      "sd_interval": 3.7954354590001187,
+      "cv": 0.8502050241904824,
+      "min_interval": 0.2666666666666515,
+      "max_interval": 22.199999999998738
     },
     "blink_partial": {
-      "count": 5,
-      "per_minute": 1.0,
-      "mean_interval": 21.949999999998752,
-      "median_interval": 3.566666666666464,
-      "sd_interval": 32.68591694700556,
-      "cv": 1.4891078335766477,
-      "min_interval": 2.133333333333212,
-      "max_interval": 78.53333333332887
+      "count": 9,
+      "per_minute": 1.8,
+      "mean_interval": 31.383333333335518,
+      "median_interval": 26.333333333342594,
+      "sd_interval": 25.408561549206773,
+      "cv": 0.8096195926459375,
+      "min_interval": 4.83333333333718,
+      "max_interval": 82.09999999999535
     },
     "double_blink_second": {
-      "count": 1,
-      "per_minute": 0.2
+      "count": 3,
+      "per_minute": 0.6
     },
     "expression": {
       "count": 13,
       "per_minute": 2.6,
-      "mean_interval": 21.811111111112254,
-      "median_interval": 18.300000000005554,
-      "sd_interval": 9.720495084682087,
-      "cv": 0.4456671205406734,
-      "min_interval": 9.26666666666614,
-      "max_interval": 45.99999999999739
+      "mean_interval": 22.044444444445748,
+      "median_interval": 18.699999999998937,
+      "sd_interval": 9.007500304103663,
+      "cv": 0.4086063646014525,
+      "min_interval": 8.433333333332854,
+      "max_interval": 37.7666666666706
     },
     "head_all": {
-      "count": 13,
-      "per_minute": 2.6,
-      "mean_interval": 22.50833333333385,
-      "median_interval": 17.333333333338174,
-      "sd_interval": 15.06703001651158,
-      "cv": 0.6693978533807287,
-      "min_interval": 5.999999999999659,
-      "max_interval": 45.366666666664656
+      "count": 18,
+      "per_minute": 3.6,
+      "mean_interval": 16.17647058823589,
+      "median_interval": 15.133333333332473,
+      "sd_interval": 12.22667054068941,
+      "cv": 0.7558305425153174,
+      "min_interval": 2.6999999999998465,
+      "max_interval": 58.23333333333212
     },
     "head_pitch": {
-      "count": 2,
-      "per_minute": 0.4
+      "count": 5,
+      "per_minute": 1.0,
+      "mean_interval": 68.75000000000253,
+      "median_interval": 55.21666666667639,
+      "sd_interval": 48.15244599763429,
+      "cv": 0.7003992145110184,
+      "min_interval": 16.999999999999034,
+      "max_interval": 147.5666666666583
     },
     "head_roll": {
-      "count": 5,
-      "per_minute": 1.0,
-      "mean_interval": 59.94999999999714,
-      "median_interval": 45.06666666666439,
-      "sd_interval": 46.655841006242845,
-      "cv": 0.7782458883443715,
-      "min_interval": 12.2999999999993,
-      "max_interval": 137.36666666666048
+      "count": 1,
+      "per_minute": 0.2
     },
     "head_yaw": {
-      "count": 6,
-      "per_minute": 1.2,
-      "mean_interval": 54.02000000000125,
-      "median_interval": 79.76666666666215,
-      "sd_interval": 34.64351534638799,
-      "cv": 0.6413090586150906,
-      "min_interval": 8.466666666673405,
-      "max_interval": 84.13333333332945
+      "count": 12,
+      "per_minute": 2.4,
+      "mean_interval": 17.239393939393743,
+      "median_interval": 16.06666666666706,
+      "sd_interval": 8.147873468391225,
+      "cv": 0.47263108535228243,
+      "min_interval": 2.6999999999998465,
+      "max_interval": 32.73333333333147
     },
     "posture_shift": {
-      "count": 5,
-      "per_minute": 1.0,
-      "mean_interval": 63.5583333333391,
-      "median_interval": 53.48333333333689,
-      "sd_interval": 33.47335901710886,
-      "cv": 0.5266557076245836,
-      "min_interval": 28.50000000002268,
-      "max_interval": 118.76666666665993
+      "count": 6,
+      "per_minute": 1.2,
+      "mean_interval": 43.81999999999902,
+      "median_interval": 45.86666666667159,
+      "sd_interval": 16.344330991372253,
+      "cv": 0.3729879276899274,
+      "min_interval": 22.333333333332064,
+      "max_interval": 70.699999999996
     },
     "state_change": {
-      "count": 9,
-      "per_minute": 1.8,
-      "mean_interval": 30.04166666666865,
-      "median_interval": 25.866666666665196,
-      "sd_interval": 17.461248762142528,
-      "cv": 0.5812343554665645,
-      "min_interval": 9.433333333332797,
-      "max_interval": 65.5000000000156
+      "count": 8,
+      "per_minute": 1.6,
+      "mean_interval": 32.385714285715004,
+      "median_interval": 22.533333333345468,
+      "sd_interval": 30.92988413211603,
+      "cv": 0.9550471500873727,
+      "min_interval": 2.666666666666515,
+      "max_interval": 94.99999999999461
     },
     "voluntary_all": {
-      "count": 123,
-      "per_minute": 24.6,
-      "mean_interval": 2.4587431693990958,
-      "median_interval": 2.066666666666549,
-      "sd_interval": 1.73621583189206,
-      "cv": 0.7061395649210415,
-      "min_interval": 0.0,
-      "max_interval": 9.6333333333328
+      "count": 89,
+      "per_minute": 17.8,
+      "mean_interval": 3.3102272727274555,
+      "median_interval": 2.800000000001196,
+      "sd_interval": 2.1887185376921585,
+      "cv": 0.6611988716680375,
+      "min_interval": 0.19999999999998863,
+      "max_interval": 9.033333333340522
     }
   },
   "attention_share": {
-    "LENS": 0.31521739130434784,
-    "MAIN_DISPLAY": 0.21739130434782608,
-    "DESK": 0.15217391304347827,
-    "SECOND_DISPLAY": 0.14130434782608695,
-    "CHAT": 0.08695652173913043,
-    "MIDDLE_DISTANCE": 0.08695652173913043
+    "LENS": 0.38461538461538464,
+    "MAIN_DISPLAY": 0.21153846153846154,
+    "MIDDLE_DISTANCE": 0.15384615384615385,
+    "CHAT": 0.1346153846153846,
+    "SECOND_DISPLAY": 0.07692307692307693,
+    "DESK": 0.038461538461538464
   },
   "state_sequence": [
-    "READING",
+    "IDLE_RELAXED",
+    "IDLE_ATTENTIVE",
+    "FOCUSED",
+    "IDLE_ATTENTIVE",
+    "MILD_POSITIVE",
     "IDLE_ATTENTIVE",
     "THINKING",
-    "IDLE_ATTENTIVE",
-    "IDLE_RELAXED",
-    "IDLE_ATTENTIVE",
-    "IDLE_RELAXED",
-    "READING",
-    "IDLE_RELAXED"
+    "IDLE_ATTENTIVE"
   ],
   "state_visits": {
-    "IDLE_ATTENTIVE": 3,
-    "IDLE_RELAXED": 3,
-    "READING": 2,
+    "IDLE_ATTENTIVE": 4,
+    "IDLE_RELAXED": 1,
+    "FOCUSED": 1,
+    "MILD_POSITIVE": 1,
     "THINKING": 1
   },
   "stillness": {
-    "longest_quiet_s": 12.133333333333805,
-    "median_quiet_s": 2.433333333333195,
-    "fraction_over_3s": 0.33653846153846156,
-    "fraction_over_8s": 0.028846153846153848
+    "longest_quiet_s": 9.033333333340522,
+    "median_quiet_s": 2.800000000001196,
+    "fraction_over_3s": 0.4772727272727273,
+    "fraction_over_8s": 0.03409090909090909
   },
   "pose": {
-    "yaw_max": 6.125600591612086,
-    "yaw_sd": 1.3958492796856796,
-    "gaze_x_max": 0.27546607196714457,
-    "gaze_x_sd": 0.08651646982482822,
-    "yaw_max_step": 0.8320981057407422,
-    "gaze_max_step": 0.24537497984695378
+    "yaw_max": 7.751056172448915,
+    "yaw_sd": 1.677857290681569,
+    "gaze_x_max": 0.2763588211862237,
+    "gaze_x_sd": 0.07579689264944282,
+    "yaw_max_step": 0.697443125635571,
+    "gaze_max_step": 0.2234299021426437
   },
   "seed": 20260902,
   "profile": "PRESENTER_CALM",
