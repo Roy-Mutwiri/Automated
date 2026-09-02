@@ -218,13 +218,27 @@ class LivePortraitRenderer:
         session of outfit changes. Eviction is oldest-first and the *current*
         source is never evicted.
         """
+        # Framing and environment travel with the source, because they are not
+        # a preference - they are a property of what kind of picture it is.
+        #
+        # A head-and-shoulders portrait wants the person matted out and dropped
+        # into the generated room. A room-scale master frame wants precisely the
+        # opposite: its own room kept, nothing matted, nothing re-framed, only
+        # the face crop regenerated. Preparing a master frame with the portrait's
+        # settings deletes the room it was generated with and crops away the
+        # shot - which is exactly what happened the first time the cameras were
+        # wired up.
+        framing = framing or self.framing
+        environment = environment or self.environment
         path = Path(source_image).resolve()
-        if path == self.source_path:
+        if (path == self.source_path and framing == self.framing
+                and environment == self.environment):
             return False
         if not path.exists():
-            raise FileNotFoundError(f"no portrait for this outfit: {path}")
+            raise FileNotFoundError(f"no source image here: {path}")
 
-        key = str(path)
+        # The prepared state depends on all three, so the cache key does too.
+        key = f"{path}|{framing}|{environment}"
         cached = self._source_cache.get(key)
         if cached is not None:
             for name, value in cached.items():
@@ -259,14 +273,18 @@ class LivePortraitRenderer:
                     )
 
             previous = self._capture_source_state()
+            prev_mode = (self.framing, self.environment)
+            self.framing, self.environment = framing, environment
             try:
                 self._prepare_source(path)
             except Exception:
                 for name, value in previous.items():
                     setattr(self, name, value)
+                self.framing, self.environment = prev_mode
                 raise
             self._source_cache[key] = self._capture_source_state()
 
+        self.framing, self.environment = framing, environment
         self.source_path = path
         self._info.notes = self._describe_source()
 
