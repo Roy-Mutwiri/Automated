@@ -96,8 +96,14 @@ def summarise(events, minutes: float, poses) -> dict:
     out["state_visits"] = dict(Counter(states).most_common())
 
     # Stillness: fraction of time with no voluntary event inside a window.
-    vol = sorted(e.time for e in events
-                 if e.kind in ("attention", "head_move", "posture", "expression"))
+    # The engine emits head_yaw / head_pitch / head_roll and posture_shift, not
+    # "head_move" and "posture". An earlier version of this list used the names
+    # it expected rather than the names the engine emits, so the stillness
+    # figure was computed from attention and expression alone and every head
+    # turn and postural shift was invisible to it.
+    VOLUNTARY = ("attention", "head_yaw", "head_pitch", "head_roll",
+                 "posture_shift", "expression")
+    vol = sorted(e.time for e in events if e.kind in VOLUNTARY)
     quiet = []
     for a, b in zip(vol, vol[1:]):
         quiet.append(b - a)
