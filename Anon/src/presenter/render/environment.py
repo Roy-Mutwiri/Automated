@@ -47,6 +47,9 @@ __all__ = [
     "render_streaming_room",
     "render_desk_foreground",
     "render_mic_foreground",
+    "luminance",
+    "fit_exposure",
+    "light_wrap",
 ]
 
 
