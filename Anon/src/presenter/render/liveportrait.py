@@ -111,7 +111,7 @@ class LivePortraitRenderer:
         self.subject_alpha_out = None
         self.desk_band = None
         self.wrap_layer = None
-        self.wrap_mask = None
+        self.wrap_idx = None
         # Measured at startup: how far the plate sits under the face, in stops.
         self.face_luma = None
         self.background_stops = None
