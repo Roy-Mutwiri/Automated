@@ -353,3 +353,94 @@ def test_light_wrap_stays_inside_the_silhouette():
     assert wrap[:, :60].max() == 0.0, "wrap leaked outside the subject"
     assert wrap[:, 60:72].max() > 1.0, "no wrap just inside the edge"
     assert wrap[:, 90:].max() == 0.0, "wrap reaches deep into the subject"
+
+
+# -- wardrobe ---------------------------------------------------------------
+def test_source_state_is_complete():
+    """Switching outfits swaps one source portrait for another, and it has to
+    swap *everything* that belongs to a source.
+
+    A missing entry does not crash - it leaves one stale array behind, so the
+    new face renders against the old silhouette's mask or the old background.
+    That is a far worse failure than an exception, so the list is checked
+    against the code rather than maintained by hand and hoped over."""
+    import ast
+    from pathlib import Path
+
+    from presenter.render.liveportrait import _SOURCE_STATE
+
+    src = Path("src/presenter/render/liveportrait.py")
+    if not src.exists():                      # running from another cwd
+        src = Path(__file__).resolve().parents[1] / src
+    tree = ast.parse(src.read_text(encoding="utf-8"))
+    cls = next(n for n in tree.body
+               if isinstance(n, ast.ClassDef) and n.name == "LivePortraitRenderer")
+
+    per_source = {"_prepare_source", "_prepare_compositing", "_finish_blend_setup"}
+    assigned = set()
+    for fn in cls.body:
+        if not (isinstance(fn, ast.FunctionDef) and fn.name in per_source):
+            continue
+        for node in ast.walk(fn):
+            if not isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            flat = []
+            for t in targets:
+                flat.extend(t.elts if isinstance(t, (ast.Tuple, ast.List)) else [t])
+            for t in flat:
+                if (isinstance(t, ast.Attribute)
+                        and isinstance(t.value, ast.Name) and t.value.id == "self"):
+                    assigned.add(t.attr)
+
+    missing = assigned - set(_SOURCE_STATE)
+    assert not missing, (
+        f"_SOURCE_STATE does not cover {sorted(missing)} - an outfit switch "
+        f"would leave these stale from the previous portrait"
+    )
+
+
+def test_wardrobe_resolves_outfits_to_portraits():
+    """The base portrait is the no-edit combination, and it is not duplicated
+    on disk to make the naming scheme uniform."""
+    from presenter.render.wardrobe import Wardrobe
+
+    w = Wardrobe.load()
+    assert w.clothing and w.headwear, "wardrobe declares nothing"
+
+    plain_c = next(k for k, i in w.clothing.items() if not i.edits)
+    plain_h = next(k for k, i in w.headwear.items() if not i.edits)
+    assert w.path(plain_c, plain_h) == w.base
+
+    dressed = next(k for k, i in w.clothing.items() if i.edits)
+    assert w.path(dressed, plain_h).name == f"{dressed}__{plain_h}.png"
+    assert w.path(dressed, plain_h).parent == w.directory
+
+    try:
+        w.path("no_such_shirt", plain_h)
+    except KeyError as exc:
+        assert "no_such_shirt" in str(exc)
+    else:
+        raise AssertionError("unknown clothing key was accepted")
+
+
+def test_wardrobe_prompts_fit_the_clip_token_limit():
+    """CLIP truncates at 77 tokens silently. An earlier revision lost the whole
+    photographic-direction block off the end of every prompt and produced
+    costume-shop results with no error anywhere."""
+    from presenter.render.wardrobe import Wardrobe
+
+    w = Wardrobe.load()
+    # Word count is a deliberate stand-in: it needs no tokenizer download to
+    # run in CI, and CLIP tokens outnumber words, so passing here is necessary
+    # rather than sufficient. tools/generate_wardrobe.py does the real check
+    # with the actual tokenizer before it generates anything.
+    for section in (w.clothing, w.headwear):
+        for item in section.values():
+            if not item.edits:
+                continue
+            words = len(w.prompt_for(item).split())
+            assert words <= 60, f"{item.key} prompt is {words} words, too long"
+    for headwear in (False, True):
+        words = len(w.negative_for(headwear=headwear).split())
+        assert words <= 60, f"negative prompt is {words} words, too long"
