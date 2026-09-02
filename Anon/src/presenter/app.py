@@ -166,6 +166,13 @@ def main() -> int:
                     choices=["shoulders", "close"],
                     help="shoulders = head and shoulders, blurred side fill; "
                          "close = tight 16:9 crop")
+    ap.add_argument("--environment", default="streaming_room",
+                    choices=["streaming_room", "source"],
+                    help="streaming_room = generated room behind the presenter "
+                         "(needs a person matte, adds ~30s to startup); "
+                         "source = keep the portrait's own background")
+    ap.add_argument("--room-seed", type=int, default=7,
+                    help="changes the generated room's light placement")
     ap.add_argument("--compile", action="store_true",
                     help="torch.compile the warping/generator modules; large "
                          "first-run cost, needed because the workload is "
