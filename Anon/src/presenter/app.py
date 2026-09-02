@@ -303,6 +303,77 @@ def main() -> int:
         cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(WINDOW, args.width, args.height)
 
+    # -- camera buttons -----------------------------------------------------
+    cam_row = None
+    still_frame = None          # set while a non-animated camera is selected
+    if rig is not None and not args.headless:
+        from presenter.ui import Button, ButtonRow, draw_busy
+
+        cam_row = ButtonRow(
+            [Button(c.key, c.label, enabled=rig.exists(c.key), live=c.animated)
+             for c in rig.ordered()],
+            # Bottom left, above the help line: the debug readout owns the top
+            # left and the wardrobe dropdowns the top right, and seven buttons
+            # are 680px wide - there is nowhere else for them to go.
+            origin=(14, args.height - 58),
+        )
+        cam_row.selected = camera
+        cam_row.attach(WINDOW, (args.width, args.height))
+
+        def load_still(key: str) -> np.ndarray:
+            """Read a still camera's master frame, fitted to the output."""
+            img = cv2.imread(str(rig.path(key)))
+            if img is None:
+                raise FileNotFoundError(rig.path(key))
+            if img.shape[1::-1] != (args.width, args.height):
+                img = cv2.resize(img, (args.width, args.height),
+                                 interpolation=cv2.INTER_AREA)
+            return img
+
+        def cut_to(key: str) -> None:
+            """Switch cameras. Blocks while a live camera is prepared."""
+            nonlocal camera, still_frame, outfit
+            if key == camera or not rig.exists(key):
+                return
+            cam = rig.cameras[key]
+
+            if not cam.animated:
+                # No renderer work at all: there is no drivable face in this
+                # frame, so LivePortrait is not involved and no GPU memory is
+                # needed. That is also why these switches are instant.
+                try:
+                    still_frame = load_still(key)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[app] cannot cut to {key}: {exc}", file=sys.stderr)
+                    return
+                camera = key
+                cam_row.selected = key
+                print(f"[app] camera -> {key} ({cam.label}, still)")
+                return
+
+            busy = (last_good if last_good is not None
+                    else np.zeros((args.height, args.width, 3), np.uint8)).copy()
+            draw_busy(busy, f"cutting to {cam.label}...")
+            cv2.imshow(WINDOW, busy)
+            cv2.waitKey(1)
+
+            t0 = time.perf_counter()
+            try:
+                fresh = renderer.set_source(rig.path(key))
+            except Exception as exc:  # noqa: BLE001 - keep the stream alive
+                print(f"[app] cannot cut to {key}: {exc}", file=sys.stderr)
+                return
+            still_frame = None
+            camera = key
+            cam_row.selected = key
+            if bar is not None:
+                # An outfit and a camera are different master frames; only one
+                # can be on screen, so stop claiming the outfit is.
+                bar.set_menus(build_menus())
+            print(f"[app] camera -> {key} ({cam.label}, "
+                  f"{'prepared' if fresh else 'cached'} in "
+                  f"{time.perf_counter() - t0:.2f}s)")
+
     bar = None
     if wardrobe is not None and not args.headless:
         from presenter.ui import DropdownBar, Menu, Option, draw_busy
