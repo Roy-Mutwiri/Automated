@@ -113,8 +113,8 @@ DEFAULT_SUBJECT = (
 )
 
 
-def build_prompt(subject: str) -> str:
-    return f"{subject}, {STYLE}"
+def build_prompt(subject: str, style: str = "streaming") -> str:
+    return f"{subject}, {STYLES[style]}"
 
 
 def main() -> int:
