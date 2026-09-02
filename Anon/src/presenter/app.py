@@ -399,7 +399,7 @@ def main() -> int:
 
         def wear(ident: str, key: str) -> None:
             """Apply a dropdown choice. Blocks while the portrait is prepared."""
-            nonlocal outfit
+            nonlocal outfit, camera, still_frame
             want = ((key, outfit[1]) if ident == "clothing"
                     else (outfit[0], key))
             if want == outfit or not wardrobe.exists(*want):
