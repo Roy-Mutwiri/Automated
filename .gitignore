@@ -1,0 +1,11 @@
+# --- Cross-folder junctions -------------------------------------------------
+# Anon/Dripper and Dripper/Anon are Windows directory junctions pointing at
+# their sibling folder. They are convenience links for navigating on disk, not
+# real content. Git follows them like ordinary directories, so without these
+# rules every file would be committed twice and the path loop
+# (Anon/Dripper/Anon/...) would recurse until git gave up.
+/Anon/Dripper/
+/Dripper/Anon/
+
+# --- Auto-sync runtime ------------------------------------------------------
+/tools/sync.log
