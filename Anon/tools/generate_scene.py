@@ -61,47 +61,24 @@ MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 # duplicated-subject artefacts that off-bucket sizes produce.
 WIDTH, HEIGHT = 1344, 768
 
-SUBJECT = (
-    "a brown-skinned Arab man in his mid 30s, warm medium-brown complexion, "
-    "short neatly trimmed dark beard, short dark hair, calm confident face, "
-    "wearing a fitted dark charcoal crew-neck shirt, "
-    "seated upright and relaxed in a premium black ergonomic gaming chair with "
-    "a high back and headrest, leaning very slightly toward the camera, "
-    "shoulders relaxed, looking directly into the camera lens, "
-    "calm friendly neutral expression, mouth closed, eyes open and clearly visible"
+# Encoder 1: who he is and how he is framed. MUST stay under 77 CLIP tokens.
+SUBJECT_PROMPT = (
+    "medium shot photo, waist up, camera 2 metres back, "
+    "a brown-skinned Arab man in his mid 30s, warm brown complexion, "
+    "short trimmed dark beard, fitted dark charcoal shirt, "
+    "sitting upright and relaxed in a premium black gaming chair with a high "
+    "back, looking into the camera, calm neutral expression, mouth closed, "
+    "eyes open, sharp detailed eyes, natural skin texture with pores"
 )
 
-# Phrased as the space *around him*, and placed after the subject. See the SHOT
-# note below for why leading with this does not work.
+# Encoder 2: where he is and how it is lit. Also under 77 tokens.
 ROOM = (
-    "sitting in a luxury professional streaming studio at night, "
-    "on the wall several feet behind him vertical dark walnut acoustic slat "
-    "panels over charcoal felt, "
-    "visible natural wood grain, semi-matte finish, "
-    "dark charcoal painted wall on one side, "
-    "premium floating shelves mostly empty with only a few objects, "
-    "one small plant, two books, one small sculptural object, "
-    "hidden warm LED strip lighting under the shelves, "
-    "one small warm tungsten lamp, "
-    "dark walnut desk in the foreground with immaculate cable management, "
-    "a broadcast microphone on a matte black boom arm at the lower edge of frame, "
-    "a headphone stand, "
-    "the edge of a dark monitor turned away at the side of frame, "
-    "spacious room with real depth, the wall several feet behind the man"
-)
-
-LIGHT_AND_CAMERA = (
-    "soft key light from the upper left at forty degrees, gentle fill from the "
-    "right, subtle warm rim light separating his hair and shoulder from the "
-    "dark wall, warm tungsten practical lights in the room, "
-    "the man is lit brighter than the room behind him, "
-    "warm amber and charcoal colour palette, "
-    "shot on a full frame mirrorless camera at 40mm, eye level, "
-    "mild shallow depth of field, face sharp, background softly defocused but "
-    "clearly legible, "
-    "photorealistic, natural detailed skin texture with visible pores, "
-    "sharp detailed eyes with natural catchlights, "
-    "professional colour grading, photograph, raw photo"
+    "luxury professional streaming studio at night, wall of vertical dark "
+    "walnut acoustic slats several feet behind him, floating shelves nearly "
+    "empty, hidden warm LED, one tungsten lamp, dark walnut desk, broadcast "
+    "microphone on a boom arm, moody dark charcoal and warm amber, soft key "
+    "light from upper left, warm rim light, 40mm, shallow depth of field, "
+    "photograph"
 )
 
 CONCEPTS = {
@@ -109,13 +86,10 @@ CONCEPTS = {
     # restrained, one distant cool accent.
     "hybrid": ROOM,
     # A: no visible streaming gear at all.
-    "executive": ROOM.replace(
-        "a broadcast microphone on a matte black boom arm at the lower edge of frame, ",
-        "",
-    ).replace("a headphone stand, ", ""),
+    "executive": ROOM.replace("broadcast microphone on a boom arm, ", ""),
     # B: apparatus foregrounded.
-    "creator": ROOM + ", a premium desktop PC with a glass side panel and a "
-    "single subtle warm interior light, a small control pad on the desk",
+    "creator": ROOM.replace("one tungsten lamp, ", "a glass-side PC with one "
+                            "warm interior light, "),
 }
 
 NEGATIVE = (
@@ -141,24 +115,6 @@ NEGATIVE = (
     "cartoon, anime, "
     "overexposed, blown highlights, flat lighting, harsh flash, "
     "cheap, low quality, jpeg artifacts"
-)
-
-
-# Shot-size language, and it is load-bearing.
-#
-# The first attempt led with the room, on the theory that describing the space
-# first would make SDXL build a space and then put someone in it. It does not:
-# all eight candidates came back as empty interior-design renders with no human
-# in them at all. The room description simply consumed the whole prompt.
-#
-# The person has to be the grammatical subject to be rendered. But making him
-# the subject without qualification produces a headshot, which is the failure
-# in the other direction. So he leads *and* the shot size is stated explicitly
-# and repeatedly - "medium shot", "waist up", a stated camera distance - which
-# is the only reliable lever on framing.
-SHOT = (
-    "medium shot photograph, waist up, camera two metres away, "
-    "the man occupies the middle of the frame with the room visible around him"
 )
 
 
