@@ -183,6 +183,54 @@ def build_prompts(concept: str) -> tuple[str, str]:
     return SUBJECT_PROMPT, CONCEPTS[concept]
 
 
+def vram_preflight(need_gb: float = 9.0) -> bool:
+    """Report GPU memory before loading anything. Returns True if NORMAL mode.
+
+    Exists because two batches died mid-run with no traceback. The cause was
+    never the generator: LM Studio's llama-server was holding ~13.7 GB of the
+    16 GB. A CUDA OOM during decode kills the process silently, so from the
+    outside it looks like the tool is broken.
+
+    **This reports and adapts. It never terminates anything.** Other people's
+    applications - an LLM server, a 3D editor with unsaved work, a browser -
+    are not ours to kill, and a tool that quietly closes them would be far worse
+    than one that runs slowly.
+    """
+    import torch
+
+    free, total = torch.cuda.mem_get_info()
+    free_gb, total_gb = free / 1e9, total / 1e9
+    used_gb = total_gb - free_gb
+
+    print("[preflight] GPU memory")
+    print(f"[preflight]   total {total_gb:5.1f} GB")
+    print(f"[preflight]   used  {used_gb:5.1f} GB")
+    print(f"[preflight]   free  {free_gb:5.1f} GB   (need ~{need_gb:.0f} GB for NORMAL)")
+
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=pid,process_name,used_memory",
+             "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=10).stdout.strip()
+        rows = [r for r in out.splitlines() if r.strip()]
+        if rows:
+            print(f"[preflight]   {len(rows)} process(es) on the GPU:")
+            for r in rows[:8]:
+                print(f"[preflight]     {r}")
+    except Exception:
+        pass
+
+    if free_gb >= need_gb:
+        print("[preflight] mode NORMAL")
+        return True
+
+    print(f"[preflight] mode LOW_VRAM - only {free_gb:.1f} GB free.")
+    print("[preflight] Other applications are holding GPU memory. Nothing will")
+    print("[preflight] be terminated; using CPU offload instead (slower, safe).")
+    return False
+
+
 def _person_coverage(img_bgr: np.ndarray) -> float:
     """Fraction of the frame occupied by a person, via segmentation."""
     import torch
@@ -256,7 +304,7 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--concept", default="hybrid", choices=sorted(CONCEPTS))
-    ap.add_argument("--count", type=int, default=8)
+    ap.add_argument("--count", type=int, default=4)
     ap.add_argument("--seed", type=int, default=200)
     ap.add_argument("--steps", type=int, default=40)
     ap.add_argument("--guidance", type=float, default=6.5)
@@ -270,6 +318,8 @@ def main() -> int:
 
     import torch
     from diffusers import AutoencoderKL, StableDiffusionXLPipeline
+
+    normal_mode = vram_preflight()
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -307,21 +357,11 @@ def main() -> int:
         use_safetensors=True,
     )
 
-    # This card is shared. Two batches died silently mid-run - no traceback,
-    # just a dead process - and the cause was not the generator: LM Studio's
-    # llama-server, VRoid Studio and a browser were holding roughly 10 GB of
-    # the 16 GB between them, leaving too little for SDXL at 1344x768.
-    #
-    # Auto-enable CPU offload when free VRAM is short. Offload keeps one module
-    # on the GPU at a time, so peak usage is bounded by the largest single
-    # module instead of the whole pipeline. It costs perhaps 30% throughput and
-    # removes the failure mode entirely - a good trade for a batch job that
-    # otherwise dies eight images in.
-    free, total = torch.cuda.mem_get_info()
-    free_gb = free / 1e9
-    if args.low_vram or free_gb < 9.0:
-        print(f"[scene] {free_gb:.1f} GB free of {total / 1e9:.1f} GB - "
-              f"enabling CPU offload (slower, but bounded)")
+    # LOW_VRAM keeps one module on the GPU at a time, so peak usage is bounded
+    # by the largest single module rather than the whole pipeline. Costs ~30%
+    # throughput; removes the silent-OOM failure entirely. The master frame is
+    # generated once, so stability beats speed here.
+    if args.low_vram or not normal_mode:
         pipe.enable_model_cpu_offload()
     else:
         pipe = pipe.to("cuda")
