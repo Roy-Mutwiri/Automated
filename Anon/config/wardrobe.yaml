@@ -79,6 +79,12 @@ headwear:
   # ("a white ghutra draped over his head") returns braided hair; establishing
   # "a Saudi man wearing..." and then saying what a ghutra physically is gets
   # the model into the right context first.
+  # `agal` runs a third, small pass over the crown once the cloth exists. As a
+  # clause inside the prompts below the cord never appeared even once: the
+  # model spends the whole mask on the cloth and the agal is a small dark
+  # detail sitting on top of it. The taqiyah was the clue - it worked first
+  # time, and the only thing different about it was a small mask with the whole
+  # prompt aimed at one object.
   ghutra_white:
     label: White ghutra + agal
     drape: 0.9
@@ -86,6 +92,9 @@ headwear:
       a Saudi man wearing a white ghutra and black agal, the ghutra is a
       large plain white cotton cloth covering his head and falling over
       both shoulders, the agal is a thick black cord ring on top
+    agal: >-
+      a thick black agal cord ring resting flat on top of his head over the
+      white ghutra, doubled black rope circlet, close detail
   shemagh_red:
     label: Red shemagh + agal
     drape: 0.9
@@ -93,6 +102,9 @@ headwear:
       a Saudi man wearing a red and white checkered shemagh and black agal,
       the shemagh is a large checkered cloth covering his head and falling
       over both shoulders, a black cord ring on top
+    agal: >-
+      a thick black agal cord ring resting flat on top of his head over the
+      checkered shemagh, doubled black rope circlet, close detail
   ghutra_loose:
     label: Ghutra, no agal
     drape: 0.9
