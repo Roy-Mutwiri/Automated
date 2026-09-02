@@ -18,15 +18,15 @@ Every camera renders *this* state. The world is built once, before any camera is
 
 | quantity | value |
 |---|---|
-| yaw | +0.45908 |
-| pitch | +0.39066 |
-| roll | +0.17705 |
+| yaw | -3.62983 |
+| pitch | -0.12374 |
+| roll | -0.32145 |
 | eye_open_l | +1.00000 |
 | eye_open_r | +1.00000 |
-| gaze_x | -0.00718 |
-| gaze_y | +0.01265 |
-| scale | +1.00060 |
-| breathing_phase | +0.15431 |
+| gaze_x | +0.12490 |
+| gaze_y | +0.10817 |
+| scale | +1.00263 |
+| breathing_phase | +0.38518 |
 
 ## Camera rig
 
@@ -34,9 +34,9 @@ Shared by every camera: sensor 36.0 x 24.0 mm, exposure +0.0 EV, output 1920x108
 
 | camera | enabled | position | lens | f | focus dist |
 |---|---|---|---|---|---|
-| cam1 | yes | (+0.10, +2.50, +1.26) | 50 mm | f/2.8 | 1.27 m |
-| cam2 | yes | (-1.05, +2.45, +1.42) | 65 mm | f/2.8 | 1.69 m |
-| cam3 | yes | (+1.35, +2.42, +1.20) | 65 mm | f/2.8 | 1.73 m |
+| cam1 | yes | (+0.10, +2.94, +1.26) | 50 mm | f/2.8 | 1.71 m |
+| cam2 | yes | (-1.43, +2.88, +1.49) | 65 mm | f/2.8 | 2.26 m |
+| cam3 | yes | (+1.73, +2.80, +1.19) | 65 mm | f/2.8 | 2.27 m |
 | cam4 | no | (+0.78, +0.72, +1.56) | 40 mm | f/4.0 | 1.28 m |
 | cam5 | no | (+0.12, +0.42, +1.48) | 32 mm | f/4.0 | 2.23 m |
 | cam6 | no | (+1.15, +2.55, +2.35) | 28 mm | f/4.0 | 2.15 m |
