@@ -248,3 +248,34 @@ def test_blink_moves_the_brow():
                 coupled = True
                 break
     assert coupled, "brow does not follow the eyelid during a blink"
+
+
+# -- environment ------------------------------------------------------------
+def test_streaming_room_is_deterministic_and_plausible():
+    """The room must be identical every run: it is the background, and the
+    brief rules out any background that changes between frames."""
+    from presenter.render.environment import render_streaming_room
+
+    a = render_streaming_room(320, 180, seed=7)
+    b = render_streaming_room(320, 180, seed=7)
+    assert (a == b).all(), "room is not deterministic for a fixed seed"
+
+    c = render_streaming_room(320, 180, seed=8)
+    assert not (a == c).all(), "seed does not change the room"
+
+    assert a.shape == (180, 320, 3) and a.dtype.name == "uint8"
+    # Dim enough that a lit face separates from it, not crushed to black.
+    assert 15 < a.mean() < 120, f"room mean luminance {a.mean():.1f} implausible"
+
+
+def test_desk_foreground_covers_only_the_bottom():
+    """The desk occludes the presenter's lower edge; it must not creep up
+    over the face."""
+    from presenter.render.environment import render_desk_foreground
+
+    _, alpha = render_desk_foreground(320, 180)
+    rows = alpha[:, 0, 0]
+    covered = rows > 0.5
+    assert covered.any(), "desk covers nothing"
+    assert not covered[: int(180 * 0.6)].any(), "desk reaches into the face area"
+    assert covered[-1], "desk does not reach the bottom of frame"
