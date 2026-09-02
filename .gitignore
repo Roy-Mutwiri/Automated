@@ -60,3 +60,8 @@ Anon/logs/
 *.local.yaml
 .DS_Store
 Thumbs.db
+
+# --- Vendored upstream projects ---------------------------------------------
+# Cloned from upstream, not our code. Pinned commit recorded in
+# Anon/docs/avatar_model_research.md so the environment is reproducible.
+Anon/third_party/
