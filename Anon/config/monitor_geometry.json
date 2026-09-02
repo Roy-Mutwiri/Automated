@@ -13,15 +13,15 @@
     {
       "id": "centre",
       "role": "primary workstation display",
-      "quad": [[436, 46], [866, 42], [866, 296], [436, 297]],
+      "quad": [[432, 39], [868, 43], [868, 309], [432, 305]],
       "replace": true,
       "content": "assets/screens/default_streamer_ui.png",
-      "note": "430 x 250 px visible, aspect 1.72 - consistent with a 16:9 panel very close to square-on. Heavily occluded by the subject's head and headphones on the right; occlusion is resolved from masks, not from the quad."
+      "note": "Corners located by max-gradient scans along the panel edges rather than by eye: the first estimate sat 4-7 px inside the true LCD on the top and bottom and left a rim of the old picture showing. 436 x 267 px visible. Heavily occluded by the subject's head and headphones on the right; occlusion is resolved from masks, not from the quad."
     },
     {
       "id": "right",
       "role": "secondary panel, angled",
-      "quad": [[1177, 40], [1500, 18], [1500, 318], [1177, 299]],
+      "quad": [[1181, 29], [1500, 13], [1500, 318], [1181, 302]],
       "replace": true,
       "content": "assets/screens/secondary_panel.png",
       "note": "Runs off the right edge of frame at x=1344; only its left third is visible. The off-frame corners are estimated from the panel's foreshortening so the visible strip carries the correct horizontal scale. Replacing it also removes an unowned AI-generated human likeness from the plate, which section 0 of the brief wants avoided."

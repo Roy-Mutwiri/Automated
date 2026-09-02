@@ -73,6 +73,9 @@ MAX_SCREEN_SAT = 70.0
 # Highlight roll-off knee, in 0-255 luma. Above this the curve compresses.
 KNEE = 200.0
 
+# Softness of the screen boundary, in plate pixels.
+EDGE_FEATHER_PX = 1.2
+
 # How far beyond the segmented human an occluder may reach, in plate pixels.
 # Sized for headphone cups and hair, not for content on the panel behind him.
 OCCLUDER_REACH_PX = 27
@@ -80,10 +83,23 @@ OCCLUDER_REACH_PX = 27
 
 # --- Masks ------------------------------------------------------------------
 
-def quad_mask(shape, quad) -> np.ndarray:
-    m = np.zeros(shape[:2], np.uint8)
-    cv2.fillConvexPoly(m, np.int32(quad), 255)
-    return m.astype(np.float32) / 255.0
+def quad_mask(shape, quad, feather: float = EDGE_FEATHER_PX) -> np.ndarray:
+    """Antialiased, feathered screen polygon.
+
+    `fillConvexPoly` alone gives a hard binary edge, which against a plate whose
+    own screen edge is defocused to sigma ~2.2 produces a visible stair-stepped
+    rectangle. The polygon is rasterised 4x oversampled and then softened, so
+    the join lands inside the panel's dark inner bezel and reads as the same
+    out-of-focus edge the plate already has.
+    """
+    h, w = shape[:2]
+    S = 4
+    big = np.zeros((h * S, w * S), np.uint8)
+    cv2.fillConvexPoly(big, np.int32(np.float32(quad) * S), 255)
+    m = cv2.resize(big, (w, h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
+    if feather > 0:
+        m = cv2.GaussianBlur(m, (0, 0), feather)
+    return np.clip(m, 0.0, 1.0)
 
 
 def occlusion_mask(img, quad_m, protect, dark_v: int = 62) -> np.ndarray:
