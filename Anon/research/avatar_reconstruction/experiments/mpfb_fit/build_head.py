@@ -225,7 +225,9 @@ def main() -> int:
     ratios = lm["ratios"]
     print(f"[build] identity ratios from {lm_path.name}")
 
-    verts, faces, lines = load_base(DATA / "3dobjs/base.obj")
+    verts, lines, keep_face, joints = load_base(DATA / "3dobjs/base.obj")
+    print(f"[build] body faces {sum(keep_face)} of {len(keep_face)}; "
+          f"{len(joints)} joint markers")
     lo, hi = verts.min(axis=0), verts.max(axis=0)
     print(f"[build] base mesh {len(verts)} verts, bounds "
           f"x[{lo[0]:.2f},{hi[0]:.2f}] y[{lo[1]:.2f},{hi[1]:.2f}] "
@@ -241,8 +243,18 @@ def main() -> int:
     moved = int((np.linalg.norm(fitted - verts, axis=1) > 1e-6).sum())
     print(f"[build] {moved} of {len(verts)} vertices moved by the fit")
 
-    n = write_obj(out_path, fitted, lines)
-    print(f"[build] wrote {n} verts -> {out_path}")
+    n, nf = write_obj(out_path, fitted, lines, keep_face)
+    print(f"[build] wrote {n} verts, {nf} body faces -> {out_path}")
+
+    # Skeleton joint positions, from the marker cubes, after the same morphs.
+    # These are what a rig gets built from, so they must come from the fitted
+    # mesh rather than the base one.
+    joint_pos = {name: fitted[sorted(idx)].mean(axis=0).tolist()
+                 for name, idx in joints.items()}
+    (out_path.parent / "fitted_joints.json").write_text(
+        json.dumps(joint_pos, indent=2), encoding="utf-8")
+    print(f"[build] {len(joint_pos)} fitted joint positions -> "
+          f"fitted_joints.json")
 
     meta = out_path.with_suffix(".json")
     meta.write_text(json.dumps({
