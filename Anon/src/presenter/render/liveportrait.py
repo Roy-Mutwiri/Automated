@@ -89,6 +89,11 @@ class LivePortraitRenderer:
         self.device = device
         self.output_size = output_size
         self.paste_back = paste_back
+        if framing not in ("shoulders", "close"):
+            raise ValueError(
+                f"framing must be 'shoulders' or 'close', got {framing!r}"
+            )
+        self.framing = framing
 
         weights = self.root / "pretrained_weights"
         cfg = InferenceConfig(
