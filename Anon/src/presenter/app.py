@@ -198,6 +198,31 @@ def main() -> int:
     engine = BehaviorEngine(profile=args.profile,
                             state=BehaviorState(args.state), seed=args.seed)
 
+    # The wardrobe decides which portrait the renderer starts from, because an
+    # outfit *is* a source portrait here - see presenter/render/wardrobe.py.
+    wardrobe = outfit = None
+    if args.wardrobe and args.renderer == "liveportrait":
+        from presenter.render.wardrobe import Wardrobe
+
+        try:
+            wardrobe = Wardrobe.load(args.wardrobe)
+        except FileNotFoundError:
+            print(f"[app] no wardrobe at {args.wardrobe}; dropdowns disabled")
+        else:
+            clothing, headwear = wardrobe.default()
+            outfit = (args.clothing or clothing, args.headwear or headwear)
+            if not wardrobe.exists(*outfit):
+                print(f"[app] {outfit[0]}/{outfit[1]} has no portrait yet - "
+                      f"run tools/generate_wardrobe.py; falling back")
+                outfit = wardrobe.default()
+            missing = len(wardrobe.missing())
+            if missing:
+                print(f"[app] wardrobe: {missing} combination(s) not generated")
+
+    if not args.source:
+        args.source = str(wardrobe.path(*outfit)) if outfit \
+            else "assets/presenter_source.png"
+
     if args.renderer == "liveportrait":
         import torch
 
