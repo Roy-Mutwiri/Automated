@@ -42,7 +42,7 @@ import numpy as np
 
 from ..behavior.randomness import Rng
 
-__all__ = ["RoomStyle", "render_streaming_room"]
+__all__ = ["RoomStyle", "render_streaming_room", "render_desk_foreground"]
 
 
 @dataclass
@@ -79,7 +79,7 @@ class RoomStyle:
     # Desk edge across the bottom of frame, closer to camera than the wall and
     # therefore less blurred. This is what actually sells "seated at a desk".
     desk: bool = True
-    desk_y: float = 0.87
+    desk_y: float = 0.83
     desk_color: tuple[int, int, int] = (38, 40, 48)
 
     # Defocus. The wall is far behind the subject, so it is blurred hard.
@@ -241,3 +241,65 @@ def render_streaming_room(
         room += noise
 
     return np.clip(room, 0, 255).astype(np.uint8)
+
+
+def render_desk_foreground(
+    width: int,
+    height: int,
+    style: RoomStyle | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """The desk edge, which sits in FRONT of the presenter.
+
+    Returns ``(bgr, alpha)`` at the output resolution.
+
+    Two reasons this is a separate foreground layer rather than part of the
+    wall:
+
+    **Depth.** A seated presenter is behind their desk. Painting the desk into
+    the background and then drawing the person over it puts the furniture in
+    the wrong place, and the eye notices even when it cannot say why. Occluding
+    the bottom of the subject is what actually communicates "seated at a desk"
+    rather than "photograph of a person with a desk drawn behind them".
+
+    **It hides a real defect.** The source portrait is a fixed crop, so the
+    torso is cut off at the image boundary, leaving hard vertical edges at the
+    bottom of frame where the body simply stops. A foreground desk crossing
+    above that line occludes it completely. Solving a composition problem and a
+    clipping artefact with the same element is the reason it is worth doing
+    properly.
+
+    It is nearer the camera than the wall, so it takes a *weaker* blur - it
+    sits at a different point on the focus ramp. Blurring foreground and
+    background identically is what flattens a render into a painted backdrop.
+    """
+    style = style or RoomStyle()
+    w, h = width * 2, height * 2
+    short = min(w, h)
+
+    desk = np.zeros((h, w, 3), np.float32)
+    alpha = np.zeros((h, w), np.float32)
+
+    dy = int(h * style.desk_y)
+    cv2.rectangle(desk, (0, dy), (w, h), style.desk_color, -1)
+    cv2.rectangle(alpha, (0, dy), (w, h), 1.0, -1)
+
+    # Specular sheen along the front edge, picking up the monitor the presenter
+    # is facing. A flat slab reads as a rectangle; the highlight reads as a
+    # surface.
+    edge = max(int(h * 0.008), 2)
+    cv2.line(desk, (0, dy), (w, dy),
+             tuple(float(min(c * 2.6, 255)) for c in style.desk_color), edge)
+    # Warm falloff toward the sides, matching the LED washes on the wall.
+    xs = np.linspace(-1.0, 1.0, w, dtype=np.float32)[None, :, None]
+    desk[dy:] *= (1.0 - 0.35 * np.abs(xs) ** 1.6)
+
+    k = max(int(short * style.blur * 0.35) | 1, 3)
+    desk = cv2.GaussianBlur(desk, (k, k), 0)
+    alpha = cv2.GaussianBlur(alpha, (k, k), 0)
+
+    desk = cv2.resize(desk, (width, height), interpolation=cv2.INTER_AREA)
+    alpha = cv2.resize(alpha, (width, height), interpolation=cv2.INTER_AREA)
+    return (
+        np.clip(desk, 0, 255).astype(np.uint8),
+        np.clip(alpha, 0.0, 1.0)[..., None].astype(np.float32),
+    )
