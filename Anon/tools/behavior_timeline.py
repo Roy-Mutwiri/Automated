@@ -47,8 +47,8 @@ SACCADE_RATE_RANGE = (6.0, 40.0)    # voluntary gaze shifts per minute
 # engine that matched only those names measured a gaze interval CV of exactly
 # 0.000 - not a suspiciously regular presenter, an analyser looking for events
 # that are no longer emitted.
-GAZE_KINDS = ("attention", "gaze_shift", "gaze_left", "gaze_right",
-              "gaze_down", "gaze_return")
+GAZE_KINDS = frozenset({"attention", "gaze_shift", "gaze_left", "gaze_right",
+                        "gaze_down", "gaze_return"})
 HEAD_MOVE_RANGE = (2.0, 20.0)       # deliberate head adjustments per minute
 EXPRESSION_RANGE = (1.0, 14.0)      # per minute
 
@@ -196,7 +196,7 @@ def report(minutes: float, profile: str, seed: int | None, fps: float,
     print("\n-- interval variability (CV; 0 = metronome, ~1 = memoryless) --")
     blink_iv = intervals_of(events, {"blink", "blink_partial", "double_blink_second"})
     gaze_iv = intervals_of(
-        events, {GAZE_KINDS}
+        events, set(GAZE_KINDS)
     )
     head_iv = intervals_of(events, {"head_yaw", "head_pitch", "head_roll"})
 
