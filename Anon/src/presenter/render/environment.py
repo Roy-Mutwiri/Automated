@@ -122,17 +122,39 @@ class RoomStyle:
     wrap_strength: float = 0.55
 
 
-def _radial_sprite(size: int) -> np.ndarray:
-    """A soft disc with a slightly brighter rim - a defocused point light.
+def _radial_sprite(size: int, cats_eye: float = 0.0, angle: float = 0.0) -> np.ndarray:
+    """A defocused point light: a soft disc with a slightly brighter rim.
 
-    A real out-of-focus highlight is not a gaussian blob: the lens aperture
+    A real out-of-focus highlight is not a gaussian blob - the lens aperture
     projects a disc with a marginally hot edge. Reproducing that rim is what
     makes synthetic bokeh look like glass rather than like an airbrush.
+
+    ``cats_eye`` adds optical vignetting. Away from the optical axis the barrel
+    clips the exit pupil, and the highlight becomes the *intersection of two
+    circles* offset along the radial direction - which is what physically
+    happens, and why the resulting lens shape is elongated tangentially rather
+    than radially. Modelling it as two circles rather than as a squashed
+    ellipse costs nothing and gets the orientation right for free:
+    ``max(r1, r2)`` is exactly 1.0 on the clipped boundary, so the aperture rim
+    follows the new outline instead of the original circle.
+
+    At ``cats_eye == 0`` the two circles coincide and this reduces exactly to
+    the unclipped disc.
     """
     yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
     c = (size - 1) * 0.5
-    r = np.sqrt((xx - c) ** 2 + (yy - c) ** 2) / max(c, 1e-3)
-    disc = np.clip(1.0 - r, 0.0, 1.0)
+    nx = (xx - c) / max(c, 1e-3)
+    ny = (yy - c) / max(c, 1e-3)
+
+    if cats_eye > 1e-3:
+        ox = math.cos(angle) * cats_eye
+        oy = math.sin(angle) * cats_eye
+        r1 = np.sqrt((nx - ox) ** 2 + (ny - oy) ** 2)
+        r2 = np.sqrt((nx + ox) ** 2 + (ny + oy) ** 2)
+        r = np.maximum(r1, r2)
+    else:
+        r = np.sqrt(nx * nx + ny * ny)
+
     disc = np.where(r < 1.0, 0.72 + 0.28 * np.clip((r - 0.55) / 0.45, 0, 1), 0.0)
     disc *= np.clip(1.0 - (r - 0.86) / 0.14, 0.0, 1.0)   # soft outer falloff
     return np.clip(disc, 0.0, 1.0)
