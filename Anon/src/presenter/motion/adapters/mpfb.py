@@ -36,7 +36,11 @@ one channel here that the 2D face adapter has no counterpart for at all.
 
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
+
+from mathutils import Vector
 
 from ..breathing import RIB_EXPANSION
 from ..state import HumanMotionState
@@ -69,9 +73,27 @@ AXIS_MAP: dict[str, tuple[str, tuple[int, int, int], tuple[float, float, float]]
 # upper bone is the rib cage proper and carries most of it.
 CHEST_TOP_SHARE = 0.62
 
-# Finger local axes, measured by driving each in turn on this rig.
-FINGER_CURL_AXIS = 0
-FINGER_SPREAD_AXIS = 2
+# Finger axes are NOT uniform across the hand and must not be hardcoded.
+#
+# Measured (tools/rig_axes.py): the thumb and index hinge about local X, while
+# the middle, ring and little fingers hinge about local **Z**, with signs that
+# differ between hands. A single constant was right for two fingers out of five
+# and drove the other three sideways, which is why the hand fanned open instead
+# of closing.
+#
+# The map is loaded from config/rig_axes.json, regenerated whenever the rig is
+# rebuilt. There is deliberately no axis index written in this file.
+AXIS_INDEX = {"X": 0, "Y": 1, "Z": 2}
+_AXIS_MAP_PATH = Path(__file__).resolve().parents[4] / "config" / "rig_axes.json"
+
+
+def _load_axis_map() -> dict:
+    try:
+        return json.loads(_AXIS_MAP_PATH.read_text()).get("axis_map", {})
+    except (OSError, ValueError) as exc:
+        print(f"[mpfb] no measured axis map ({exc}); fingers will not curl "
+              f"correctly - run tools/rig_axes.py")
+        return {}
 
 D2R = math.pi / 180.0
 
@@ -88,9 +110,9 @@ class MPFBAdapter:
             for name, obj in _scene_objects().items()
             if name.startswith("target_")
         }
-        self._rest_target = {}
-        for key, obj in self._targets.items():
-            self._rest_target[key] = tuple(obj.location)
+        self._rest_target = {key: tuple(obj.location)
+                             for key, obj in self._targets.items()}
+        self._axis_map = _load_axis_map()
 
     # -- posing --------------------------------------------------------------
     def apply(self, motion: HumanMotionState) -> None:
@@ -123,6 +145,19 @@ class MPFBAdapter:
             k = 1.0 + RIB_EXPANSION * drive
             top.scale = (k, 1.0 + RIB_EXPANSION * 0.35 * drive, k)
 
+        # Root translation: the pelvis sliding in the seat.
+        #
+        # `pose_bone.location` is in **bone-local** space, not world. The root
+        # bone points up the spine, so assigning a world-space delta to it slid
+        # the pelvis *along the bone* - settling back lifted the body 4.7 cm off
+        # the seat instead of moving it backward. The delta is rotated into the
+        # bone's own frame first.
+        root = pb.get("root")
+        if root is not None:
+            world = Vector((motion.root_x, -motion.root_z, motion.root_y))
+            basis = root.bone.matrix_local.to_3x3()
+            root.location = basis.inverted() @ world
+
         self._apply_hands(motion)
         self._apply_contacts(motion)
 
@@ -130,28 +165,33 @@ class MPFBAdapter:
         """Distribute each finger's curl across its three segments.
 
         The proximal joint takes the most and the distal the least, which is
-        how a relaxed hand actually closes. Perfectly straight fingers are the
-        single most obvious mannequin tell, so the resting curls in `HandPose`
-        are non-zero and unequal.
+        how a relaxed hand actually closes. Each bone is driven on *its own*
+        measured hinge axis; the segments before the first measured joint
+        inherit that finger's axis, since a finger flexes in one plane.
         """
         pb = self.rig.pose.bones
         share = (0.45, 0.33, 0.22)
         for side, hand in (("l", motion.hand_l), ("r", motion.hand_r)):
             for f, curl in enumerate(hand.curl, start=1):
+                ref = self._axis_map.get(f"finger_{side}_{f}_2")
                 for seg in range(1, 4):
-                    bone = pb.get(f"finger_{side}_{f}_{seg}")
+                    name = f"finger_{side}_{f}_{seg}"
+                    bone = pb.get(name)
                     if bone is None:
                         continue
-                    amount = curl * share[seg - 1] * 78.0 * D2R
+                    entry = self._axis_map.get(name) or ref
+                    if entry is None:
+                        continue
+                    idx = AXIS_INDEX[entry["curl_axis"]]
+                    sign = entry["curl_sign"]
                     e = [0.0, 0.0, 0.0]
-                    # Local X. Established by driving each axis in turn and
-                    # looking: X curls toward the palm, Y twists the finger and
-                    # Z splays it sideways. Z was the first guess and produced a
-                    # hand with its fingers fanned apart rather than closed.
-                    e[FINGER_CURL_AXIS] = amount * (1.0 if side == "l" else -1.0)
-                    if seg == 1:
-                        e[FINGER_SPREAD_AXIS] = (
-                            hand.spread * 9.0 * D2R * (1 if side == "l" else -1))
+                    e[idx] = curl * share[seg - 1] * 78.0 * D2R * sign
+                    if seg == 1 and hand.spread:
+                        # Spread is about a perpendicular axis, whichever of the
+                        # other two is not the bone's own length.
+                        spread_idx = 2 if idx != 2 else 0
+                        e[spread_idx] = (hand.spread * 9.0 * D2R
+                                         * (1 if side == "l" else -1))
                     bone.rotation_euler = e
 
     def _apply_contacts(self, motion: HumanMotionState) -> None:

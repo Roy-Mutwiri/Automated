@@ -31,15 +31,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 RIG_BLEND = "assets/rig/body_rig.blend"
 
-# (location, look-at height, lens). Units are the rig's own, which are roughly
-# decimetres: the body spans about 18 units head to toe.
+# Cameras are derived from the body, not typed in. The presets below are
+# (side offset, forward distance, height above the seat, look-at height above
+# the seat, lens) in *body-relative* terms; `setup_scene` turns them into world
+# positions using the measured geometry, so they stay framed if the rig changes.
+#
+# The high and rear views exist because they are the cheat detectors: a high
+# angle shows whether the hands really touch the desk and where the knees are,
+# and a rear view shows shoulder and breathing motion that is nearly invisible
+# head-on.
+# Forward is **+Z** in this space, so a front camera has a positive forward
+# offset. The first version used negative values - Blender's convention, not the
+# source data's - and every view came out mirrored front-to-back: the preset
+# named "rear" was the one showing his face.
 CAMERAS = {
-    "front":   ((0.0, -17.0, 7.4), 6.2, 62.0),
-    "side":    ((15.5, -7.0, 7.2), 6.0, 62.0),
-    "three_q": ((10.0, -14.0, 7.8), 6.4, 60.0),
-    "rear":    ((-5.0, 14.0, 8.4), 6.2, 58.0),
-    "top":     ((0.5, -7.0, 18.0), 3.5, 45.0),
-    "torso":   ((0.0, -11.0, 6.4), 5.8, 72.0),
+    "front":   (0.00, +2.30, 0.75, 0.42, 50.0),
+    "side":    (2.05, +0.55, 0.70, 0.38, 52.0),
+    "three_q": (1.35, +1.85, 0.80, 0.42, 50.0),
+    # High enough to see the shoulders over the backrest, which is the
+    # whole point of a rear view.
+    "rear":    (-0.55, -1.75, 1.45, 0.55, 50.0),
+    "high":    (0.55, +1.25, 2.30, 0.05, 45.0),
+    "torso":   (0.00, +1.55, 0.72, 0.40, 62.0),
+    "hands":   (0.30, +1.05, 0.95, 0.28, 68.0),
 }
 
 
@@ -72,34 +86,47 @@ def setup_scene(camera: str, width: int, height: int, samples: int = 16):
     world.node_tree.nodes["Background"].inputs[0].default_value = (0.05, 0.055, 0.065, 1)
     world.node_tree.nodes["Background"].inputs[1].default_value = 0.6
 
-    # Desk, chair, floor. Blocks, on purpose - what is being judged is the
-    # body, not the furniture.
+    # Desk, chair, floor. Blocks on purpose - the body is what is being judged.
     #
-    # Placement is derived from the contact targets rather than typed in. The
-    # first version put the desk at +Y, which after the MakeHuman-to-Blender
-    # conversion is *behind* him: forward is -Y. He was sitting with his back
-    # to his own desk.
-    tgt = bpy.data.objects.get("target_mouse")
-    desk_z = tgt.location.z if tgt is not None else 2.0
-    desk_y = tgt.location.y if tgt is not None else -6.0
+    # Every plane comes from `rig_geometry`, the same module the hand and foot
+    # targets are computed from. Placing furniture independently is what put the
+    # desk behind him last time.
+    from presenter.motion.rig_geometry import (UNITS_PER_CM, SeatedGeometry,
+                                               load_joints, mh_to_blender)
 
-    for name, loc, size in (
-        ("desk", (0.0, desk_y - 1.6, desk_z - 0.3), (8.5, 3.0, 0.28)),
-        ("chair_seat", (0.0, 1.2, 0.9), (4.6, 4.2, 0.35)),
-        ("chair_back", (0.0, 4.4, 5.6), (4.6, 0.45, 4.8)),
-        ("floor", (0.0, 0.0, -9.4), (26.0, 26.0, 0.2)),
-    ):
+    j = load_joints()
+    g = SeatedGeometry.measure(j)
+    cm = UNITS_PER_CM
+
+    def slab(name, centre_mh, half_mh, shade):
+        loc = mh_to_blender(centre_mh)
+        hx, hy, hz = half_mh                       # half-extents in MH axes
         bpy.ops.mesh.primitive_cube_add(size=2.0, location=loc)
         o = bpy.context.object
         o.name = name
-        o.scale = size
+        o.scale = (hx, hz, hy)                     # MH (x,y,z) -> BL (x,z,y)
         m = bpy.data.materials.new(name + "_mat")
         m.use_nodes = True
-        bsdf = m.node_tree.nodes["Principled BSDF"]
-        shade = 0.05 if name.startswith("chair") else (0.10 if name == "desk" else 0.17)
-        bsdf.inputs["Base Color"].default_value = (shade, shade, shade * 1.06, 1)
-        bsdf.inputs["Roughness"].default_value = 0.72
+        b = m.node_tree.nodes["Principled BSDF"]
+        b.inputs["Base Color"].default_value = (shade, shade, shade * 1.05, 1)
+        b.inputs["Roughness"].default_value = 0.72
         o.data.materials.append(m)
+        return o
+
+    seat_mid_z = 0.5 * (g.seat_back_z + g.seat_front_z)
+    seat_half_z = 0.5 * (g.seat_front_z - g.seat_back_z)
+
+    slab("floor", (0.0, g.floor_y - 1.0 * cm, seat_mid_z),
+         (140 * cm, 1.0 * cm, 140 * cm), 0.17)
+    slab("chair_seat", (0.0, g.seat_y - 3.0 * cm, seat_mid_z),
+         (24 * cm, 3.0 * cm, seat_half_z), 0.05)
+    # Mid-back height. A full-height backrest is realistic but hides the
+    # shoulders from the rear camera, and the rear view exists precisely to
+    # check shoulder and breathing motion.
+    slab("chair_back", (0.0, g.seat_y + 24 * cm, g.seat_back_z - 3.0 * cm),
+         (23 * cm, 24 * cm, 3.0 * cm), 0.05)
+    slab("desk", (0.0, g.desk_y - 1.5 * cm, g.desk_front_z + 35 * cm),
+         (60 * cm, 1.5 * cm, 35 * cm), 0.10)
 
     for name, loc, energy, size in (
         ("key", (-9.0, -14.0, 13.0), 9000.0, 7.0),
@@ -114,13 +141,20 @@ def setup_scene(camera: str, width: int, height: int, samples: int = 16):
         bpy.context.collection.objects.link(lo)
         _look_at(lo, (0.0, 0.0, 5.0))
 
-    loc, look_h, lens = CAMERAS[camera]
+    # Body-relative preset -> world placement, using the measured geometry.
+    span = (g.shoulder_y - g.floor_y)              # a body-scale length
+    sx, fz, hy, look_hy, lens = CAMERAS[camera]
+    cam_mh = (sx * span,
+              g.seat_y + hy * span,
+              g.seat_front_z + fz * span)
+    look_mh = (0.0, g.seat_y + look_hy * span, g.seat_back_z + 0.20 * span)
+
     cam_data = bpy.data.cameras.new("cam")
     cam_data.lens = lens
     cam = bpy.data.objects.new("cam", cam_data)
-    cam.location = loc
+    cam.location = Vector(mh_to_blender(cam_mh))
     bpy.context.collection.objects.link(cam)
-    _look_at(cam, (0.0, 0.0, look_h))
+    _look_at(cam, mh_to_blender(look_mh))
     scene.camera = cam
     return scene
 

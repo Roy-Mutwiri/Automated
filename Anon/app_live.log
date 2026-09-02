@@ -1,0 +1,46 @@
+[app] wardrobe: 17 combination(s) not generated
+[app] loading LivePortrait, source=assets/master/master_v04_final.png (full/source)
+[22:21:21] Load appearance_feature_extractor from   live_portrait_wrapper.py:46
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\base_models\appearance_                            
+           feature_extractor.pth done.                                         
+[22:21:22] Load motion_extractor from               live_portrait_wrapper.py:49
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\base_models\motion_extr                            
+           actor.pth done.                                                     
+           Load warping_module from                 live_portrait_wrapper.py:52
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\base_models\warping_mod                            
+           ule.pth done.                                                       
+           Load spade_generator from                live_portrait_wrapper.py:55
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\base_models\spade_gener                            
+           ator.pth done.                                                      
+           Load stitching_retargeting_module from   live_portrait_wrapper.py:59
+           C:\Users\mutwi\Documents\Automated\Anon\                            
+           third_party\LivePortrait\pretrained_weig                            
+           hts\liveportrait\retargeting_models\stit                            
+           ching_retargeting_module.pth done.                                  
+[22:21:23] LandmarkRunner warmup time: 0.044s       human_landmark_runner.py:95
+[render] background lock: human region 29.4% of frame, grown 29 px
+expression channel calibration:
+  [VERIFIED  ] gaze_x       gain=0.0430  horizontal iris. index 15 alone; 11/13/16 added distortion, not gaze. 0.018 latent = eyes near their natural lateral limit, so gain maps gaze_x=+-0.42 onto that limit
+  [VERIFIED  ] gaze_y       gain=0.0240  vertical iris. couples with lid aperture, which is anatomically correct - lids follow vertical gaze - but caps how far this can be driven before the eye reads as widened rather than raised
+  [VERIFIED  ] brow_l       gain=0.0120  subject's LEFT brow. strongest brow dimension in the latent
+  [VERIFIED  ] brow_r       gain=0.0360  subject's RIGHT brow. weaker pair, gain scaled ~3x to partly compensate; a residual left/right imbalance is left in as facial asymmetry
+  [UNVERIFIED] brow_furrow  gain=0.0140  both brows driven down together. the lowering is measured; whether this reads as a medial *pull* rather than a flat drop has not been confirmed at expressive amplitude
+  [VERIFIED  ] smile        gain=0.0260  symmetric smile. NO single dimension lifts the corners - the scan found the mouth dims either open/close it (19, 20 axis 1) or shear it sideways (17, 20 axis 0). A smile needs a combination, and this pair was chosen by rendering candidates and looking. Driving it also produces the cheek lift and lower-lid narrowing on its own, because the model learned faces holistically - which is why cheek and squint are deliberately NOT mapped separately
+  [VERIFIED  ] smile_asym   gain=0.0100  lateral pull, carrying the left/right difference so one corner can lead. Measured as the most laterally-biased mouth dimension
+  [UNVERIFIED] mouth_open   gain=0.0100  reserved for lip-sync, unused while mouth_open stays 0. indices are the three most mouth-selective on axis 1 (27.1, 18.9, 17.0) but sign and articulation quality are uncalibrated
+[app] warming up (3 frames)...
+[app] warmup took 19.8s
+[render] background lock: human region 29.2% of frame, grown 29 px
+[app] camera -> cam2 (2 Medium, prepared in 1.67s)
+[render] background lock: human region 36.9% of frame, grown 29 px
+[app] camera -> cam3 (3 Close, prepared in 1.63s)
+[render] background lock: human region 29.8% of frame, grown 29 px
+[app] camera -> cam1 (1 Hero, prepared in 2.91s)

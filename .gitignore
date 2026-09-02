@@ -105,3 +105,9 @@ Anon/calibration/
 Anon/clip_blink.png
 Anon/clip_gaze.png
 Anon/clip_contact_sheet.png
+Anon/seated_frames/
+Anon/seated_debug_frames/
+Anon/eyehead_frames/
+Anon/finger_tmp/
+Anon/seated_render.log
+Anon/seated_debug.log

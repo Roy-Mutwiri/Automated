@@ -96,6 +96,7 @@ def draw_debug(frame: np.ndarray, engine: BehaviorEngine, pose: AvatarPose,
                timer: FrameTimer, render_ms: float, failures: int,
                renderer_name: str) -> None:
     """Overlay engine state. Deliberately dense - this is a diagnostic view."""
+    m = engine.motion
     lines = [
         f"{renderer_name}   {frame.shape[1]}x{frame.shape[0]}",
         f"FPS {timer.fps:5.1f}   render {render_ms:5.2f}ms   "
@@ -108,8 +109,22 @@ def draw_debug(frame: np.ndarray, engine: BehaviorEngine, pose: AvatarPose,
         f"lids   L {pose.eye_open_l:5.3f}  R {pose.eye_open_r:5.3f}",
         f"brow   L {pose.brow_l:+5.3f}  R {pose.brow_r:+5.3f}  "
         f"furrow {pose.brow_furrow:+5.3f}",
-        f"breath phase {pose.breathing_phase:4.2f}   scale {pose.scale:6.4f}",
         f"arousal {engine.arousal:+5.2f}   motion budget {engine.motion_budget:4.2f}",
+        "",
+        # The body. None of this is visible in a face-only render - the torso
+        # here is a photograph - but it is what the rig is being driven by, and
+        # showing it is the only way to tell a breathing presenter from a still
+        # one on this renderer.
+        f"BODY (canonical state, mostly invisible on this renderer)",
+        f"breath phase {m.breathing.phase:4.2f}  drive {m.breathing.drive:5.3f}  "
+        f"rate {m.breathing.rate:4.1f}/min  depth {m.breathing.depth:4.2f}",
+        f"chest  rx {m.chest.rx:+6.3f}   clav L rz {m.clavicle_l.rz:+6.3f}  "
+        f"R rz {m.clavicle_r.rz:+6.3f}",
+        f"neck   ry {m.neck.ry:+6.2f}   head ry {m.head.ry:+6.2f}   "
+        f"posture {m.posture.engagement:+5.2f}",
+        f"attend {m.attention.target:<15} az {m.attention.azimuth:+6.1f}  "
+        f"el {m.attention.elevation:+6.1f}  demand {m.attention.visual_demand:4.2f}",
+        f"hands  R {str(m.hand_r.contact):<12} L {str(m.hand_l.contact)}",
         "",
         f"blinks {engine.stats.blinks:4d} ({engine.stats.blinks_per_minute():5.1f}/min)"
         f"   next in {engine.blink.time_to_next(engine.now):4.1f}s",
@@ -125,7 +140,7 @@ def draw_debug(frame: np.ndarray, engine: BehaviorEngine, pose: AvatarPose,
         lines.append(f"RENDER FAILURES: {failures} (holding last good frame)")
 
     overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (620, 26 + 19 * len(lines)), (0, 0, 0), -1)
+    cv2.rectangle(overlay, (0, 0), (700, 26 + 19 * len(lines)), (0, 0, 0), -1)
     cv2.addWeighted(overlay, 0.62, frame, 0.38, 0, frame)
 
     y = 26

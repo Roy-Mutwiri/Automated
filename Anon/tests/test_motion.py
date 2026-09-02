@@ -270,3 +270,104 @@ def test_expression_has_a_reaction_latency():
     assert m.face.mouth_corner_l == 0.0, "reacted on the trigger frame"
     latency = sysx._active.latency
     assert 0.09 <= latency <= 1.4
+
+
+# --- recording, replay and determinism ---------------------------------------
+
+def test_recording_round_trips_exactly():
+    """Numeric channels must survive save and load bit for bit.
+
+    A recording that is nearly the same is useless for the thing it exists
+    for - rendering one take from seven cameras and getting one human.
+    """
+    import numpy as np
+
+    from presenter.motion.recording import MotionRecording
+
+    engine = BehaviorEngine(seed=4)
+    rec = MotionRecording()
+    for _ in range(600):
+        engine.update(1.0 / 30.0)
+        rec.append(engine.motion)
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "m.npz"
+        rec.save(path)
+        back = MotionRecording.load(path)
+
+    assert len(back) == len(rec)
+    a = np.stack(rec.rows)
+    b = np.stack(back.rows)
+    assert np.abs(a - b).max() == 0.0
+    # The non-numeric channels carry the *reason* for a movement and must not
+    # be dropped.
+    assert back.labels[300]["attention_target"] == rec.labels[300]["attention_target"]
+    assert back.labels[300]["behavior_state"] == rec.labels[300]["behavior_state"]
+
+
+def test_same_state_gives_the_same_2d_pose():
+    """The adapter is a pure function of the state. No hidden history."""
+    from presenter.motion.recording import MotionRecording
+
+    engine = BehaviorEngine(seed=6)
+    rec = MotionRecording()
+    for _ in range(300):
+        engine.update(1.0 / 30.0)
+        rec.append(engine.motion)
+
+    for i in (10, 150, 299):
+        first = vars(to_avatar_pose(rec.state(i)))
+        second = vars(to_avatar_pose(rec.state(i)))
+        assert first == second
+    # And different states must not collapse to the same pose.
+    assert vars(to_avatar_pose(rec.state(10))) != vars(to_avatar_pose(rec.state(299)))
+
+
+def test_replaying_a_recording_reproduces_the_timeline():
+    """Replay is the renderer-independence proof, so it has to be exact."""
+    from presenter.motion.recording import MotionRecording
+
+    engine = BehaviorEngine(seed=11)
+    rec = MotionRecording()
+    live = []
+    for _ in range(900):
+        engine.update(1.0 / 30.0)
+        rec.append(engine.motion)
+        live.append(to_avatar_pose(engine.motion))
+
+    for i, want in enumerate(live):
+        got = to_avatar_pose(rec.state(i))
+        for attr in ("yaw", "pitch", "roll", "gaze_x", "gaze_y",
+                     "eye_open_l", "eye_open_r"):
+            assert getattr(got, attr) == pytest.approx(getattr(want, attr), abs=1e-5)
+
+
+# --- seated limits -----------------------------------------------------------
+
+def test_seated_limits_bound_every_joint():
+    from presenter.behavior.constraints import SEATED_JOINT_LIMITS, apply_body
+
+    m = HumanMotionState()
+    for j in m.joints().values():
+        j.rx, j.ry, j.rz = 400.0, -400.0, 400.0
+    apply_body(m)
+    joints = m.joints()
+    for name, ranges in SEATED_JOINT_LIMITS.items():
+        j = joints[name]
+        for axis, (lo, hi) in zip(("rx", "ry", "rz"), ranges):
+            assert lo <= getattr(j, axis) <= hi
+
+
+def test_normal_behaviour_never_hits_a_seated_limit():
+    """Limits are a backstop for generated motion, not a working constraint.
+
+    If ordinary idle behaviour is clipping, either the behaviour is wrong or
+    the limits are, and both are worth knowing about.
+    """
+    engine = BehaviorEngine(seed=5)
+    total = 0
+    for _ in range(30 * 60 * 5):
+        engine.update(1.0 / 30.0)
+        total += sum(engine.limit_hits.values())
+    assert total == 0, f"{total} axis-clamps during ordinary idle behaviour"

@@ -40,7 +40,35 @@ from __future__ import annotations
 
 import math
 
-__all__ = ["AnatomicalLimits", "SEATED_PRESENTER", "apply"]
+__all__ = ["AnatomicalLimits", "SEATED_PRESENTER", "apply", "SEATED_JOINT_LIMITS",
+           "apply_body"]
+
+# Plausible ranges for a *seated presenter at a desk*, in degrees, as
+# (min, max) per axis. Not full anatomical range: a spine can flex far further
+# than this, but a man in a task chair does not, and a limit set to what the
+# body could theoretically do would never catch anything.
+#
+# These exist so that a generated or learned motion source, when one arrives,
+# has something to be clamped by. Principle 5: generated motion is a proposal.
+SEATED_JOINT_LIMITS: dict[str, tuple[tuple[float, float], ...]] = {
+    #             rx (fwd/back)     ry (turn)       rz (side bend)
+    "pelvis":      ((-12.0, 14.0), (-9.0, 9.0),   (-7.0, 7.0)),
+    "spine_lower": ((-14.0, 16.0), (-12.0, 12.0), (-10.0, 10.0)),
+    "spine_mid":   ((-12.0, 14.0), (-14.0, 14.0), (-10.0, 10.0)),
+    "chest":       ((-10.0, 12.0), (-14.0, 14.0), (-9.0, 9.0)),
+    "clavicle_l":  ((-8.0, 10.0),  (-8.0, 8.0),   (-12.0, 12.0)),
+    "clavicle_r":  ((-8.0, 10.0),  (-8.0, 8.0),   (-12.0, 12.0)),
+    "shoulder_l":  ((-45.0, 70.0), (-40.0, 40.0), (-35.0, 35.0)),
+    "shoulder_r":  ((-45.0, 70.0), (-40.0, 40.0), (-35.0, 35.0)),
+    "elbow_l":     ((-2.0, 150.0), (-25.0, 25.0), (-15.0, 15.0)),
+    "elbow_r":     ((-2.0, 150.0), (-25.0, 25.0), (-15.0, 15.0)),
+    "wrist_l":     ((-60.0, 60.0), (-25.0, 25.0), (-30.0, 30.0)),
+    "wrist_r":     ((-60.0, 60.0), (-25.0, 25.0), (-30.0, 30.0)),
+    "neck":        ((-25.0, 30.0), (-45.0, 45.0), (-22.0, 22.0)),
+    "head":        ((-20.0, 22.0), (-35.0, 35.0), (-25.0, 25.0)),
+    "eye_l":       ((-30.0, 30.0), (-42.0, 42.0), (-2.0, 2.0)),
+    "eye_r":       ((-30.0, 30.0), (-42.0, 42.0), (-2.0, 2.0)),
+}
 
 
 class AnatomicalLimits:
@@ -67,6 +95,29 @@ def _soft(x: float, limit: float) -> float:
     if limit <= 0.0:
         return 0.0
     return limit * math.tanh(x / limit)
+
+
+def apply_body(motion) -> dict[str, int]:
+    """Clamp every joint of a motion state to its seated range, in place.
+
+    Returns a count of how many axes were actually clamped, per joint. A
+    non-empty result is not necessarily a bug - it is the constraint stage doing
+    its job - but a *persistently* non-empty one means something upstream is
+    asking for a pose this body cannot hold.
+    """
+    hit: dict[str, int] = {}
+    joints = motion.joints()
+    for name, ranges in SEATED_JOINT_LIMITS.items():
+        j = joints.get(name)
+        if j is None:
+            continue
+        for axis, (lo, hi) in zip(("rx", "ry", "rz"), ranges):
+            v = getattr(j, axis)
+            c = min(max(v, lo), hi)
+            if c != v:
+                setattr(j, axis, c)
+                hit[name] = hit.get(name, 0) + 1
+    return hit
 
 
 def apply(pose, limits: AnatomicalLimits = SEATED_PRESENTER) -> None:

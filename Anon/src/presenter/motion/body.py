@@ -166,6 +166,19 @@ class BodySystem:
         self._left_rest = "desk_rest_l"
         self.shift_count = 0
 
+        # How far the pelvis may slide back before the spine meets the
+        # backrest. Measured from the body, so a different chair or a different
+        # body changes it without editing this file.
+        try:
+            from .rig_geometry import SeatedGeometry, load_joints
+            j = load_joints()
+            g = SeatedGeometry.measure(j)
+            self._max_slide, self._rest_gap = g.back_contact_travel(j)
+        except Exception:
+            # No rig data available (pure-behaviour tests). Contact is then
+            # simply never claimed, rather than guessed at.
+            self._max_slide, self._rest_gap = 0.0, 1.0
+
     # -- scheduling ----------------------------------------------------------
     def _schedule(self, drives) -> None:
         median = 74.0 / self.activity
@@ -310,10 +323,27 @@ class BodySystem:
         motion.hand_l.contact = self._left_rest
         motion.hand_l.contact_weight = 1.0
 
+        # Chair contact, physical rather than visual.
+        #
+        # Settling back slides the pelvis toward the backrest until the lumbar
+        # spine meets it; leaning forward slides it away and the back leaves the
+        # rest. The travel is clamped to the measured gap so the torso can reach
+        # the backrest but never enter it.
+        settle = max(-self._engagement, 0.0)
+        slide = -self._max_slide * settle
+        motion.root_z = slide
+
+        # Contact is *derived* from where the spine ended up, so it cannot
+        # claim the back is resting while the torso is leaning away.
+        remaining = self._rest_gap + slide
+        contact = 1.0 - min(max(remaining / max(self._rest_gap, 1e-3), 0.0), 1.0)
+        contact *= max(1.0 - max(self._engagement, 0.0) * 1.4, 0.0)
+
         motion.posture = PostureState(
             engagement=self._engagement,
             lean=-ENGAGEMENT_COUPLING["pelvis"][0] * self._engagement,
-            settle=max(-self._engagement, 0.0),
+            settle=settle,
+            back_contact=contact,
             shoulder_drop_l=SEATED_NEUTRAL["clavicle_l"][2],
             shoulder_drop_r=SEATED_NEUTRAL["clavicle_r"][2],
         )

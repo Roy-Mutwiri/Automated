@@ -47,6 +47,8 @@ import math
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
 JOINTS = "research/avatar_reconstruction/outputs/fitted_joints.json"
 MESH = "research/avatar_reconstruction/outputs/fitted_head.obj"
 
@@ -61,6 +63,20 @@ SKELETON: list[tuple[str, str, str, str | None, bool]] = [
     ("neck",        "joint-neck",       "joint-head",      "chest_top",   True),
     ("head",        "joint-head",       "joint-head-2",    "neck",        True),
 ]
+
+# Legs. Camera 5 and 6 will see them, and a seated pose without hips is a
+# torso balanced on a standing pair of legs.
+for side in ("l", "r"):
+    SKELETON += [
+        (f"thigh_{side}", f"joint-{side}-upper-leg", f"joint-{side}-knee",
+         "pelvis", False),
+        (f"shin_{side}",  f"joint-{side}-knee",      f"joint-{side}-ankle",
+         f"thigh_{side}", True),
+        (f"foot_{side}",  f"joint-{side}-ankle",     f"joint-{side}-foot-1",
+         f"shin_{side}",  True),
+        (f"toe_{side}",   f"joint-{side}-foot-1",    f"joint-{side}-foot-2",
+         f"foot_{side}",  True),
+    ]
 
 for side in ("l", "r"):
     SKELETON += [
@@ -85,62 +101,18 @@ for side in ("l", "r"):
                 seg > 1,
             ))
 
-# Contact targets, in MakeHuman coordinates.
-#
-# Placed as a fraction of the arm's *actual* reach, measured from this body's
-# own joints, rather than as absolute offsets. The first version used fractions
-# of shoulder width and put the mouse 6.09 units from the shoulder against a
-# total arm reach of 5.20 - out of reach. The IK solved it correctly by
-# straightening the arm and pointing at the target, which is why the character
-# sat at his desk with both arms locked straight out to the sides.
-#
-# 0.72 of full reach gives a relaxed elbow around 100 degrees, which is what a
-# forearm resting on a desk actually does.
-COMFORT_REACH = 0.72
+# Contact targets and scene planes come from the shared geometry module, which
+# measures them off this body. Nothing here is a typed-in coordinate: the desk
+# and the hand targets are computed from the same numbers, so they cannot
+# disagree the way they did when the desk was placed at +Y and the targets at -Y.
+def contact_points(j: dict) -> dict:
+    from presenter.motion.rig_geometry import SeatedGeometry
 
-
-def contact_points(j: dict) -> dict[str, tuple[float, float, float]]:
-    import math as _m
-
-    def dist(a, b):
-        return _m.dist(j[a], j[b])
-
+    g = SeatedGeometry.measure(j)
     out = {}
-    for side, sign in (("l", +1.0), ("r", -1.0)):
-        sh = j[f"joint-{side}-shoulder"]
-        reach = dist(f"joint-{side}-shoulder", f"joint-{side}-elbow") +             dist(f"joint-{side}-elbow", f"joint-{side}-hand")
-        d = reach * COMFORT_REACH
-
-        elbow_y = j[f"joint-{side}-elbow"][1]
-        desk_y = elbow_y - 0.35
-        dy = desk_y - sh[1]
-
-        # Whatever budget is left after dropping to desk height goes forward,
-        # with a little of it inward so the hands are nearer than the shoulders.
-        planar = max(d * d - dy * dy, 0.25) ** 0.5
-        # Barely inward. At 0.22 both hands converged on the midline and the
-        # fingers met, which is a person praying, not a person at a desk.
-        dx = -sign * planar * 0.04
-        dz = max(planar * planar - dx * dx, 0.25) ** 0.5
-
-        hand = "desk_rest_l" if side == "l" else "mouse"
-        out[hand] = (sh[0] + dx, desk_y, sh[2] + dz)
-
-        # The lap is lower, closer and further inboard.
-        lap_d = reach * 0.52
-        out[f"lap_rest_{side}"] = (
-            sh[0] - sign * lap_d * 0.30,
-            j["joint-pelvis"][1] + 1.1,
-            sh[2] + lap_d * 0.62,
-        )
-        out[f"armrest_{side}"] = (
-            sh[0] + sign * 0.35,
-            desk_y - 1.5,
-            sh[2] + planar * 0.55,
-        )
-
-    mouse = out["mouse"]
-    out["keyboard"] = (mouse[0] * 0.35, mouse[1], mouse[2] - 0.3)
+    out.update(g.hand_targets(j))
+    out.update(g.foot_targets(j))
+    out.update(g.pole_targets(j))
     return out
 
 
@@ -213,9 +185,41 @@ def build(joints_path: Path, mesh_path: Path, out_path: Path,
         bpy.context.collection.objects.link(e)
         targets[name] = e
 
-    # IK on each forearm, two bones deep, so the elbow and shoulder solve
-    # together and the hand can be pinned to a surface. Disabled by default;
-    # the adapter raises the influence when the hand is in contact.
+    # IK, constrained by *measured* hinge axes rather than by pole targets.
+    #
+    # Poles were tried first and made things worse: a pole angle is measured
+    # from the bone's roll, the elbow's roll sits only 0.805 aligned with its
+    # anatomical hinge, and leaving the angle at zero twisted both arms out of
+    # their sockets. Locking the two axes a hinge cannot rotate about is
+    # equivalent, needs no angle, and cannot flip - the solver has nowhere to
+    # flip to.
+    #
+    # Axes come from tools/rig_axes.py. Knees are near-perfect (0.997); elbows
+    # and fingers are looser, which is a property of the fitted joint data and
+    # is recorded in the contract rather than hidden.
+    import json as _json
+    axis_path = Path("config/rig_axes.json")
+    axis_map = {}
+    if axis_path.exists():
+        axis_map = _json.loads(axis_path.read_text()).get("axis_map", {})
+
+    def hinge_of(bone_name, fallback_axis, fallback_sign):
+        e = axis_map.get(bone_name)
+        if not e:
+            return fallback_axis, fallback_sign
+        return e["curl_axis"], e["curl_sign"]
+
+    def constrain_hinge(pb, axis, sign, lo_deg, hi_deg):
+        """Lock every axis but the hinge, and limit the hinge to its range."""
+        for a in "xyz":
+            setattr(pb, f"lock_ik_{a}", a.upper() != axis)
+        lo, hi = math.radians(lo_deg), math.radians(hi_deg)
+        if sign < 0:
+            lo, hi = -hi, -lo
+        setattr(pb, f"use_ik_limit_{axis.lower()}", True)
+        setattr(pb, f"ik_min_{axis.lower()}", lo)
+        setattr(pb, f"ik_max_{axis.lower()}", hi)
+
     for side, tname in (("l", "desk_rest_l"), ("r", "mouse")):
         pb = rig.pose.bones.get(f"elbow_{side}")
         if pb is None:
@@ -225,6 +229,26 @@ def build(joints_path: Path, mesh_path: Path, out_path: Path,
         ik.chain_count = 2
         ik.influence = 0.0
         ik.name = "hand_contact"
+        axis, sgn = hinge_of(f"elbow_{side}", "Z", -1.0 if side == "l" else 1.0)
+        constrain_hinge(pb, axis, sgn, 2.0, 150.0)   # elbows never hyperextend
+
+        # The shoulder may swing but barely twist; a humerus that spins in its
+        # socket is the other way an IK arm announces itself.
+        sh = rig.pose.bones.get(f"shoulder_{side}")
+        if sh is not None:
+            sh.ik_stiffness_y = 0.85
+
+    for side in ("l", "r"):
+        pb = rig.pose.bones.get(f"shin_{side}")
+        if pb is None:
+            continue
+        ik = pb.constraints.new("IK")
+        ik.target = targets[f"foot_{side}"]
+        ik.chain_count = 2
+        ik.influence = 1.0
+        ik.name = "foot_contact"
+        axis, sgn = hinge_of(f"shin_{side}", "X", 1.0)
+        constrain_hinge(pb, axis, sgn, 2.0, 150.0)
 
     # --- skinning ---------------------------------------------------------
     bpy.ops.object.select_all(action="DESELECT")

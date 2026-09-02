@@ -148,6 +148,10 @@ class PostureState:
     engagement: float = 0.0          # -1 relaxed back .. +1 forward focus
     lean: float = 0.0                # degrees of forward torso lean
     settle: float = 0.0              # 0..1 how far back into the chair
+    # 0 = back clear of the rest, 1 = leaning on it. Derived from where the
+    # spine actually ends up, not asserted, so it cannot claim contact while
+    # the torso is somewhere else.
+    back_contact: float = 0.0
     # Persistent, person-specific asymmetry. Set once from the persona and not
     # re-randomised; a body that is asymmetric differently every second reads
     # as noise rather than as a person.

@@ -41,6 +41,7 @@ from .attention import AttentionSystem
 from .blinking import BlinkSystem
 from .breathing import BreathingSystem
 from .constraints import apply as apply_constraints
+from .constraints import apply_body
 from .context import Drives
 from .curves import clamp
 from .expression import ExpressionSystem
@@ -346,6 +347,11 @@ class BehaviorEngine:
         self.body.update(drives, motion)
         self.emotion.update(drives, motion)
         self.respiration.apply(self.respiration.update(drives), motion)
+
+        # Constraints on the body, before any adapter sees it. The head-only
+        # clamp below still runs for the 2D pose; this one bounds every joint a
+        # rig can express.
+        self.limit_hits = apply_body(motion)
 
         self.motion = motion
         pose = to_avatar_pose(motion)
