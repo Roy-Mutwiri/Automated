@@ -37,6 +37,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import time as _time
 from pathlib import Path
@@ -162,6 +163,25 @@ def load_depth(path: Path) -> np.ndarray:
     return d
 
 
+def _geometry_fingerprint() -> str:
+    """Fingerprint everything that can change room depth.
+
+    Cached depth is only reusable while the world it describes is unchanged.
+    Keying the cache on camera and resolution alone is not enough: moving a
+    camera 20 cm, or changing a focal length, leaves the filename identical and
+    silently reuses depth for a world that no longer exists. Every occlusion
+    decision afterwards would be wrong, and nothing would say so.
+
+    Both files are hashed whole rather than field by field, so a change to any
+    part of the room or the rig invalidates the cache without anyone having to
+    remember to list it here.
+    """
+    h = hashlib.sha256()
+    for rel in ("config/cameras.yaml", "config/room_geometry.yaml"):
+        h.update((ROOT / rel).read_bytes())
+    return h.hexdigest()[:10]
+
+
 def _hide_human():
     """Hide every part of the Blender proxy human.
 
@@ -204,7 +224,8 @@ def room_depth_map(world, camera_id, width, height, cache=True):
     import bpy
     from mathutils import Vector
 
-    key = ROOT / "renders" / "depth_cache" / f"{camera_id}_{width}x{height}.npy"
+    key = (ROOT / "renders" / "depth_cache" /
+           f"{camera_id}_{width}x{height}_{_geometry_fingerprint()}.npy")
     if cache and key.exists():
         cached = np.load(key)
         if cached.shape == (height, width):
