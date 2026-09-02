@@ -292,3 +292,82 @@ recomposed every frame, undoing the optimisation that took compositing from
 The dark wedge visible at the presenter's lower left is the office chair's frame
 in the source photograph, pulled in by the DeepLabV3 person matte. It predates
 this work and belongs to matting, not to the environment.
+
+## Wardrobe: clothing and head attire — 2026-09-02
+
+Two dropdowns in the preview window, and the machinery behind them.
+
+### The constraint that decided the design
+
+An outfit cannot be a layer. The torso in the output is static pixels lifted
+from the source portrait, the head is warped from appearance features extracted
+from that same image at startup, and `AvatarPose` carries head angles and eyelid
+openness — not a body. Nothing downstream *can* put a garment on someone. So
+changing clothes means changing the image the whole pipeline was prepared from,
+which is `set_source()`: swap every per-source array at once, cache the prepared
+result, and leave the model weights and the room style alone.
+
+Measured: **6.2 s** for a first switch, **0.00 s** for one already visited.
+Returning to a previous outfit reproduces its frame byte-for-byte, and a cached
+outfit is byte-identical to a freshly prepared one — both asserted directly
+rather than eyeballed.
+
+`_SOURCE_STATE` lists the 36 attributes that belong to a source rather than to
+the renderer. It is checked against the code by a test that walks the AST of the
+three methods that populate them, because the failure mode of a missing entry is
+not a crash — it is the new face rendered against the previous outfit's mask.
+
+### What the generation actually took
+
+`tools/generate_wardrobe.py` inpaints the base portrait with the face masked out
+of the edit, so identity, beard, skin and key light are copied through and only
+the garment is denoised. Four things had to be found the hard way:
+
+**CLIP truncates at 77 tokens, silently.** The first version paired a 53-token
+garment description with 56 tokens of photographic direction and lost 31 off the
+end — which is to say it lost the *entire* photographic direction while
+appearing to work, and the results looked like costume-shop stock photos with no
+error anywhere. `check_prompts()` now runs before anything is generated and it
+caught a 1-token overrun on its very first run.
+
+**SDXL base cannot insert a headdress.** Its UNet takes 4 channels and was never
+trained on mask conditioning. Across three rounds: at strength 0.97 it
+re-imagined the skull into a wound turban, at 0.85 it stopped producing a
+headdress at all and merely restyled the hair, and with the drape mask it put
+the cloth on the neck as a scarf. Garments worked throughout — a shirt is a
+plausible continuation of a torso — but a ghutra is not a plausible continuation
+of a scalp. This is what the 9-channel inpainting checkpoint exists for, and it
+is the one thing here that needed a download rather than a better prompt.
+
+**The mask has to match the garment's actual shape.** A horizontal cut at the
+chin leaves the collar untouched, because shoulders sit *higher* than the chin —
+the garment mask starts above the shoulder line with the head punched out
+instead. And a crown-plus-two-side-panels headwear mask left the hairline and
+headphone band partly outside it, so the model continued that context and
+returned braided hair and reconstructed headphone cups. One contiguous bell from
+crown to shoulders fixed it.
+
+**Naming the garment is not enough.** Three prompt shapes were generated side by
+side. "A white ghutra draped over his head, Gulf Arab headdress" returns braided
+hair. A literal description without the culture returns the same. Only
+establishing the wearer and then *defining* the object — "a Saudi man wearing a
+white ghutra and black agal, the ghutra is a large plain white cotton cloth
+covering his head..." — produces cloth.
+
+### Not delivered, and labelled as such
+
+**The agal does not render.** The black cord ring never appeared as a clause
+inside the ghutra prompt — the model spends the whole mask on the cloth. A
+dedicated third pass over the crown, on the reasoning that the taqiyah worked
+precisely because it was a small mask with one object in the prompt, was tried
+and was *worse*: it repainted the top of the head as bare scalp. The menu labels
+were changed from "White ghutra + agal" to "White ghutra" rather than claiming
+something the image does not contain.
+
+### Incidental fix
+
+`_person_matte` built and destroyed a ResNet-101 on every call. That was
+defensible when a matte happened once per process; it now happens twice per
+source prepare, and a source is prepared every time the presenter changes
+clothes. The segmenter is kept resident (~230 MB against 14.7 GB free) and
+released in `close()`.
