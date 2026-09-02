@@ -256,6 +256,11 @@ class BehaviorEngine:
         self.gaze.update(drives, pose, attention=self.attention)
         self.expression.update(drives, pose)
 
+        # The frozen head system's own contribution, before anything else is
+        # added. Kept separate because the stylistic head limits in the profile
+        # bound *idle fidgeting*, not gaze-driven turns.
+        self.idle_head = (pose.yaw, pose.pitch, pose.roll)
+
         # --- assemble the canonical motion state ---------------------------
         #
         # The face subsystems above are frozen and still write into an
@@ -353,7 +358,7 @@ class BehaviorEngine:
         self.stats.head_moves = self.head.move_count
         self.stats.expressions = self.expression.expression_count
         self.stats.posture_shifts = self.posture.shift_count
-        self.stats.breaths = self.breathing.breath_count
+        self.stats.breaths = self.respiration.breath_count
 
         self._pose = pose
         return pose
