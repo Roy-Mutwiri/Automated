@@ -94,7 +94,7 @@ class FrameTimer:
 
 def draw_debug(frame: np.ndarray, engine: BehaviorEngine, pose: AvatarPose,
                timer: FrameTimer, render_ms: float, failures: int,
-               renderer_name: str) -> None:
+               renderer_name: str, has_cameras: bool = True) -> None:
     """Overlay engine state. Deliberately dense - this is a diagnostic view."""
     lines = [
         f"{renderer_name}   {frame.shape[1]}x{frame.shape[0]}",
@@ -135,11 +135,20 @@ def draw_debug(frame: np.ndarray, engine: BehaviorEngine, pose: AvatarPose,
                     colour, 1, cv2.LINE_AA)
         y += 19
 
+    # Only advertise keys that actually do something. The camera rig exists
+    # solely for the photoreal renderer, so under the schematic renderer the
+    # bracket keys are inert - and a help line promising "[ ] camera" made that
+    # look like broken camera switching rather than a renderer that has none.
+    camera_help = "[ ] camera   " if has_cameras else ""
     cv2.putText(frame,
-                "1-9 state   [ ] camera   c clothing   h head attire   d debug   "
-                "s screenshot   q quit",
+                f"1-9 state   {camera_help}c clothing   h head attire   "
+                f"d debug   s screenshot   q quit",
                 (14, frame.shape[0] - 14), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                 (150, 160, 175), 1, cv2.LINE_AA)
+    if not has_cameras:
+        cv2.putText(frame, "cameras off: run with --renderer liveportrait",
+                    (14, frame.shape[0] - 34), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                    (120, 210, 255), 1, cv2.LINE_AA)
 
 
 def main() -> int:
@@ -230,6 +239,16 @@ def main() -> int:
     # portrait, not onto a room-scale master frame. Whichever was picked last
     # wins, and the UI reflects that by clearing the other one's highlight.
     rig = camera = None
+    if args.cameras and args.renderer != "liveportrait":
+        # Say so out loud. The cameras are source photographs prepared for the
+        # photoreal renderer; the schematic renderer draws a wireframe rig and
+        # has nothing to switch between. Staying silent here reads as "camera
+        # switching is broken" rather than "this renderer has no cameras",
+        # which is the wrong thing to go and debug.
+        print(f"[app] camera buttons are OFF: --renderer is "
+              f"'{args.renderer}'. Cameras exist only for the photoreal "
+              f"renderer - re-run with --renderer liveportrait to switch "
+              f"between cam1-cam7.")
     if args.cameras and args.renderer == "liveportrait":
         from presenter.render.cameras import CameraRig
 
@@ -537,7 +556,7 @@ def main() -> int:
                     shown = frame.copy()
                 if debug:
                     draw_debug(shown, engine, pose, timer, render_ms, failures,
-                               renderer.info.name)
+                               renderer.info.name, has_cameras=cam_row is not None)
                 if cam_row is not None:
                     cam_row.draw(shown)
                 if bar is not None:
