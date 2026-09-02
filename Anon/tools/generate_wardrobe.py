@@ -70,22 +70,38 @@ sys.path.insert(0, str(ROOT / "src"))
 
 MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 
-# Shared photographic direction. The garment has to look like it was in the
-# original photograph, which means matching the lens, the key light and the
-# skin rendering - not just naming the item.
+# CLIP truncates at 77 tokens, silently.
+#
+# The first version of this file paired a 53-token garment description with a
+# 56-token block of photographic direction and lost 31 tokens off the end -
+# which is to say, it lost the *entire* photographic direction while appearing
+# to work. The results came back looking like costume-shop stock photos and the
+# cause was invisible until the prompts were actually tokenised.
+#
+# Everything below is written to fit. `check_prompts()` asserts it, so a future
+# edit that overruns fails loudly instead of quietly dropping the tail.
+TOKEN_LIMIT = 77
+
 LOOK = (
-    "photorealistic, raw photo, natural fabric texture with visible weave, "
-    "soft warm key light from the front left, gentle falloff, "
-    "50mm lens, shallow depth of field, natural cloth folds and creases, "
-    "consistent lighting with the rest of the photograph, high detail"
+    "photorealistic raw photo, natural fabric texture, soft warm key light, "
+    "50mm lens, natural cloth folds, high detail"
 )
 
 NEGATIVE = (
-    "cartoon, illustration, 3d render, cgi, painting, flat colour, "
-    "costume, cosplay, fancy dress, theatrical, plastic, shiny latex, "
-    "distorted fabric, melted cloth, floating cloth, extra limbs, extra arms, "
-    "hands, fingers, deformed hands, text, logo, watermark, signature, "
-    "harsh shadows, blown highlights, low quality, blurry"
+    "cartoon, illustration, 3d render, painting, costume, cosplay, "
+    "plastic, distorted fabric, melted cloth, extra arms, hands, fingers, "
+    "text, logo, watermark, low quality, blurry"
+)
+
+# Headwear has its own failure mode, and it is specific: asked for a ghutra,
+# SDXL reaches for a turban - cloth wound tightly around the skull - because
+# that is what dominates its training data for "Arab headdress". A ghutra is
+# the opposite: a square of cloth laid *over* the head, weighted by the agal,
+# hanging free past the ears. Naming the wrong outcomes is the most effective
+# lever available.
+HEADWEAR_NEGATIVE = (
+    "turban, wound cloth, wrapped around head, bandana, tied headscarf, "
+    "hijab, veil, hat, cap, hood, long hair, blonde hair, visible hairline"
 )
 
 # -- the wardrobe -----------------------------------------------------------
