@@ -56,8 +56,8 @@ class RoomStyle:
 
     # Fairy / string lights. Warm, matching the source's existing bokeh.
     bokeh_warm: tuple[int, int, int] = (150, 196, 235)
-    bokeh_count: int = 26
-    bokeh_radius: tuple[int, int] = (26, 74)
+    bokeh_count: int = 44
+    bokeh_radius: tuple[int, int] = (9, 42)
 
     # RGB accent. Kept low - see the module docstring. Two hues on opposite
     # sides is the common LED-strip arrangement.
@@ -74,7 +74,7 @@ class RoomStyle:
     # asserting any detail the blur would have destroyed anyway.
     shelf: bool = True
     shelf_y: float = 0.30          # fraction of height
-    shelf_darkness: float = 0.55
+    shelf_darkness: float = 0.40
 
     # Desk edge across the bottom of frame, closer to camera than the wall and
     # therefore less blurred. This is what actually sells "seated at a desk".
@@ -217,10 +217,6 @@ def render_streaming_room(
             np.array(style.monitor_glow, np.float32)[None, None, :]
             * spill * style.monitor_strength
         )
-
-    # -- defocus ------------------------------------------------------------
-    k = int(short * style.blur) | 1
-    room = cv2.GaussianBlur(room, (k, k), 0)
 
     # -- desk, added after the wall blur and blurred less --------------------
     # The desk is nearer the camera than the wall, so it sits at a different
