@@ -89,12 +89,11 @@ _ANCHOR = "one adult male streamer seated close to camera"
 # quantity being targeted now (240-280 px at 1344x768), and camera distance is
 # the lever that actually moves it.
 SUBJECT_PROMPT = (
-    "photorealistic livestream camera frame, " + _ANCHOR + ", "
-    "a brown-skinned Arab man in his 30s with a short dark beard, "
-    "in a matte black high-back gaming chair, facing directly toward camera, "
-    "head and upper torso large in frame, symmetrical frontal face, "
-    "looking into the lens, calm neutral expression, mouth closed, eyes open, "
-    "40mm lens, eye level, natural skin texture"
+    "livestream camera frame, " + _ANCHOR + ", "
+    "a brown-skinned Arab man in his 30s, short dark beard, "
+    "in a matte black high-back gaming chair, facing directly at camera, "
+    "head and upper torso large in frame, frontal face, looking into the lens, "
+    "calm neutral expression, mouth closed, eyes open, 40mm, natural skin"
 )
 
 # Encoder B: the same man, then the room he is in.
@@ -131,8 +130,8 @@ NEGATIVE_2 = (
     "office chair, mesh chair, executive chair, corporate office, "
     "rgb lighting, rainbow, neon, purple, cyberpunk, gamer bedroom, "
     "text, letters, signage, logo, watermark, screen text, numbers, "
-    "cgi, 3d render, illustration, cartoon, sketch, plastic skin, waxy, "
-    "deformed hands, extra limbs, two people, blurry face, overexposed"
+    "cgi, 3d render, illustration, cartoon, sketch, plastic skin, "
+    "deformed hands, two people, blurry face, overexposed"
 )
 
 
