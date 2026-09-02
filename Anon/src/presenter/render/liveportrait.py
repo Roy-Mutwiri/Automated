@@ -72,6 +72,7 @@ class LivePortraitRenderer:
         use_half: bool = True,
         output_size: tuple[int, int] = (1280, 720),
         paste_back: bool = True,
+        framing: str = "shoulders",
     ) -> None:
         self.root = Path(liveportrait_root).resolve()
         if not self.root.exists():
