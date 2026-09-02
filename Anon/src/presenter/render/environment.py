@@ -220,23 +220,29 @@ def render_streaming_room(
     k = int(short * style.blur) | 1
     room = cv2.GaussianBlur(room, (k, k), 0)
 
-    # -- shelf silhouette, one plane nearer than the wall -------------------
-    # Applied *after* the wall blur and with a weaker kernel of its own. The
-    # shelf stands proud of the wall, so it is not at the same focus distance,
-    # and giving both the same blur is what flattens a room into a backdrop.
+    # -- shelf, and the objects standing proud of it ------------------------
+    # Two layers, because they are at two depths. The board is fixed to the
+    # wall and is therefore at wall distance: it must take the *full* wall
+    # blur. Giving it a sharper kernel - which is tempting, since it is the
+    # only piece of furniture in shot - immediately turns it into a hard rule
+    # ruled across the whole frame, which reads as a graphic element and not
+    # as a shelf. The objects sitting on it are the part that is genuinely
+    # nearer the camera, and they are the third plane in the focus ramp.
     if style.shelf:
         sy = int(h * style.shelf_y)
         thickness = max(int(h * 0.014), 2)
         # Drawn as a *darkening* of the wall rather than as black. A hard black
         # bar survives even heavy blur as a visible band, which reads as a
         # graphic element rather than as a piece of furniture.
-        shelf_layer = np.zeros((h, w), np.float32)
-        cv2.rectangle(shelf_layer, (0, sy), (w, sy + thickness), 1.0, -1)
+        board = np.zeros((h, w), np.float32)
+        cv2.rectangle(board, (0, sy), (w, sy + thickness), 1.0, -1)
+        board = cv2.GaussianBlur(board, (k, k), 0)
 
         # A small odd number of objects in two loose groups, heights varied.
         # An even rank of similarly-sized blocks spread across the whole width
         # reads as a graphic pattern rather than as somebody's belongings, and
         # the eye picks that up even through this much blur.
+        objects = np.zeros((h, w), np.float32)
         n = max(int(style.shelf_objects), 0)
         groups = 2 if n >= 4 else 1
         for g in range(groups):
@@ -246,14 +252,16 @@ def render_streaming_room(
                 ow = rng.uniform(0.022, 0.055) * w
                 oh = rng.uniform(0.025, 0.10) * h
                 cv2.rectangle(
-                    shelf_layer,
+                    objects,
                     (int(x), int(sy - oh)), (int(x + ow), sy),
                     float(rng.uniform(0.35, 0.8)), -1,
                 )
                 x += ow + rng.uniform(0.008, 0.03) * w
 
-        k_shelf = max(int(short * style.blur * style.shelf_focus) | 1, 3)
-        shelf_layer = cv2.GaussianBlur(shelf_layer, (k_shelf, k_shelf), 0)
+        k_obj = max(int(short * style.blur * style.shelf_focus) | 1, 3)
+        objects = cv2.GaussianBlur(objects, (k_obj, k_obj), 0)
+
+        shelf_layer = np.clip(board + objects, 0.0, 1.0)
         room *= (1.0 - style.shelf_darkness * shelf_layer)[..., None]
 
     # -- bokeh: defocused fairy lights --------------------------------------
