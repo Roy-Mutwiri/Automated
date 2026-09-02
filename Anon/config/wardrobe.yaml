@@ -74,27 +74,32 @@ headwear:
   none:
     label: Bare head
     prompt: null            # keeps the headphones
+  # These prompts name the wearer and then *define* the garment. That phrasing
+  # was not a stylistic choice - three prompt shapes were generated side by
+  # side and only this one produced cloth at all. Naming the item alone
+  # ("a white ghutra draped over his head") returns braided hair; establishing
+  # "a Saudi man wearing..." and then saying what a ghutra physically is gets
+  # the model into the right context first.
   ghutra_white:
     label: White ghutra + agal
     drape: 0.9
     prompt: >-
-      a thick black agal rope ring resting on top of a white ghutra,
-      the white cloth laid over his head hanging loose past his ears
-      onto his shoulders, Gulf Arab headdress
+      a Saudi man wearing a white ghutra and black agal, the ghutra is a
+      large plain white cotton cloth covering his head and falling over
+      both shoulders, the agal is a thick black cord ring on top
   shemagh_red:
     label: Red shemagh + agal
     drape: 0.9
     prompt: >-
-      a thick black agal rope ring resting on top of a red and white
-      checkered shemagh, the cloth laid over his head hanging loose
-      past his ears onto his shoulders, Arab headdress
+      a Saudi man wearing a red and white checkered shemagh and black agal,
+      the shemagh is a large checkered cloth covering his head and falling
+      over both shoulders, a black cord ring on top
   ghutra_loose:
     label: Ghutra, no agal
     drape: 0.9
     prompt: >-
-      a plain white ghutra cloth laid over his head without any cord,
-      hanging loose past his ears onto his shoulders, one end thrown
-      back over the shoulder, Arab headdress
+      a Saudi man wearing a plain white ghutra with no cord, a large white
+      cotton cloth covering his head and falling over both shoulders
   taqiyah:
     label: Taqiyah
     drape: 0.0             # a skullcap does not fall past the ears
