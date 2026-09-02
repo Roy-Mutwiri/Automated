@@ -64,6 +64,7 @@ class Camera:
 class CameraRig:
     cameras: dict[str, Camera]
     directory: Path
+    master: Path
     room: str = ""
 
     @classmethod
