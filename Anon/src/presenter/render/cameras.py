@@ -41,8 +41,14 @@ class Camera:
     key: str
     label: str
     animated: bool
-    subject: str
+    subject: str = ""
     hint: str = ""
+    # A derived camera has no image of its own: it prepares the rig's master
+    # frame at a different framing. That is what makes the man identical rather
+    # than merely similar across the cameras that show his face - it is one
+    # photograph, punched in and out of.
+    derive: bool = False
+    framing: str = "full"
     room: str | None = None            # None = the generator's shared room text
     negative: str | None = None
     negative_2: str | None = None
