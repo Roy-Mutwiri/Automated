@@ -118,12 +118,20 @@ def _capsule(name, a, b, radius, mat):
 
 
 def _look_at_euler(position, target):
-    """Blender camera convention: local -Z forward, +Y up."""
-    dx = target[0] - position[0]
-    dy = target[1] - position[1]
-    dz = target[2] - position[2]
-    horizontal = math.hypot(dx, dy)
-    return (math.atan2(horizontal, -dz), 0.0, math.atan2(dy, dx) + math.pi / 2)
+    """Aim an object at a world point.
+
+    Blender cameras and lights look down their local -Z with +Y up. Deriving
+    those Euler angles by hand is easy to get subtly wrong - the first version
+    of this function did, and every camera rendered a flat grey wall because it
+    was aimed at the floor. `to_track_quat` is the supported way and cannot be
+    off by a convention.
+    """
+    from mathutils import Vector
+
+    direction = Vector(target) - Vector(position)
+    if direction.length < 1e-9:
+        return (0.0, 0.0, 0.0)
+    return tuple(direction.to_track_quat("-Z", "Y").to_euler())
 
 
 def _distance(a, b):
