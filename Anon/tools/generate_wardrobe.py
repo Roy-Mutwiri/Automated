@@ -333,6 +333,14 @@ def main() -> int:
                     help="regenerate variants that already exist")
     args = ap.parse_args()
 
+    over = check_prompts()
+    if over:
+        print("[wardrobe] prompts exceed CLIP's 77-token limit and would be "
+              "truncated without warning:")
+        for line in over:
+            print(f"[wardrobe]   {line}")
+        return 2
+
     base_path = ROOT / args.base if not Path(args.base).is_absolute() else Path(args.base)
     img = cv2.imread(str(base_path))
     if img is None:
