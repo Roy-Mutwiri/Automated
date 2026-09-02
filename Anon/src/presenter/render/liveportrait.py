@@ -284,10 +284,12 @@ class LivePortraitRenderer:
         M_src2out_h = np.vstack([M_src2out, [0.0, 0.0, 1.0]]).astype(np.float32)
         self.M_crop2out = (M_src2out_h @ M_c2o_h)[:2, :].astype(np.float32)
 
-        # Static background, composed once.
-        self.background = cv2.warpAffine(
-            img_bgr, M_src2out, (out_w, out_h), flags=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_REPLICATE,
+        # Static background, composed once: the fill underneath, then the
+        # correctly-scaled source on top of it.
+        self.background = self._build_fill(img_bgr, out_w, out_h)
+        cv2.warpAffine(
+            img_bgr, M_src2out, (out_w, out_h), dst=self.background,
+            flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT,
         )
 
         # Feather mask in output space, also once.
