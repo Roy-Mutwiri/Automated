@@ -63,12 +63,12 @@ WIDTH, HEIGHT = 1344, 768
 
 # Encoder 1: who he is and how he is framed. MUST stay under 77 CLIP tokens.
 SUBJECT_PROMPT = (
-    "medium shot photo, waist up, camera 2 metres back, "
-    "a brown-skinned Arab man in his mid 30s, warm brown complexion, "
-    "short trimmed dark beard, fitted dark charcoal shirt, "
-    "sitting upright and relaxed in a premium black gaming chair with a high "
-    "back, looking into the camera, calm neutral expression, mouth closed, "
-    "eyes open, sharp detailed eyes, natural skin texture with pores"
+    "medium shot photo, waist up, camera 2m back, "
+    "a brown-skinned Arab man in his mid 30s, warm brown skin, "
+    "short trimmed dark beard, dark charcoal shirt, "
+    "sitting relaxed in a premium black gaming chair with a high back, "
+    "looking into the camera, calm neutral expression, mouth closed, "
+    "eyes open, natural skin texture"
 )
 
 # Encoder 2: where he is and how it is lit. Also under 77 tokens.
@@ -88,33 +88,27 @@ CONCEPTS = {
     # A: no visible streaming gear at all.
     "executive": ROOM.replace("broadcast microphone on a boom arm, ", ""),
     # B: apparatus foregrounded.
-    "creator": ROOM.replace("one tungsten lamp, ", "a glass-side PC with one "
-                            "warm interior light, "),
+    "creator": ROOM.replace("one tungsten lamp, ", "a glass-side PC glowing warm, "),
 }
 
+# Negatives are split across both encoders too. The first version was 218
+# tokens, so two thirds of it - every geometry and look term - was discarded
+# before the model saw it.
 NEGATIVE = (
-    # Text is the single biggest generated-scene tell.
     "text, writing, letters, words, signage, labels, logo, watermark, "
-    "book titles, screen text, user interface text, numbers, charts, graphs, "
-    # Cheap-room signature.
-    "rgb lighting, rainbow lighting, neon, purple lighting, pink lighting, "
-    "saturated blue, cyberpunk, gamer bedroom, led strip visible, "
-    "cluttered, messy, funko pop, figurines, posters, energy drink, "
-    "foam acoustic pyramids, "
-    # Geometry failures.
-    "warped walls, curved wall, crooked shelves, floating objects, "
-    "distorted furniture, extra limbs, extra arms, deformed hands, "
-    "impossible geometry, melting objects, duplicated person, two people, "
-    # Camera failures.
-    "fisheye, ultra wide angle, wide angle distortion, low angle, "
-    "extreme bokeh, blurry face, out of focus face, "
-    # Look failures.
-    "plastic skin, airbrushed, oversmoothed, waxy, doll-like, "
-    "cgi, 3d render, architectural rendering, interior design render, showroom, "
-    "empty room, no people, unoccupied, video game screenshot, illustration, "
-    "cartoon, anime, "
-    "overexposed, blown highlights, flat lighting, harsh flash, "
-    "cheap, low quality, jpeg artifacts"
+    "screen text, numbers, charts, "
+    "empty room, no people, unoccupied, "
+    "rgb lighting, rainbow, neon, purple lighting, cyberpunk, gamer bedroom, "
+    "cluttered, messy, funko pop, posters, foam pyramids"
+)
+
+NEGATIVE_2 = (
+    "cgi, 3d render, architectural rendering, showroom, video game, "
+    "illustration, cartoon, plastic skin, airbrushed, waxy, doll-like, "
+    "warped walls, crooked shelves, floating objects, distorted furniture, "
+    "extra limbs, deformed hands, duplicated person, two people, "
+    "fisheye, wide angle distortion, blurry face, overexposed, flat lighting, "
+    "low quality"
 )
 
 
