@@ -85,11 +85,11 @@ _ANCHOR = "one adult male streamer seated close to camera"
 # Encoder A: WHO + composition + camera. The chair is named here as well as in
 # encoder B, because it kept disappearing when it lived in only one.
 SUBJECT_PROMPT = (
-    "livestream camera frame, " + _ANCHOR + ", "
+    "close-up portrait photograph of " + _ANCHOR + ", "
+    "his face fills much of the frame, head and shoulders, "
     "a brown-skinned Arab man in his 30s, short dark beard, "
-    "in a matte black high-back gaming chair, headrest behind his shoulders, "
-    "facing directly at camera, head and upper torso large in frame, "
-    "frontal face, looking into the lens, calm neutral, 40mm"
+    "looking straight into the camera lens, frontal face, calm neutral, "
+    "seated in a black gaming chair, 50mm portrait lens, eye level"
 )
 
 # Encoder B: same subject, then a MODERN room.
@@ -121,16 +121,18 @@ CONCEPTS = {
 # tokens, so two thirds of it - every geometry and look term - was discarded
 # before the model saw it.
 NEGATIVE = (
-    "empty room, no people, unoccupied, tiny person, distant person, "
-    "wide room shot, interior only, "
-    "rustic, cabin, antique, vintage, traditional study, library, "
+    "from behind, back of head, rear view, back turned, side profile, "
+    "wide angle, wide room shot, full body, racing simulator, sim rig, "
+    "empty room, no people, tiny person, distant person, "
+    "rustic, cabin, antique, vintage, library, "
     "wooden room, all wood interior, brown room, bare table lamp, "
     "music studio, midi keyboard, piano, mixing console"
 )
 
 NEGATIVE_2 = (
-    "empty room, no people, unoccupied, tiny person, distant person, "
-    "office chair, mesh chair, executive chair, corporate office, bedroom, "
+    "from behind, back of head, rear view, wide angle, racing simulator, "
+    "empty room, no people, tiny person, distant person, "
+    "office chair, mesh chair, corporate office, bedroom, "
     "rgb lighting, rainbow, neon, purple, cyberpunk, "
     "text, letters, signage, logo, watermark, screen text, "
     "cgi, 3d render, illustration, plastic skin, deformed hands, blurry face"
