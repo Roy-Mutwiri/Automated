@@ -287,7 +287,14 @@ class LiveSession:
         proposer = (
             TopicProposer(llm, CoverageMemory()) if llm is not None else None
         )
-        planner = ContentPlanner(load_content(ROOT / "configs" / "content.yaml"))
+        # Seed per session. With a shared seed every session walks the fallback
+        # inventory in the same order and says the same thing at the same
+        # moment -- seven accounts posting identical commentary simultaneously,
+        # which is both the clone problem and a coordinated-behaviour signal.
+        planner = ContentPlanner(
+            load_content(ROOT / "configs" / "content.yaml"),
+            seed=abs(hash(self.session_id)) % 100_000,
+        )
 
         if self.args.tts == "piper":
             from platform_.tts.piper import PiperTTS
