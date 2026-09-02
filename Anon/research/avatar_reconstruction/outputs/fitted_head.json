@@ -1,0 +1,36 @@
+{
+  "source_base_mesh": "MakeHuman base.obj (CC0), via mpfb-2.0.8",
+  "targets_licence": "CC0",
+  "addon_code_used": false,
+  "weights": {
+    "caucasian-male-young": 0.65,
+    "african-male-young": 0.2,
+    "asian-male-young": 0.15,
+    "head-oval": 0.2035999999999999,
+    "head-scale-vert-incr": 0.15269999999999992,
+    "head-scale-horiz-decr": 0.08483333333333329,
+    "chin-width-incr": 0.4032583333333335,
+    "chin-bones-incr": 0.3456500000000002,
+    "head-square": 0.20162916666666675,
+    "nose-scale-horiz-incr": 0.22330000000000033,
+    "nose-scale-vert-incr": 0.10299999999999976,
+    "mouth-scale-horiz-incr": 0.11737499999999998,
+    "l-eye-trans-out": 0.07649999999999972,
+    "r-eye-trans-out": 0.07649999999999972,
+    "chin-height-incr": 0.11066666666666633
+  },
+  "ratios": {
+    "face_width": 204.71025,
+    "face_height": 249.86556,
+    "aspect_w_over_h": 0.81928,
+    "interpupillary_over_width": 0.45918,
+    "eye_width_over_width": 0.20018,
+    "nose_length_over_height": 0.2903,
+    "nose_width_over_width": 0.31552,
+    "mouth_width_over_width": 0.39565,
+    "jaw_width_over_width": 0.84913,
+    "chin_to_mouth_over_height": 0.28328,
+    "brow_to_eye_over_height": 0.14491,
+    "upper_face_over_height": 0.29389
+  }
+}
