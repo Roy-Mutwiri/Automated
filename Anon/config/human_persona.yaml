@@ -1,0 +1,65 @@
+# ONE person. Stable for the whole stream.
+#
+# The brief's requirement is that the viewer meets a specific individual rather
+# than "generic AI speaker motion", and that the individual does not change
+# personality every minute. Everything here is therefore a constant of the
+# character, not a runtime control: the behaviour engine reads it once.
+#
+# What is NOT here, deliberately: anything that varies within a session. Energy
+# fluctuates, but it fluctuates around `energy` on a ~26 s Ornstein-Uhlenbeck
+# process owned by the engine. Attention changes, but around these biases.
+
+name: "calm_professional_streamer"
+
+# --- temperament ---------------------------------------------------------
+# 0 = torpid, 1 = restless. Sets the mean of the arousal process, which
+# modulates every discretionary rate at once.
+energy: 0.38
+
+# --- gesture (declared, not yet rendered - see the rig note in the docs) --
+gesture_rate: 0.30          # fraction of clauses that get any hand gesture
+gesture_amplitude: 0.35     # seated-streamer scale; 1.0 would be a stage
+handedness: right
+dominant_hand_bias: 0.72    # share of one-handed gestures using the dominant hand
+two_hand_probability: 0.14  # reserved for comparison / size / strong explanation
+
+# --- head ----------------------------------------------------------------
+head_motion_level: 1.0      # multiplies the head's share of a gaze shift
+eye_only_deg: 11.0          # below this a gaze shift is eyes alone
+head_share_full_deg: 42.0   # eccentricity at which the head takes its full share
+head_share_max: 0.62        # the head never takes all of it; the eyes keep some
+
+# --- attention -----------------------------------------------------------
+# Where this person's attention naturally sits. Multiplies the base weights in
+# attention.py rather than replacing them.
+gaze_camera_bias: 1.0
+gaze_monitor_bias: 1.0
+gaze_second_display_bias: 1.0
+gaze_chat_bias: 1.0
+
+# --- face ----------------------------------------------------------------
+smile_frequency: 0.35       # relative; MILD_POSITIVE is on a 70 s cooldown
+smile_strength: 0.30        # peak amplitude of the commonest smile type
+brow_activity: 0.45         # most sentences need almost no brow movement
+blink_profile: primary_gaze # primary_gaze | conversational | reading_heavy
+
+# --- posture -------------------------------------------------------------
+posture_activity: 0.40
+lean_tendency: 0.30
+
+# --- reaction ------------------------------------------------------------
+# Nobody reacts at zero milliseconds. Perception plus preparation, sampled
+# per event around this median.
+reaction_latency_median: 0.42
+reaction_latency_shape: 0.35
+reaction_strength: 0.55
+
+# --- stable asymmetries --------------------------------------------------
+# Fixed for this person, never re-randomised. A human is asymmetric in a
+# consistent way; randomising it every event reads as noise, not as a face.
+# The brow figure is not a style choice - the expression calibration measured
+# the subject-left brow dimension as roughly 3x stronger than the best
+# subject-right pair, and this records that the imbalance is intentional.
+brow_asymmetry: 0.14
+smile_asymmetry: 0.11
+shoulder_drop: left

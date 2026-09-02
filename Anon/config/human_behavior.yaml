@@ -1,0 +1,92 @@
+# Tuning for the autonomic layer. Every number here is either measured from the
+# literature (cited) or a deliberate choice with a reason.
+#
+# This file is the knobs, not the model. Distribution *shapes* live in code
+# because changing a log-normal to a uniform is a design decision, not a tuning
+# one.
+
+blink:
+  # Spontaneous blink rate is not a personality constant. Measured ranges:
+  # reading 1.4-14.4/min, primary gaze 8.0-21.0/min, conversation 10.5-32.5/min.
+  # A single interval cannot represent a factor-of-three swing driven by what
+  # the eyes are doing, so the interval is modulated by visual demand.
+  median_interval: 4.0        # seconds -> ~15/min before demand modulation
+  interval_shape: 0.55        # log-normal sigma; positively skewed, long tail
+  min_interval: 0.9
+  max_interval: 22.0
+  demand_span: 1.4            # how far demand stretches the interval
+  demand_base: 0.3            # demand of looking at the lens = neutral
+  min_frames: 4.5             # a blink must be sampled enough to be seen
+  base_duration: 0.21         # asymmetric: closing is faster than opening
+  brow_coupling: 0.18         # orbicularis wraps the orbit; the brow follows
+  double_probability: 0.09
+  partial_probability: 0.12
+  asymmetry: 0.06             # larger than this reads as a wink
+
+gaze:
+  # Saccade duration follows the main sequence: ~20 ms for the smallest to
+  # >100 ms for the largest. Fixations run 200-600 ms typical with a long tail;
+  # a streamer's dwell on a display is longer than a reader's on a word.
+  microsaccade_rate: 1.6      # Hz. measured 1-3/s during sustained fixation
+  microsaccade_amplitude: 0.018   # must stay near perceptual threshold
+  drift_time: 1.1
+  ocular_limit_deg: 35.0
+
+attention:
+  # Angles in degrees from neutral forward, in the ROOM. Never screen space,
+  # never relative to a camera - this is what makes a camera cut unable to
+  # change where he is looking.
+  #
+  # LENS and MAIN_DISPLAY are a few degrees apart because the camera sits on
+  # the monitor. That near-coincidence is why a streamer can appear to hold eye
+  # contact while actually reading.
+  targets:
+    LENS:            {azimuth:   0.0, elevation:   0.6, dwell: 4.2, weight: 3.40}
+    MAIN_DISPLAY:    {azimuth:  -2.0, elevation:  -4.5, dwell: 3.1, weight: 2.20}
+    SECOND_DISPLAY:  {azimuth: -21.0, elevation:  -3.5, dwell: 1.9, weight: 0.75}
+    CHAT:            {azimuth:  17.5, elevation:  -5.5, dwell: 2.3, weight: 0.70}
+    DESK:            {azimuth:  -6.0, elevation: -17.0, dwell: 1.4, weight: 0.50}
+    MIDDLE_DISTANCE: {azimuth:  10.0, elevation:   8.0, dwell: 2.0, weight: 0.35}
+  recency_decay: 0.45         # a target just visited is 0.45x as interesting
+  same_target_penalty: 0.08
+
+head:
+  median_interval: 15.0       # voluntary idle moves, distinct from gaze turns
+  yaw_amplitude: 1.5          # degrees per idle move; 3+ reads as bobbing
+  sway_amplitude: 0.22        # involuntary. never set to zero
+  move_duration: 0.75
+
+breathing:
+  period: 4.1                 # ~14.6 breaths/min
+  scale_amount: 0.0028        # if breathing is *visible*, this is too high
+  period_jitter: 0.16         # no two breaths the same length
+
+posture:
+  shift_median_interval: 60.0
+  time_constant: 14.0
+
+states:
+  # Semi-Markov. Duration is drawn once on entry, not resampled per frame -
+  # per-frame sampling forces a geometric dwell whose most likely value is the
+  # shortest one, which is not how attention works.
+  # min / median / max seconds, then re-entry cooldown.
+  IDLE_ATTENTIVE: {min: 12.0, median: 38.0, max: 150.0, cooldown:  0.0}
+  IDLE_RELAXED:   {min: 14.0, median: 46.0, max: 180.0, cooldown:  0.0}
+  READING:        {min:  4.0, median: 11.0, max:  34.0, cooldown: 20.0}
+  FOCUSED:        {min:  6.0, median: 17.0, max:  52.0, cooldown: 25.0}
+  THINKING:       {min:  2.2, median:  5.0, max:  13.0, cooldown: 45.0}
+  MILD_POSITIVE:  {min:  1.8, median:  4.2, max:   9.0, cooldown: 70.0}
+
+engine:
+  arousal_amplitude: 0.28
+  arousal_time: 26.0
+  motion_budget_halflife: 3.0
+  suppression_gain: 2.4
+
+constraints:
+  # Real cervical range, reduced for a seated presenter at a desk. Distinct
+  # from the profile's head_max_* which is stylistic, not anatomical.
+  head_yaw: 38.0
+  head_pitch_up: 22.0
+  head_pitch_down: 30.0
+  head_roll: 24.0
