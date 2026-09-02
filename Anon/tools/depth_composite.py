@@ -54,6 +54,58 @@ FAR = 1.0e10
 # Chosen so that 65535 / DEPTH_RANGE_M == 1000 exactly: a 16-bit depth PNG then
 # stores plain millimetres.
 DEPTH_RANGE_M = 65.535
+# Below this, a human pixel has no coverage and must not contribute colour no
+# matter what its depth buffer claims.
+ALPHA_EPS = 1.0 / 255.0
+
+
+def validate_depth(d, name, require_geometry=True):
+    """Enforce the depth contract, loudly.
+
+    The contract, in full:
+
+        valid surface   positive finite metres from the camera plane
+        nothing here    +infinity (FAR)
+        anything else   a bug
+
+    NaN, zero and negative depths are rejected rather than repaired. They have
+    no physical meaning here, and every one of them would quietly change an
+    occlusion decision: NaN loses every comparison, zero and negatives win
+    every comparison. A human that silently draws in front of the whole room is
+    what a negative depth looks like from the outside.
+
+    `require_geometry` catches the uninitialized buffer - the failure that
+    actually happened. When cv2 refused to decode the EXR it returned None,
+    the depth became all-FAR, and the occlusion self-test passed while
+    comparing nothing against nothing.
+    """
+    d = np.asarray(d)
+    if d.ndim != 2:
+        raise ValueError(f"{name}: expected a 2-D depth map, got {d.shape}")
+    if not np.issubdtype(d.dtype, np.floating):
+        raise ValueError(f"{name}: depth must be floating point, got {d.dtype}")
+
+    nan = int(np.isnan(d).sum())
+    if nan:
+        raise ValueError(f"{name}: {nan} NaN depths. NaN loses every "
+                         f"comparison, so those pixels would silently never "
+                         f"occlude anything.")
+    bad = int((d <= 0.0).sum())
+    if bad:
+        lo = float(d.min())
+        raise ValueError(f"{name}: {bad} depths <= 0 (min {lo}). Zero and "
+                         f"negative depths win every comparison, which draws "
+                         f"that surface in front of the entire room.")
+    if not np.isfinite(d[d < FAR / 2]).all():
+        raise ValueError(f"{name}: non-finite depth below the FAR sentinel")
+
+    finite = int((d < FAR / 2).sum())
+    if require_geometry and finite == 0:
+        raise ValueError(
+            f"{name}: every pixel is FAR - the buffer holds no geometry at "
+            f"all. This is what an unread or unwritten depth image looks like, "
+            f"and it makes any occlusion test pass vacuously.")
+    return finite
 
 
 def _read_exr(path: Path) -> np.ndarray:
@@ -246,13 +298,23 @@ def render_room(camera_id: str, width: int, height: int, sim_time: float):
 def composite(room_rgb, room_depth, human_rgba, human_depth, debug=False):
     """Per-pixel depth resolution. The nearer surface wins."""
     h, w = room_rgb.shape[:2]
+    validate_depth(room_depth, "room depth")
+    validate_depth(human_depth, "human depth")
+    if room_depth.shape != (h, w) or human_depth.shape != (h, w):
+        raise ValueError(f"shape mismatch: rgb {(h, w)}, room depth "
+                         f"{room_depth.shape}, human depth {human_depth.shape}")
+    if human_rgba.shape[:2] != (h, w):
+        raise ValueError(f"human rgba {human_rgba.shape[:2]} != rgb {(h, w)}")
+
     human_rgb = human_rgba[..., :3].astype(np.float32)
     alpha = (human_rgba[..., 3:4].astype(np.float32) / 255.0
              if human_rgba.shape[2] == 4 else np.ones((h, w, 1), np.float32))
 
-    # Where the human is transparent he has no surface, so he cannot win.
+    # Coverage is checked before depth and independently of it. A Gaussian
+    # renderer will happily emit a depth value for a pixel it did not cover;
+    # without this the human would draw where he is not.
     hd = human_depth.copy()
-    hd[alpha[..., 0] < 0.01] = FAR
+    hd[alpha[..., 0] < ALPHA_EPS] = FAR
 
     human_in_front = (hd < room_depth)[..., None]
     # Alpha still matters at the silhouette: a half-covered pixel is a blend of
