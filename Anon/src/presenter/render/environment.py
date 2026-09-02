@@ -259,13 +259,24 @@ def render_streaming_room(
     for _ in range(style.bokeh_count):
         radius = int(rng.uniform(*style.bokeh_radius) * (short / 720.0))
         radius = max(radius, 6)
-        sprite = _radial_sprite(radius * 2)
 
         # Clustered along the upper wall, the way a string of lights hangs,
         # rather than scattered uniformly - uniform placement reads as a
         # particle effect.
         cx = int(rng.uniform(0.02, 0.98) * w)
         cy = int(rng.truncated_gauss(0.30 * h, 0.16 * h, 0.02 * h, 0.72 * h))
+
+        # Optical vignetting scales with distance from the optical axis. The
+        # clip is applied along the radial direction, which leaves the surviving
+        # lens shape elongated tangentially - the way real cat's-eye bokeh sits.
+        dx = (cx / w - 0.5) * 2.0
+        dy = (cy / h - 0.5) * 2.0
+        r_norm = min(math.hypot(dx, dy) / math.sqrt(2.0), 1.0)
+        sprite = _radial_sprite(
+            radius * 2,
+            style.bokeh_cats_eye * r_norm ** 1.6,
+            math.atan2(dy, dx),
+        )
 
         intensity = rng.uniform(0.35, 1.0)
         tint = base * rng.uniform(0.82, 1.12)
