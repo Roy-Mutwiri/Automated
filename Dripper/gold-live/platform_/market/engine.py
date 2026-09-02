@@ -40,6 +40,7 @@ from shared.contracts import (
     MarketConfidence,
     MarketContext,
     MarketEvent,
+    MarketEventKind,
     MarketState,
     Observation,
     Price,
@@ -52,6 +53,22 @@ DEFAULT_TIMEFRAMES = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600}
 
 
 class MarketEngine:
+    #: Timeframes the detectors run on. 1m is collected for session extremes and
+    #: price display but is NOT analysed: at that resolution gold produces a
+    #: "structure break" every few candles, and a host reacting to each one is
+    #: unlistenable. Structure means something on 5m and above.
+    ANALYSED_TIMEFRAMES = frozenset({"5m", "15m", "1h"})
+
+    #: Minimum gap between two events of the same kind on the same timeframe.
+    #: Real structure does not break twice in ninety seconds; a detector saying
+    #: it did is noise, and narrating noise is how a host loses credibility.
+    EVENT_COOLDOWN_S = {
+        MarketEventKind.BOS: 300,
+        MarketEventKind.CHOCH: 600,
+        MarketEventKind.LIQUIDITY_SWEEP: 300,
+        MarketEventKind.VOL_EXPANSION: 900,
+    }
+
     def __init__(
         self,
         symbol: str = "XAUUSD",
@@ -60,12 +77,15 @@ class MarketEngine:
         stale_after_s: float = 15.0,
         unavailable_after_s: float = 120.0,
         swing_strength: int = 2,
+        analysed_timeframes: frozenset[str] | None = None,
     ) -> None:
         self.symbol = symbol
         self.series = {
             name: CandleSeries(period_s)
             for name, period_s in (timeframes or DEFAULT_TIMEFRAMES).items()
         }
+        self.analysed = analysed_timeframes or self.ANALYSED_TIMEFRAMES
+        self._last_event_at: dict[tuple[str, str], datetime] = {}
         self.delayed_after_s = delayed_after_s
         self.stale_after_s = stale_after_s
         self.unavailable_after_s = unavailable_after_s
@@ -142,7 +162,26 @@ class MarketEngine:
             if series.mark_stale_closed(now) is not None:
                 self._on_candle_close(name, now)
 
+    def _rate_limit(self, timeframe: str, events: list[MarketEvent]) -> list[MarketEvent]:
+        kept: list[MarketEvent] = []
+        for event in events:
+            key = (timeframe, event.kind.value)
+            cooldown = self.EVENT_COOLDOWN_S.get(event.kind, 300)
+            last = self._last_event_at.get(key)
+            if last is not None and (event.occurred_at - last).total_seconds() < cooldown:
+                log.debug(
+                    "suppressed %s on %s (%.0fs since last, cooldown %ds)",
+                    event.kind.value, timeframe,
+                    (event.occurred_at - last).total_seconds(), cooldown,
+                )
+                continue
+            self._last_event_at[key] = event.occurred_at
+            kept.append(event)
+        return kept
+
     def _on_candle_close(self, timeframe: str, now: datetime) -> None:
+        if timeframe not in self.analysed:
+            return
         series = self.series[timeframe]
         candles = series.closed_candles
         if len(candles) < 5:
@@ -165,7 +204,7 @@ class MarketEngine:
             atr_baseline=self._atr_baseline(timeframe),
             reported_levels=self._reported_levels[timeframe],
         )
-        events = run_all(ctx)
+        events = self._rate_limit(timeframe, run_all(ctx))
         if events:
             log.info(
                 "[%s] %s: %s", self.symbol, timeframe,

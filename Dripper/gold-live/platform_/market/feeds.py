@@ -111,8 +111,10 @@ class SyntheticFeed(Feed):
                 ask=round(self.price + self.spread / 2, 2),
                 at=now,
             )
-            if self.interval_s:
-                await asyncio.sleep(0)
+            # Must actually wait. Sleeping 0 advanced simulated market time by
+            # hours per wall-clock second, which made every time-based cooldown
+            # in the engine look like it had already elapsed.
+            await asyncio.sleep(self.interval_s)
 
     async def close(self) -> None:
         self._running = False

@@ -26,7 +26,13 @@ from platform_.market.indicators import (
     find_swings,
     true_range,
 )
-from shared.contracts import MarketConfidence, Structure, Trend
+from shared.contracts import (
+    MarketConfidence,
+    MarketEvent,
+    MarketEventKind,
+    Structure,
+    Trend,
+)
 
 T0 = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc)
 
@@ -323,3 +329,53 @@ def test_engine_emits_and_drains_events():
     assert e.drain_events() == [], "drain must be idempotent"
     if events:
         assert all(ev.evidence for ev in events), "every event carries its evidence"
+
+
+# -- event noise control ---------------------------------------------------
+
+
+def test_one_minute_timeframe_is_not_analysed():
+    """Gold breaks 'structure' every few candles on 1m. Narrating that is
+    unlistenable, so 1m is collected for extremes but never analysed."""
+    e = MarketEngine(timeframes={"1m": 60, "5m": 300})
+    assert "1m" not in e.analysed
+    assert "5m" in e.analysed
+
+    at = T0
+    for price in [3650, 3656, 3651, 3647, 3653, 3668, 3672, 3676]:
+        for _ in range(4):
+            at += timedelta(seconds=20)
+            e.on_tick(price - 0.18, price + 0.18, at)
+
+    assert all(ev.timeframe != "1m" for ev in e.drain_events())
+
+
+def test_same_event_kind_is_rate_limited():
+    """Real structure does not break twice in ninety seconds."""
+    e = MarketEngine(timeframes={"5m": 300})
+    first = MarketEvent(
+        kind=MarketEventKind.BOS, timeframe="5m", occurred_at=T0, severity=5
+    )
+    soon = MarketEvent(
+        kind=MarketEventKind.BOS, timeframe="5m",
+        occurred_at=T0 + timedelta(seconds=90), severity=5,
+    )
+    later = MarketEvent(
+        kind=MarketEventKind.BOS, timeframe="5m",
+        occurred_at=T0 + timedelta(seconds=400), severity=5,
+    )
+
+    assert e._rate_limit("5m", [first]) == [first]
+    assert e._rate_limit("5m", [soon]) == []
+    assert e._rate_limit("5m", [later]) == [later]
+
+
+def test_rate_limit_is_per_kind_and_timeframe():
+    e = MarketEngine(timeframes={"5m": 300, "15m": 900})
+    bos = MarketEvent(kind=MarketEventKind.BOS, timeframe="5m",
+                      occurred_at=T0, severity=5)
+    sweep = MarketEvent(kind=MarketEventKind.LIQUIDITY_SWEEP, timeframe="5m",
+                        occurred_at=T0, severity=4)
+    assert e._rate_limit("5m", [bos]) == [bos]
+    assert e._rate_limit("5m", [sweep]) == [sweep], "different kind, not suppressed"
+    assert e._rate_limit("15m", [bos]) == [bos], "different timeframe, not suppressed"
