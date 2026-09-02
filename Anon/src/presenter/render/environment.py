@@ -515,6 +515,26 @@ def luminance(bgr: np.ndarray) -> np.ndarray:
     return (0.114 * b + 0.587 * g + 0.299 * r).astype(np.float32)
 
 
+def key_luminance(bgr: np.ndarray, percentile: float = 80.0) -> float:
+    """How bright the face is, in the sense the exposure rule means.
+
+    Not the median. A landmark bounding box is roughly half skin and half
+    hair, beard, brow shadow and the unlit side of the face, so its median
+    lands somewhere in the shadow - on this project's source portrait, 72
+    against lit skin at 140-170. Fitting a background to that measurement
+    drives the whole room around two thirds of a stop too dark, and the error
+    is worst on exactly the faces where it matters most: dark hair, full
+    beards, low-key lighting.
+
+    The rule ("one to two stops under the face") has always meant the
+    key-lit skin, so measure that. The 80th percentile sits inside the lit
+    cheek and forehead while staying below the speculars on the nose and brow,
+    which the 95th and above would pick up instead - and speculars are a
+    property of skin oil and light angle, not of exposure.
+    """
+    return float(np.percentile(luminance(bgr), percentile))
+
+
 def fit_exposure(
     plate: np.ndarray,
     face_luma: float,
