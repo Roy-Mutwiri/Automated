@@ -160,6 +160,43 @@ while `torch.compile` (better kernels *and* less dispatch) gave 69.1→47.9 ms.
 Reducing resolution or model size to buy frames would be the wrong trade: the
 brief ranks a stable realistic 30 FPS above an unstable 60.
 
+## Wardrobe
+
+Two dropdowns in the preview window change what the presenter is wearing —
+clothing, and head attire. `c` and `h` cycle them from the keyboard.
+
+```bash
+python tools/generate_wardrobe.py --preview      # check the masks
+python tools/generate_wardrobe.py --all --sheet  # generate every combination
+```
+
+**An outfit is a whole source portrait, not a layer**, and that is forced by
+the architecture rather than chosen. The torso in the output is static pixels
+lifted from the source image and the head is warped from appearance features
+extracted from it once at startup; `AvatarPose` carries head angles and eyelid
+openness, not a body. So nothing downstream *can* put a garment on. Changing
+clothes means changing the image the pipeline was prepared from —
+`LivePortraitRenderer.set_source()`, which caches prepared sources so the first
+visit to an outfit costs a few seconds and every later one is instant.
+
+The variants are SDXL **inpaints** of the base portrait with the face masked
+out of the edit, so the identity, beard, skin texture and key light are copied
+through untouched and only the garment region is denoised. Definitions live in
+[`config/wardrobe.yaml`](config/wardrobe.yaml) — labels, prompts and mask
+parameters together, read by both the generator and the UI so a menu entry
+cannot drift from the file it names.
+
+Two findings worth keeping, both in `assets/PROVENANCE.md`:
+
+- **SDXL base cannot insert a headdress.** Its UNet takes 4 channels and was
+  never trained on mask conditioning. Garments work — a shirt is a plausible
+  continuation of a torso — but a ghutra is not a plausible continuation of a
+  scalp. The 9-channel inpainting checkpoint is required.
+- **Naming the garment is not enough.** "A white ghutra draped over his head"
+  returns braided hair. Establishing the wearer and then defining the object
+  produces cloth. The **agal** (the cord ring) does not render at all and the
+  menu labels do not claim it.
+
 ## Configuration
 
 [`config/avatar.yaml`](config/avatar.yaml). All timing values are **medians**,
