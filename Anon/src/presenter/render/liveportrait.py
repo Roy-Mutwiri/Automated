@@ -63,6 +63,12 @@ __all__ = ["LivePortraitRenderer"]
 # the renderer and must survive the switch, while identity features, framing,
 # masks and the composited background must not.
 #
+# How far the dynamic-human region is grown beyond the segmented silhouette, as
+# a fraction of output width. Generous on purpose: the cost of over-growing is
+# a slightly larger region the generator may repaint, and the cost of
+# under-growing is clipped hair.
+BACKGROUND_LOCK_GROW = 0.022
+#
 # Kept as an explicit list rather than inferred, because a silently missing
 # entry produces a switch that mostly works - the new face over the old
 # silhouette's mask, say - which is far harder to diagnose than a crash.
@@ -80,6 +86,7 @@ _SOURCE_STATE = (
     "wrap_layer", "wrap_idx", "wrap_add",
     # per-frame blend zones
     "mask_out", "mask_box", "blend_box", "opaque_mask", "feather_mask",
+    "dynamic_human_out",
     "feather_alpha", "feather_bg_premul", "_opaque_frac",
 )
 
@@ -138,6 +145,7 @@ class LivePortraitRenderer:
         self.neutralize_pose = float(min(max(neutralize_pose, 0.0), 1.0))
         self.person_matte = None
         self.subject_alpha_out = None
+        self.dynamic_human_out = None
         self.desk_band = None
         self.wrap_layer = None
         self.wrap_idx = None
@@ -862,6 +870,8 @@ class LivePortraitRenderer:
 
         self.person_matte = None
         self.subject_alpha_out = None
+        self.dynamic_human_out = self._dynamic_human_region(
+            img_bgr, M_src2out, out_w, out_h)
         self.wrap_layer = None
         fill = self._build_fill(img_bgr, out_w, out_h).astype(np.float32)
         content = cv2.warpAffine(
@@ -888,6 +898,46 @@ class LivePortraitRenderer:
 
         self._finish_blend_setup(crop, M_src2out, w, h, out_w, out_h)
 
+    def _dynamic_human_region(self, img_bgr, M_src2out, out_w, out_h):
+        """Where the human may be over the whole session, in output space.
+
+        A *static* mask covering every position the head reaches, not a
+        per-frame matte. Per-frame segmentation would be more precise and costs
+        tens of milliseconds a frame on a renderer that already runs at four,
+        and precision is not what is needed here: the requirement is that the
+        room outside the human is never asked of the generator.
+
+        Generously dilated for exactly that reason. Clipping hair to save a few
+        pixels of drift would trade an invisible defect for a visible one, and
+        the brief is explicit that fixing the drift must not blur the hair or
+        the jaw boundary. The radius scales with the face so it holds if the
+        framing changes.
+        """
+        try:
+            matte = self._person_matte(img_bgr)
+        except Exception as exc:                      # pragma: no cover
+            print(f"[render] no person matte ({exc}); background lock disabled")
+            return None
+        if matte is None:
+            return None
+
+        alpha = cv2.warpAffine(
+            matte.astype(np.float32), M_src2out, (out_w, out_h),
+            flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+        )
+        hard = (alpha > 0.35).astype(np.uint8)
+
+        # Cover the head's full excursion plus hair. The head turns by at most
+        # a dozen degrees, which moves the silhouette by a few tens of pixels
+        # at this scale.
+        r = max(int(BACKGROUND_LOCK_GROW * out_w), 12) | 1
+        hard = cv2.dilate(hard, np.ones((r, r), np.uint8))
+        soft = cv2.GaussianBlur(hard.astype(np.float32), (0, 0), r * 0.28)
+        soft = np.clip(soft, 0.0, 1.0)[..., None]
+        print(f"[render] background lock: human region {100 * (soft > 0.5).mean():.1f}% "
+              f"of frame, grown {r} px")
+        return soft
+
     def _finish_blend_setup(self, crop, M_src2out, w, h, out_w, out_h) -> None:
         """Precompute the per-frame blend mask and its zones."""
         from src.utils.crop import prepare_paste_back
@@ -908,6 +958,24 @@ class LivePortraitRenderer:
         # back as a rectangle of old bokeh sitting over the new room.
         if self.subject_alpha_out is not None:
             self.mask_out = self.mask_out * self.subject_alpha_out
+        elif self.dynamic_human_out is not None:
+            # Keeping the plate's own environment, so nothing needs replacing -
+            # but the same restriction is needed for a different reason.
+            #
+            # LivePortrait's paste mask is a rounded box around the *crop*, and
+            # a crop that contains a head also contains a good deal of the room
+            # behind it. Those background pixels were being regenerated every
+            # frame: measured at 0.14 levels/frame of change, invisible in
+            # motion but accumulating to 162 levels between distant timestamps.
+            # The room was slowly wandering because a face was moving in front
+            # of it.
+            #
+            # This is not recursion - the compositor already starts from an
+            # immutable master every frame - so the fix is not to break a
+            # feedback loop but to stop asking the generator for pixels that
+            # belong to the master. Outside a dilated silhouette, the room now
+            # comes from the plate and is byte-identical for the whole session.
+            self.mask_out = self.mask_out * self.dynamic_human_out
 
         # Blend only inside the mask's bounding box - outside it the output is
         # exactly the precomputed background, so those pixels never need

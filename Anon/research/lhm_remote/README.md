@@ -142,3 +142,40 @@ merit:
 Option B keeps "one world, seven cameras" intact and is likely to preserve more
 quality. `config/cameras.yaml` already stores position, aim, sensor size, focal
 length and f-stop per camera, which is everything a converter needs.
+
+---
+
+## Update: LHM++ is probably the better target
+
+Researched after this package was written. `LHM-plusplus` (March 2026, same
+team) changes two things that matter to us, and both point the same way.
+
+| | LHM | LHM++ (`LHMPP-700M-*`) |
+|---|---|---|
+| VRAM | 16–24 GB | **8 GB** |
+| Single-view inference | 1.4–6.6 s | **0.79 s** |
+| 3DGS output | internal | **standard `.ply`, incl. canonical T-pose** |
+| SMPL-X | required | **`LHMPP-700M-SMPLX-FREE` variant exists** |
+| Build deps | 3 CUDA extensions | those **plus** `pointops`, `spconv`, `torch_scatter` |
+
+**Standard `.ply` at canonical T-pose is the important one.** It is exactly the
+asset the "Gaussian case" plan in this README wants: a pose-neutral 3DGS file we
+can either convert to mesh or render through its own renderer using our camera
+matrices. LHM's own export is less directly consumable.
+
+**`LHMPP-700M-SMPLX-FREE` may remove the licence-gated download entirely** -
+worth confirming before you spend time registering with MPI. Do the environment
+build first; if that variant runs without `human_model_files`, the SMPL-X step
+disappears. If it still needs it for input pose estimation, fall back to the
+instructions above.
+
+Its dependency set is *heavier*, not lighter, so it remains a remote-only job.
+Since the box is disposable, that costs nothing but the 8 GB VRAM requirement
+makes the box considerably cheaper.
+
+Model: `Damo_XR_Lab/LHMPP-700M-SMPLX-FREE` on ModelScope. Note the README's
+caveat that hub weights for the `PixelShuffle` default were still pending at the
+time of writing.
+
+**Suggested order:** build the environment, try `LHMPP-700M-SMPLX-FREE` first,
+and keep `LHM-1B-HF` in this package as the fallback if LHM++ misbehaves.

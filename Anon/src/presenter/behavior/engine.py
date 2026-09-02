@@ -35,6 +35,7 @@ from ..types import AvatarPose, BehaviorEvent
 from ..motion.adapters.face2d import GAZE_UNITS_PER_DEG, to_avatar_pose
 from ..motion.body import BodySystem
 from ..motion.breathing import RespirationSystem
+from ..motion.expression import FacialExpressionSystem
 from ..motion.state import HumanMotionState
 from .attention import AttentionSystem
 from .blinking import BlinkSystem
@@ -62,6 +63,28 @@ __all__ = ["BehaviorEngine", "EngineStats"]
 # Most of it is neck: a head that rotates on its own reads as a ball joint,
 # which is one of the clearest tells of an unrigged character.
 NECK_FRACTION = 0.68
+
+# Entering a state is a reason to feel something. Only a few states carry an
+# expression, and none of them is loud.
+STATE_EXPRESSION = {
+    "MILD_POSITIVE": ("SMALL_SMILE", 1.0),
+    "THINKING": ("FOCUSED", 0.55),
+    "FOCUSED": ("FOCUSED", 0.75),
+    "MILD_CONCERN": ("SKEPTICAL", 0.6),
+}
+
+
+def drives_stub(engine):
+    """A minimal Drives-alike for triggers raised before Drives is built.
+
+    The state transition happens at the top of the frame, before the full
+    Drives object exists, and an expression trigger needs only the clock, the
+    RNG and the event sink. Threading the real object up here would mean
+    building it twice or reordering the frame around a cosmetic detail.
+    """
+    from types import SimpleNamespace
+    return SimpleNamespace(now=engine.now, rng=engine.rng,
+                           emit=engine._events.append)
 
 
 @dataclass
@@ -129,7 +152,9 @@ class BehaviorEngine:
         # for why that boundary exists.
         self.respiration = RespirationSystem(profile)
         self.body = BodySystem(profile)
+        self.emotion = FacialExpressionSystem(profile)
         self.motion = HumanMotionState()
+        self._emotion_armed = False
 
         # Autonomous means the presenter decides his own state. Off, the state
         # is whatever an external caller last set - which is what the eventual
@@ -202,6 +227,13 @@ class BehaviorEngine:
             changed = self.states.update(self.now, self.rng)
             if changed is not None:
                 self.set_state(BehaviorState(changed))
+                # A state is a reason. Entering the positive state is the
+                # trigger for a smile; entering a focused one sets the face's
+                # tone. Both go through the same reaction latency, so nothing
+                # here reacts on the frame it was decided.
+                trigger = STATE_EXPRESSION.get(changed)
+                if trigger is not None:
+                    self.emotion.trigger(drives_stub(self), *trigger)
 
         arousal = clamp(self._arousal.step(dt, self.rng), -1.0, 1.0)
 
@@ -312,6 +344,7 @@ class BehaviorEngine:
         # Body: seated posture, engagement, comfort shifts, then respiration
         # on top of whatever posture has set.
         self.body.update(drives, motion)
+        self.emotion.update(drives, motion)
         self.respiration.apply(self.respiration.update(drives), motion)
 
         self.motion = motion
