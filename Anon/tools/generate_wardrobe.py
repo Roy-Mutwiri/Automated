@@ -191,38 +191,51 @@ def garment_mask(g: Geometry, hands_at: float = 0.86, feather: int = 41) -> np.n
     return cv2.GaussianBlur(m, (feather | 1, feather | 1), 0)
 
 
-def headwear_mask(g: Geometry, drape: float = 0.9, feather: int = 31) -> np.ndarray:
-    """Crown and ears, plus the cloth falling past them, minus the face.
+def headwear_mask(g: Geometry, drape: float = 0.9, feather: int = 31,
+                  wide: float = 1.15) -> np.ndarray:
+    """The shape the cloth occupies, minus the face.
 
-    A ghutra is a square of cloth laid over the crown whose sides hang past the
-    ears, so the mask is a cap *plus two side panels* rather than one large
-    blob - a single big ellipse reaches across the chest, where no part of the
-    headdress goes, and hands the model a bib to fill in.
+    Two shapes, because a skullcap and a ghutra are not the same object.
 
-    ``drape`` is how far the side panels fall below the chin, in face heights;
-    at 0 the panels vanish and the mask is a skullcap.
+    ``drape == 0`` is a **cap**: the crown ellipse alone, tight to the skull.
+
+    ``drape > 0`` is a **bell**: the crown flaring outward and downward to the
+    shoulders in one contiguous region, with the centre of the chest punched
+    back out because a ghutra hangs *beside* the neck rather than over it.
+
+    An earlier version used a crown plus two separate side panels. Compared
+    side by side against the bell it left the hairline and the headphone band
+    partly outside the mask, and what came back was the model continuing that
+    context - braided hair and reconstructed headphone cups down the sides
+    instead of cloth. Covering the whole region the headdress owns, in one
+    piece, is what stops it.
     """
     m = np.zeros((g.h, g.w), np.uint8)
 
     # The crown. The landmark set covers the face only, and the top of the head
     # sits roughly half a face-height above the brow line.
+    crown_w = g.face_w * (wide if drape > 0 else 0.92)
     cv2.ellipse(
         m,
-        (int(g.cx), int(g.brow_y + g.face_h * 0.05)),
-        (int(g.face_w * 0.92), int(g.face_h * 0.80)),
+        (int(g.cx), int(g.brow_y + g.face_h * (0.02 if drape > 0 else 0.05))),
+        (int(crown_w), int(g.face_h * (0.95 if drape > 0 else 0.80))),
         0, 0, 360, 255, -1,
     )
 
-    # The two side panels, outboard of the face so they cannot creep across it.
     if drape > 0:
-        for side in (-1, 1):
-            cv2.ellipse(
-                m,
-                (int(g.cx + side * g.face_w * 0.68),
-                 int(g.chin_y - g.face_h * 0.15)),
-                (int(g.face_w * 0.40), int(g.face_h * (0.55 + drape * 0.55))),
-                0, 0, 360, 255, -1,
-            )
+        flare = np.array([
+            [g.cx - crown_w, g.brow_y + g.face_h * 0.02],
+            [g.cx + crown_w, g.brow_y + g.face_h * 0.02],
+            [g.cx + g.face_w * (wide + 0.15), g.chin_y + g.face_h * drape],
+            [g.cx - g.face_w * (wide + 0.15), g.chin_y + g.face_h * drape],
+        ], np.int32)
+        cv2.fillPoly(m, [flare], 255)
+        cv2.ellipse(
+            m,
+            (int(g.cx), int(g.chin_y + g.face_h * 0.75)),
+            (int(g.face_w * 0.46), int(g.face_h * 0.95)),
+            0, 0, 360, 0, -1,
+        )
 
     _protect_head(m, g)
     return cv2.GaussianBlur(m, (feather | 1, feather | 1), 0)
