@@ -35,6 +35,7 @@ from ..types import AvatarPose, BehaviorEvent
 from .attention import AttentionSystem
 from .blinking import BlinkSystem
 from .breathing import BreathingSystem
+from .constraints import apply as apply_constraints
 from .context import Drives
 from .curves import clamp
 from .expression import ExpressionSystem
@@ -150,6 +151,8 @@ class BehaviorEngine:
                 )
             )
         self.state = state
+        if self.states is not None and self.states.state != state.value:
+            self.states.adopt(state.value, self.now, self.rng)
 
     def set_profile(self, profile: MotionProfile | str) -> None:
         if isinstance(profile, str):
@@ -243,8 +246,13 @@ class BehaviorEngine:
         # system is doing on its own. Kept additive rather than replacing the
         # head system so an attention-driven turn and an idle postural
         # adjustment can coexist, which is what happens in a real neck.
+        self.idle_head = (pose.yaw, pose.pitch, pose.roll)
         pose.yaw += self.attention.head_yaw
         pose.pitch += self.attention.head_pitch
+
+        # Anatomy last, over everything. Principle 5: generated motion is a
+        # proposal, the constraint stage decides what is physically possible.
+        apply_constraints(pose)
 
         after = (
             self.blink.blink_count,

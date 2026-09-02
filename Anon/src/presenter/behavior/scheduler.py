@@ -148,8 +148,28 @@ class StateScheduler:
                 return name
         return next(iter(options))
 
+    def adopt(self, name: str, now: float, rng) -> None:
+        """Take an externally imposed state.
+
+        When something outside drives the presenter - the content pipeline
+        putting him into SPEAKING - that caller owns the state and the
+        scheduler must not fight it. If the state is one this graph knows, the
+        dwell clock restarts on it; if it is not (every speech state), the
+        scheduler suspends until an idle state returns. Without this the
+        successor lookup raised KeyError the moment anything set a state the
+        idle graph had never heard of.
+        """
+        self.state = name
+        self.entered_at = now
+        if name in self.graph:
+            self.leave_at = now + self._sample_duration(name, rng)
+        else:
+            self.leave_at = float("inf")
+
     def update(self, now: float, rng) -> str | None:
         """Advance. Returns the new state name if a transition happened."""
+        if self.state not in self.graph:
+            return None                    # externally driven; not ours to end
         if self.leave_at <= 0.0:
             self.start(now, rng)
             return None
