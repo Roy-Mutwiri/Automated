@@ -126,9 +126,15 @@ class DropdownBar:
 
     # -- input --------------------------------------------------------------
     def attach(self, window: str, frame_size: tuple[int, int]) -> None:
+        """Record the window; do *not* install a callback.
+
+        OpenCV allows exactly one mouse callback per window, and there is more
+        than one widget on this frame. Each exposes `on_mouse` instead and the
+        application installs a single dispatcher, so adding a third widget does
+        not silently steal the second one's clicks.
+        """
         self._window = window
         self._frame_size = frame_size
-        cv2.setMouseCallback(window, self._on_mouse)
 
     def _to_image(self, x: int, y: int) -> tuple[int, int]:
         """Map window coordinates onto frame coordinates."""
