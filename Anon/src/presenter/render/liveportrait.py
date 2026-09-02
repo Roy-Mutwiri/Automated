@@ -56,6 +56,34 @@ from .base import RendererInfo
 __all__ = ["LivePortraitRenderer"]
 
 
+# Everything that belongs to *one source portrait* rather than to the renderer.
+#
+# Swapping outfits means swapping all of it at once and nothing else: the
+# LivePortrait weights, the landmark runner and the room style are properties of
+# the renderer and must survive the switch, while identity features, framing,
+# masks and the composited background must not.
+#
+# Kept as an explicit list rather than inferred, because a silently missing
+# entry produces a switch that mostly works - the new face over the old
+# silhouette's mask, say - which is far harder to diagnose than a crash.
+# `test_source_state_is_complete` walks the AST of the three methods that
+# populate these and fails if any assignment here is unaccounted for.
+_SOURCE_STATE = (
+    # identity and motion baseline
+    "source_full", "crop_info", "lmk_crop", "f_s", "x_s_info", "x_c_s", "x_s",
+    "src_pitch", "src_yaw", "src_roll", "src_scale", "src_t", "src_exp",
+    "src_eye_ratio",
+    # framing and the composited background
+    "frame_rect", "content_rect", "M_crop2out", "background",
+    "person_matte", "subject_alpha_out", "face_luma", "background_stops",
+    "desk_band", "desk_rgb_premul", "desk_inv_alpha",
+    "wrap_layer", "wrap_idx", "wrap_add",
+    # per-frame blend zones
+    "mask_out", "mask_box", "blend_box", "opaque_mask", "feather_mask",
+    "feather_alpha", "feather_bg_premul", "_opaque_frac",
+)
+
+
 def _add_liveportrait_to_path(root: Path) -> None:
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
