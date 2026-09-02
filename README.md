@@ -22,11 +22,19 @@ settle, then commits:
 | anything else             | the shared identity     |
 
 One save that touches both folders becomes **two commits**, one per author, so
-`git log --author=Anon` and the GitHub contributor graph stay accurate. After
-committing, the watcher runs `git pull --rebase --autostash` and then pushes.
+`git log --author=Anon` cleanly separates the two. After committing, the
+watcher runs `git pull --rebase --autostash` and then pushes.
 
 Names and emails live in [`tools/identities.json`](tools/identities.json).
 Edit that file to change how commits are attributed - no other change needed.
+
+> **Do not use `@users.noreply.github.com` emails here.** GitHub resolves
+> `someone@users.noreply.github.com` to whichever real account owns the login
+> `someone`, which silently credits your commits to a stranger. The identities
+> use the non-routable `.local` domain instead, so commits show the name `Anon`
+> or `Dripper` with no account attached. That also means these commits do not
+> appear in GitHub's contributor graph - only commits bound to a real account
+> do.
 
 > **Note on identity vs. access.** This attributes *authorship* by folder.
 > Both folders still push through whatever credentials this machine has, so
