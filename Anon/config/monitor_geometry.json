@@ -1,0 +1,30 @@
+{
+  "_comment": "Screen quadrilaterals on the locked master plate (1344x768), image coordinates, corner order TL, TR, BR, BL. Corners may fall outside the frame: the right monitor runs off the right edge, and the quad must describe the whole physical panel or the perspective mapping foreshortens incorrectly. Clipping to the frame is the mask's job, not the geometry's.",
+  "plate": "assets/master/master_v03_lighting.png",
+  "plate_size": [1344, 768],
+  "monitors": [
+    {
+      "id": "left",
+      "role": "secondary, powered off",
+      "quad": [[-40, 41], [338, 45], [326, 181], [-40, 183]],
+      "replace": false,
+      "note": "A dark, powered-off panel is realistic and restrained. Section 30 says stop adding room features; lighting up a third display would be adding one."
+    },
+    {
+      "id": "centre",
+      "role": "primary workstation display",
+      "quad": [[436, 46], [866, 42], [866, 296], [436, 297]],
+      "replace": true,
+      "content": "assets/screens/default_streamer_ui.png",
+      "note": "430 x 250 px visible, aspect 1.72 - consistent with a 16:9 panel very close to square-on. Heavily occluded by the subject's head and headphones on the right; occlusion is resolved from masks, not from the quad."
+    },
+    {
+      "id": "right",
+      "role": "secondary panel, angled",
+      "quad": [[1177, 40], [1500, 18], [1500, 318], [1177, 299]],
+      "replace": true,
+      "content": "assets/screens/secondary_panel.png",
+      "note": "Runs off the right edge of frame at x=1344; only its left third is visible. The off-frame corners are estimated from the panel's foreshortening so the visible strip carries the correct horizontal scale. Replacing it also removes an unowned AI-generated human likeness from the plate, which section 0 of the brief wants avoided."
+    }
+  ]
+}
