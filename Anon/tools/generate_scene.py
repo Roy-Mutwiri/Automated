@@ -88,7 +88,7 @@ CONCEPTS = {
     # A: no visible streaming gear at all.
     "executive": ROOM.replace("broadcast microphone on a boom arm, ", ""),
     # B: apparatus foregrounded.
-    "creator": ROOM.replace("one tungsten lamp, ", "a glass-side PC glowing warm, "),
+    "creator": ROOM.replace("one tungsten lamp, ", "a glass-side PC, "),
 }
 
 # Negatives are split across both encoders too. The first version was 218
@@ -107,8 +107,7 @@ NEGATIVE_2 = (
     "illustration, cartoon, plastic skin, airbrushed, waxy, doll-like, "
     "warped walls, crooked shelves, floating objects, distorted furniture, "
     "extra limbs, deformed hands, duplicated person, two people, "
-    "fisheye, wide angle distortion, blurry face, overexposed, flat lighting, "
-    "low quality"
+    "fisheye, blurry face, overexposed, flat lighting"
 )
 
 
