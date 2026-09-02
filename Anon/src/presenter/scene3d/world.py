@@ -466,9 +466,11 @@ class World:
         ob.data.materials.append(skin)
         bpy.ops.object.shade_smooth()
 
-        # The head still has to answer to the behaviour engine.
+        # Turn him round to face the cameras. The MakeHuman base mesh looks
+        # down -Y once converted to our Z-up world, and our subject faces +Y.
+        # Behaviour yaw is applied on top of that half turn.
         yaw = math.radians(getattr(pose, "yaw", 0.0))
-        ob.rotation_euler = (0.0, 0.0, yaw)
+        ob.rotation_euler = (0.0, 0.0, math.pi + yaw)
 
         self.landmarks["head_centre"] = (h["hip"][0], h["hip"][1] - 0.012,
                                          h["eye_height"] + 0.045)

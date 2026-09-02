@@ -47,7 +47,7 @@ cameras:
   - id: cam1
     name: Hero front
     enabled: true
-    position: [0.10, 2.50, 1.26]
+    position: [0.10, 2.94, 1.26]
     look_at: [0.10, 1.16, 1.22]
     focal_length_mm: 50.0
     f_stop: 2.8
@@ -66,7 +66,7 @@ cameras:
     # subject and a camera placed at eye level on this side, and a 14 mm tube
     # 15 cm from the lens fills a third of the frame. Clearing it is a camera
     # placement decision, not a reason to move the microphone.
-    position: [-1.05, 2.45, 1.42]
+    position: [-1.43, 2.88, 1.49]
     look_at: [0.10, 1.18, 1.22]
     focal_length_mm: 65.0
     f_stop: 2.8
@@ -79,7 +79,7 @@ cameras:
     # 44 degrees the other way and 18 cm further back. Deliberately NOT the
     # mirror of cam2 - the room is not symmetric and neither is he, and a
     # perfectly mirrored pair reads as a trick.
-    position: [1.35, 2.42, 1.20]
+    position: [1.73, 2.80, 1.19]
     look_at: [0.10, 1.18, 1.22]
     focal_length_mm: 65.0
     f_stop: 2.8
