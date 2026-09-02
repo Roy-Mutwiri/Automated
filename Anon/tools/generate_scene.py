@@ -245,7 +245,7 @@ def main() -> int:
     args = ap.parse_args()
 
     import torch
-    from diffusers import StableDiffusionXLPipeline
+    from diffusers import AutoencoderKL, StableDiffusionXLPipeline
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -266,8 +266,21 @@ def main() -> int:
     print(f"[scene] tokens  subject {n1}  room {n2}  neg {n3}  neg2 {n4}  "
           f"(limit {CLIP_LIMIT} each)")
 
+    # SDXL's stock VAE produces NaNs in fp16, so diffusers silently upcasts it
+    # to float32 for decoding. At 1344x768 that fp32 decode on top of the fp16
+    # UNet exceeded 16 GB and killed the first batch after one image with no
+    # traceback. Tiling the decode fixed the crash but cost ~5 minutes per
+    # image, which is worse than the problem.
+    #
+    # The fp16-fixed VAE removes the upcast entirely: it decodes natively in
+    # fp16, so peak memory drops and no tiling is needed. Correct fix rather
+    # than a workaround for a workaround.
+    vae = AutoencoderKL.from_pretrained(
+        "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16
+    )
     pipe = StableDiffusionXLPipeline.from_pretrained(
-        MODEL, torch_dtype=torch.float16, variant="fp16", use_safetensors=True,
+        MODEL, vae=vae, torch_dtype=torch.float16, variant="fp16",
+        use_safetensors=True,
     ).to("cuda")
     pipe.set_progress_bar_config(disable=True)
 
@@ -282,7 +295,8 @@ def main() -> int:
     # Tiling and slicing cost a little decode time and bound the peak, which
     # matters more here: generation is a batch job, and an OOM twelve images in
     # wastes far more time than tiled decoding ever will.
-    pipe.enable_vae_tiling()
+    # Slicing only - tiling is unnecessary now the decode is fp16, and it was
+    # the tiling specifically that cost the time.
     pipe.enable_vae_slicing()
 
     paths = []
