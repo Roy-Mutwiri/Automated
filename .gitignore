@@ -70,3 +70,8 @@ Anon/third_party/
 # with the recorded seed, and ~1.3 MB each, so only the chosen portrait
 # (Anon/assets/) is tracked.
 Anon/candidates/
+
+# Generated scene candidates. Reproducible from tools/generate_scene.py with the
+# recorded seed; only the chosen master frame (Anon/assets/) is tracked.
+Anon/scenes/
+Anon/candidates_stream/
