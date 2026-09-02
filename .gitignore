@@ -100,3 +100,8 @@ Anon/body_render.log
 tools/sync-*.log
 Anon/eyehead_frames/
 Anon/calibration/
+# Full-resolution inspection sheets. Derived, large, and regenerable from the
+# clip with tools/inspect_clip.py; the downscaled versions are tracked instead.
+Anon/clip_blink.png
+Anon/clip_gaze.png
+Anon/clip_contact_sheet.png
