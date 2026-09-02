@@ -73,6 +73,9 @@ class LivePortraitRenderer:
         output_size: tuple[int, int] = (1280, 720),
         paste_back: bool = True,
         framing: str = "shoulders",
+        environment: str = "streaming_room",
+        room_style=None,
+        room_seed: int = 7,
     ) -> None:
         self.root = Path(liveportrait_root).resolve()
         if not self.root.exists():
