@@ -1,0 +1,73 @@
+# The one transform that places the reconstructed human in the canonical world.
+#
+# There is exactly one of these, and all seven cameras observe it. That is the
+# whole point of the file.
+#
+# ---------------------------------------------------------------------------
+# THE RULE
+# ---------------------------------------------------------------------------
+#
+# If the human is framed wrongly in a camera, the fix is HERE. It is never the
+# camera.
+#
+# tools/camera_bridge.py reprojects at 0.0000 px against Blender's own
+# world_to_camera_view over six probe points and seven cameras. That number is
+# not an estimate, so a framing error cannot be coming from the extrinsics, the
+# focal length, the sensor size, or the projection convention. It is coming
+# from where the human is standing.
+#
+# Adjust: position_m, rotation_euler_deg, scale
+# Never:  camera extrinsics, focal length, sensor size, projection convention
+#
+# ---------------------------------------------------------------------------
+# NO PER-CAMERA OFFSETS
+# ---------------------------------------------------------------------------
+#
+# There is no cam2_offset. There is no cam3_offset. There will not be one.
+#
+# A per-camera nudge buys a better-looking CAM2 by asserting that the man is in
+# two different places at the same instant, which is precisely the failure the
+# multicam architecture exists to prevent - and it hides the real error rather
+# than fixing it. If CAM1 looks right and CAM2 looks wrong, the transform is
+# wrong in a way CAM1 happens not to reveal; a side camera is more sensitive to
+# depth placement than a frontal one, which is why it caught it.
+#
+# Adding a per-camera offset key here is a hard failure, not a workaround.
+#
+# ---------------------------------------------------------------------------
+
+scene_version: SCENE_V1
+
+# Coordinate frame, matching config/room_geometry.yaml exactly:
+#   X  left/right, metres
+#   Y  depth; Y=0 is the slat wall, +Y is toward the cameras
+#   Z  up
+# The presenter faces +Y.
+
+avatar_world_transform:
+  # UNSET. These are the identity values, not a fitted result.
+  #
+  # They are deliberately not guessed. The reconstruction does not exist yet,
+  # and its own canonical frame, scale and facing are not yet known - LHM++
+  # exports a canonical T-pose whose origin convention has to be measured
+  # rather than assumed. Fitting this before there is something to fit is how
+  # a wrong number acquires the appearance of a calibration.
+  #
+  # Fill it in during CAM1 alignment, then leave it alone.
+  position_m: [0.0, 0.0, 0.0]
+  rotation_euler_deg: [0.0, 0.0, 0.0]
+  scale: 1.0
+
+  status: unset
+  fitted_against: null      # which camera the alignment was done on: cam1
+  fitted_on: null           # date
+  notes: null
+
+# Where the human is expected to end up, from config/room_geometry.yaml. This
+# is a target for the alignment, NOT a value to copy into the transform above -
+# the reconstruction's own origin is unknown until it exists, so the numbers
+# will not correspond directly.
+expected_placement:
+  hip_m: [0.10, 1.24, 0.52]
+  eye_height_m: 1.22
+  facing: "+y"
