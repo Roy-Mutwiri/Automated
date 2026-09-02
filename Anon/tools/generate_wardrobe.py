@@ -157,6 +157,31 @@ HEADWEAR = {
 }
 
 
+def check_prompts() -> list[str]:
+    """Report every prompt that CLIP would silently truncate.
+
+    Truncation is the failure this whole file is most exposed to, because it
+    does not raise, does not warn in the pipeline output, and produces images
+    that look deliberate. Checking is three lines and it runs before anything
+    is generated.
+    """
+    from transformers import CLIPTokenizer
+
+    tok = CLIPTokenizer.from_pretrained(MODEL, subfolder="tokenizer")
+    over = []
+    combos = [("negative", NEGATIVE),
+              ("negative+headwear", f"{NEGATIVE}, {HEADWEAR_NEGATIVE}")]
+    for table, kind in ((CLOTHING, "clothing"), (HEADWEAR, "headwear")):
+        for name, prompt in table.items():
+            if prompt is not None:
+                combos.append((f"{kind}/{name}", f"{prompt}, {LOOK}"))
+    for name, text in combos:
+        n = len(tok(text).input_ids)
+        if n > TOKEN_LIMIT:
+            over.append(f"{name}: {n} tokens, {n - TOKEN_LIMIT} would be dropped")
+    return over
+
+
 def detect_landmarks(img_bgr: np.ndarray, lp_root: Path) -> np.ndarray:
     """Two-pass landmark detection, matching the renderer's approach.
 
