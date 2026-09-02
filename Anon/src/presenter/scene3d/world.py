@@ -461,9 +461,7 @@ class World:
                 print(f"[world] hid {drop} faces below z={clip_below} "
                       f"(standing mesh, no rig to seat it yet)")
 
-        skin = _material("skin_fitted", (0.36, 0.21, 0.14), roughness=0.52)
         ob.data.materials.clear()
-        ob.data.materials.append(skin)
         bpy.ops.object.shade_smooth()
 
         # Turn him round to face the cameras. The MakeHuman base mesh looks
