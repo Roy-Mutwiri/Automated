@@ -130,6 +130,27 @@ CHANNELS: dict[str, ExpressionChannel] = {
              "whether this reads as a medial *pull* rather than a flat drop "
              "has not been confirmed at expressive amplitude",
     ),
+    "smile": ExpressionChannel(
+        name="smile",
+        targets=[(17, 0, 1.0), (14, 1, -0.64)],
+        gain=0.026,
+        verified=True,
+        note="symmetric smile. NO single dimension lifts the corners - the scan "
+             "found the mouth dims either open/close it (19, 20 axis 1) or "
+             "shear it sideways (17, 20 axis 0). A smile needs a combination, "
+             "and this pair was chosen by rendering candidates and looking. "
+             "Driving it also produces the cheek lift and lower-lid narrowing "
+             "on its own, because the model learned faces holistically - which "
+             "is why cheek and squint are deliberately NOT mapped separately",
+    ),
+    "smile_asym": ExpressionChannel(
+        name="smile_asym",
+        targets=[(20, 0, 1.0)],
+        gain=0.010,
+        verified=True,
+        note="lateral pull, carrying the left/right difference so one corner "
+             "can lead. Measured as the most laterally-biased mouth dimension",
+    ),
     "mouth_open": ExpressionChannel(
         name="mouth_open",
         targets=[(20, 1, 1.0), (17, 1, 0.85), (19, 1, 0.6)],
@@ -151,12 +172,22 @@ def apply_expression_deltas(exp: torch.Tensor, pose) -> torch.Tensor:
     uncalibrated channel that the behaviour engine leaves at zero costs
     nothing and changes nothing.
     """
+    # The two mouth corners are carried as a symmetric part and a difference.
+    #
+    # Mapping each corner to its own dimension is not possible here: the latent
+    # has no per-corner control, and the pair that produces a smile is
+    # bilateral. So the mean drives the smile and the difference drives a
+    # lateral pull, which is what makes one corner lead without the asymmetry
+    # cancelling itself out.
+    smile = 0.5 * (pose.mouth_corner_l + pose.mouth_corner_r)
     values = {
         "gaze_x": pose.gaze_x,
         "gaze_y": pose.gaze_y,
         "brow_l": pose.brow_l,
         "brow_r": pose.brow_r,
         "brow_furrow": pose.brow_furrow,
+        "smile": smile,
+        "smile_asym": pose.mouth_corner_l - pose.mouth_corner_r,
         "mouth_open": pose.mouth_open,
     }
 
