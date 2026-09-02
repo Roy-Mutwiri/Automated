@@ -423,7 +423,12 @@ def main() -> int:
 
             t0 = time.perf_counter()
             try:
-                fresh = renderer.set_source(wardrobe.path(*want))
+                # Back to a portrait, so back to the portrait's settings -
+                # matted into the generated room, framed on the face.
+                fresh = renderer.set_source(
+                    wardrobe.path(*want),
+                    framing=args.framing, environment=args.environment,
+                )
             except Exception as exc:  # noqa: BLE001 - keep the stream alive
                 # set_source rolls itself back, so the presenter is still
                 # wearing what they were wearing. Say so and carry on.
