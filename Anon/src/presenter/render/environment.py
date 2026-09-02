@@ -88,6 +88,15 @@ class RoomStyle:
     shelf: bool = True
     shelf_y: float = 0.30          # fraction of height
     shelf_darkness: float = 0.40
+    # Objects on it. Set-dressing convention is a small, odd number with
+    # varied heights, grouped rather than spread evenly: an even rank of
+    # similar blocks reads as a graphic pattern, not as someone's shelf.
+    shelf_objects: int = 5
+    # The shelf stands proud of the wall, so it is fractionally nearer the
+    # camera and takes a correspondingly weaker blur. This is the third plane
+    # in the focus ramp - wall, shelf, desk - and it is what stops the room
+    # collapsing into a single painted backdrop.
+    shelf_focus: float = 0.72
 
     # Desk edge across the bottom of frame, closer to camera than the wall and
     # therefore less blurred. This is what actually sells "seated at a desk".
