@@ -32,6 +32,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..types import AvatarPose, BehaviorEvent
+from ..motion.adapters.face2d import GAZE_UNITS_PER_DEG, to_avatar_pose
+from ..motion.body import BodySystem
+from ..motion.breathing import RespirationSystem
+from ..motion.state import HumanMotionState
 from .attention import AttentionSystem
 from .blinking import BlinkSystem
 from .breathing import BreathingSystem
@@ -53,6 +57,11 @@ from .state import (
 )
 
 __all__ = ["BehaviorEngine", "EngineStats"]
+
+# How a head turn divides between the neck and the skull-on-atlas joint.
+# Most of it is neck: a head that rotates on its own reads as a ball joint,
+# which is one of the clearest tells of an unrigged character.
+NECK_FRACTION = 0.68
 
 
 @dataclass
@@ -114,6 +123,13 @@ class BehaviorEngine:
         self.expression = ExpressionSystem()
         self.posture = PostureSystem(profile)
         self.attention = AttentionSystem(profile)
+
+        # The body. Breathing and posture write into the canonical motion
+        # state, never into a renderer's pose - see presenter/motion/state.py
+        # for why that boundary exists.
+        self.respiration = RespirationSystem(profile)
+        self.body = BodySystem(profile)
+        self.motion = HumanMotionState()
 
         # Autonomous means the presenter decides his own state. Off, the state
         # is whatever an external caller last set - which is what the eventual
@@ -234,26 +250,67 @@ class BehaviorEngine:
             self.posture.shift_count,
         )
 
-        # Order matters only for additive channels: head and posture write
-        # pose fields that breathing then adds to.
         self.head.update(drives, pose)
         self.posture.update(drives, pose)
-        self.breathing.update(drives, pose)
         self.blink.update(drives, pose)
         self.gaze.update(drives, pose, attention=self.attention)
         self.expression.update(drives, pose)
 
-        # The head's share of a gaze shift, added on top of whatever the head
-        # system is doing on its own. Kept additive rather than replacing the
-        # head system so an attention-driven turn and an idle postural
-        # adjustment can coexist, which is what happens in a real neck.
-        self.idle_head = (pose.yaw, pose.pitch, pose.roll)
-        pose.yaw += self.attention.head_yaw
-        pose.pitch += self.attention.head_pitch
+        # --- assemble the canonical motion state ---------------------------
+        #
+        # The face subsystems above are frozen and still write into an
+        # AvatarPose; that scratch pose is a face-channel carrier here, not the
+        # output. Everything is merged into one HumanMotionState, the body
+        # systems write the parts a face renderer has never had, and the
+        # renderer-facing pose is produced by an adapter at the end.
+        motion = HumanMotionState(timestamp=self.now)
+        motion.behavior_state = self.state.value
 
-        # Anatomy last, over everything. Principle 5: generated motion is a
-        # proposal, the constraint stage decides what is physically possible.
-        apply_constraints(pose)
+        # Head and neck. The attention system's share is split between them:
+        # the neck carries most of a turn and the skull the remainder, because
+        # a head that rotates without a neck is a ball joint.
+        motion.neck.ry = self.attention.head_yaw * NECK_FRACTION
+        motion.head.ry = self.attention.head_yaw * (1.0 - NECK_FRACTION)
+        motion.neck.rx = self.attention.head_pitch * NECK_FRACTION
+        motion.head.rx = self.attention.head_pitch * (1.0 - NECK_FRACTION)
+
+        # Idle head motion from the frozen head system, which still speaks
+        # AvatarPose. Its sway belongs to the skull, not the spine.
+        motion.head.ry += pose.yaw
+        motion.head.rx += pose.pitch
+        motion.head.rz += pose.roll
+
+        # Torso participation, for large turns only.
+        motion.chest.ry += self.attention.torso_yaw * 0.55
+        motion.spine_mid.ry += self.attention.torso_yaw * 0.30
+        motion.spine_lower.ry += self.attention.torso_yaw * 0.15
+
+        # Eyes, back out of gaze units into degrees relative to the head.
+        motion.eye_l.ry = motion.eye_r.ry = pose.gaze_x / GAZE_UNITS_PER_DEG
+        motion.eye_l.rx = motion.eye_r.rx = -pose.gaze_y / GAZE_UNITS_PER_DEG
+
+        f = motion.face
+        f.eye_open_l, f.eye_open_r = pose.eye_open_l, pose.eye_open_r
+        f.brow_outer_l, f.brow_outer_r = pose.brow_l, pose.brow_r
+        f.brow_furrow = pose.brow_furrow
+        f.eye_squint_l, f.eye_squint_r = pose.squint_l, pose.squint_r
+        f.cheek_l = f.cheek_r = pose.cheek
+        f.mouth_corner_l, f.mouth_corner_r = pose.mouth_corner_l, pose.mouth_corner_r
+        f.jaw = pose.jaw
+
+        motion.attention.target = self.attention.current
+        motion.attention.azimuth = self.attention.point_az
+        motion.attention.elevation = self.attention.point_el
+        motion.attention.shifting = self.attention.is_shifting
+        motion.attention.visual_demand = self.attention.visual_demand
+
+        # Body: seated posture, engagement, comfort shifts, then respiration
+        # on top of whatever posture has set.
+        self.body.update(drives, motion)
+        self.respiration.apply(self.respiration.update(drives), motion)
+
+        self.motion = motion
+        pose = to_avatar_pose(motion)
 
         after = (
             self.blink.blink_count,
