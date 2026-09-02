@@ -32,6 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..types import AvatarPose, BehaviorEvent
+from .attention import AttentionSystem
 from .blinking import BlinkSystem
 from .breathing import BreathingSystem
 from .context import Drives
@@ -41,6 +42,7 @@ from .gaze import GazeSystem
 from .head import HeadSystem
 from .posture import PostureSystem
 from .randomness import OrnsteinUhlenbeck, Rng
+from .scheduler import BehaviorMemory, StateScheduler
 from .state import (
     PROFILES,
     STATE_MODULATION,
@@ -89,6 +91,7 @@ class BehaviorEngine:
         profile: MotionProfile | str = "PRESENTER_CALM",
         state: BehaviorState = BehaviorState.IDLE_ATTENTIVE,
         seed: int | None = None,
+        autonomous: bool = True,
     ) -> None:
         if isinstance(profile, str):
             if profile not in PROFILES:
@@ -109,6 +112,14 @@ class BehaviorEngine:
         self.breathing = BreathingSystem(profile)
         self.expression = ExpressionSystem()
         self.posture = PostureSystem(profile)
+        self.attention = AttentionSystem(profile)
+
+        # Autonomous means the presenter decides his own state. Off, the state
+        # is whatever an external caller last set - which is what the eventual
+        # content pipeline will want, and what the existing tests assume.
+        self.autonomous = autonomous
+        self.states = StateScheduler(start=state.value) if autonomous else None
+        self.memory = BehaviorMemory()
 
         self._arousal = OrnsteinUhlenbeck.from_amplitude(
             profile.arousal_amplitude, profile.arousal_time
@@ -165,6 +176,13 @@ class BehaviorEngine:
                 1.0, dt / 0.75
             )
 
+        # The presenter's own state changes before anything reads it, so a
+        # transition takes effect on the frame it happens rather than the next.
+        if self.states is not None:
+            changed = self.states.update(self.now, self.rng)
+            if changed is not None:
+                self.set_state(BehaviorState(changed))
+
         arousal = clamp(self._arousal.step(dt, self.rng), -1.0, 1.0)
 
         # Decay the motion budget before this frame's decisions.
@@ -195,12 +213,18 @@ class BehaviorEngine:
             time_since_head_move=self.now - self.head.last_move_time,
             motion_in_flight=self.blink.is_blinking or self.head.is_moving,
             suppression=suppression,
+            visual_demand=self.attention.visual_demand,
             events=self._events,
         )
 
+        # Attention runs first: it decides where he is looking this frame, and
+        # both the gaze and the head read that decision rather than inventing
+        # their own.
+        self.attention.update(drives)
+
         before = (
             self.blink.blink_count,
-            self.gaze.saccade_count,
+            self.attention.shift_count,
             self.head.move_count,
             self.expression.expression_count,
             self.posture.shift_count,
@@ -212,12 +236,19 @@ class BehaviorEngine:
         self.posture.update(drives, pose)
         self.breathing.update(drives, pose)
         self.blink.update(drives, pose)
-        self.gaze.update(drives, pose)
+        self.gaze.update(drives, pose, attention=self.attention)
         self.expression.update(drives, pose)
+
+        # The head's share of a gaze shift, added on top of whatever the head
+        # system is doing on its own. Kept additive rather than replacing the
+        # head system so an attention-driven turn and an idle postural
+        # adjustment can coexist, which is what happens in a real neck.
+        pose.yaw += self.attention.head_yaw
+        pose.pitch += self.attention.head_pitch
 
         after = (
             self.blink.blink_count,
-            self.gaze.saccade_count,
+            self.attention.shift_count,
             self.head.move_count,
             self.expression.expression_count,
             self.posture.shift_count,
@@ -236,8 +267,11 @@ class BehaviorEngine:
             self._motion_budget += 0.6
         self._motion_budget = min(self._motion_budget, 2.5)
 
+        for ev in self._events[len(self._events) - 8:]:
+            self.memory.record(ev.time, ev.kind, ev.detail.split(" ")[0])
+
         self.stats.blinks = self.blink.blink_count
-        self.stats.saccades = self.gaze.saccade_count
+        self.stats.saccades = self.attention.shift_count
         self.stats.microsaccades = self.gaze.microsaccade_count
         self.stats.head_moves = self.head.move_count
         self.stats.expressions = self.expression.expression_count
