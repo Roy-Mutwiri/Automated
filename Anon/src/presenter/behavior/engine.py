@@ -155,6 +155,15 @@ class BehaviorEngine:
         self.stats.frames += 1
         self.stats.elapsed = self.now
 
+        # Smoothed frame interval, for subsystems that must stay perceptible at
+        # whatever rate the renderer is actually achieving. Heavily smoothed on
+        # purpose: reacting to a single slow frame would make blinks jitter in
+        # length.
+        if dt > 0.0:
+            self._frame_interval += (dt - self._frame_interval) * min(
+                1.0, dt / 0.75
+            )
+
         arousal = clamp(self._arousal.step(dt, self.rng), -1.0, 1.0)
 
         # Decay the motion budget before this frame's decisions.
