@@ -271,6 +271,20 @@ def main() -> int:
     ).to("cuda")
     pipe.set_progress_bar_config(disable=True)
 
+    # Decode the latents in tiles rather than all at once.
+    #
+    # Without this the first 1344x768 batch died silently after one image. The
+    # cause is in the log: diffusers upcasts the VAE to float32 for decoding,
+    # and a full-frame fp32 decode at this resolution on top of the fp16 UNet
+    # exceeds 16 GB. The process was killed with no traceback, which is exactly
+    # what a CUDA OOM during decode looks like from the outside.
+    #
+    # Tiling and slicing cost a little decode time and bound the peak, which
+    # matters more here: generation is a batch job, and an OOM twelve images in
+    # wastes far more time than tiled decoding ever will.
+    pipe.enable_vae_tiling()
+    pipe.enable_vae_slicing()
+
     paths = []
     for i in range(args.count):
         seed = args.seed + i
