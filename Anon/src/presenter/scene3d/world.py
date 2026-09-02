@@ -462,6 +462,8 @@ class World:
                       f"(standing mesh, no rig to seat it yet)")
 
         ob.data.materials.clear()
+        ob.data.materials.append(
+            _material("skin_fitted", (0.36, 0.21, 0.14), roughness=0.52))
         bpy.ops.object.shade_smooth()
 
         # Turn him round to face the cameras. The MakeHuman base mesh looks
@@ -695,7 +697,8 @@ class World:
 
 def build_world(pose, geometry_path="config/room_geometry.yaml",
                 cameras_path="config/cameras.yaml",
-                human_mesh: str | None = None) -> World:
+                human_mesh: str | None = None,
+                project_identity: bool = False) -> World:
     """Build the entire canonical scene for one frozen simulation state."""
     geometry = yaml.safe_load((ROOT / geometry_path).read_text(encoding="utf-8"))
     cameras = yaml.safe_load((ROOT / cameras_path).read_text(encoding="utf-8"))
@@ -714,9 +717,14 @@ def build_world(pose, geometry_path="config/room_geometry.yaml",
     world.build_lighting()
     world.cameras = world.build_cameras()
     # Texturing needs the cameras to exist, because it projects through one.
-    if fitted:
-        # Align before projecting: the projection is only meaningful once the
-        # mesh lands on the man in the plate.
+    if fitted and project_identity:
+        # OFF by default, and deliberately so. Front-projecting the plate needs
+        # the mesh to land on the man to within a few pixels, which needs a
+        # correspondence between MakeHuman's 13,380 vertices and the measured
+        # facial landmarks. That mapping does not exist yet: without it the
+        # projection samples whatever is behind him and paints the wall onto
+        # his face, and a bounding-box alignment was tried and made it worse.
+        # Shipping it enabled would look like a bug rather than a known gap.
         world.align_head_to_plate(fitted, ROOT / "config/avatar_landmarks.json")
         plate = ROOT / "assets/reference/avatar_identity_camera1.png"
         world.project_identity_texture(fitted, plate)

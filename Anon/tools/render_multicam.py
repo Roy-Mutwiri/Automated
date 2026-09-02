@@ -114,6 +114,9 @@ def main() -> int:
     ap.add_argument("--human-mesh", default=None,
                     help="path to a fitted human OBJ; without it the debug "
                          "proxy is used")
+    ap.add_argument("--project-identity", action="store_true",
+                    help="front-project the plate onto the mesh; needs a "
+                         "landmark correspondence that does not exist yet")
     ap.add_argument("--turntable", action="store_true",
                     help="render the human from seven yaw angles instead, to "
                          "check identity holds around the head")
@@ -127,7 +130,8 @@ def main() -> int:
 
     from presenter.scene3d.world import build_world
 
-    world = build_world(pose, human_mesh=args.human_mesh)
+    world = build_world(pose, human_mesh=args.human_mesh,
+                        project_identity=args.project_identity)
     problems = world.validate_cameras()
     for p in problems:
         print(f"[multicam] CAMERA PROBLEM: {p}")
