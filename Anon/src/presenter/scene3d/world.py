@@ -714,6 +714,9 @@ def build_world(pose, geometry_path="config/room_geometry.yaml",
     world.cameras = world.build_cameras()
     # Texturing needs the cameras to exist, because it projects through one.
     if fitted:
+        # Align before projecting: the projection is only meaningful once the
+        # mesh lands on the man in the plate.
+        world.align_head_to_plate(fitted, ROOT / "config/avatar_landmarks.json")
         plate = ROOT / "assets/reference/avatar_identity_camera1.png"
         world.project_identity_texture(fitted, plate)
     return world
