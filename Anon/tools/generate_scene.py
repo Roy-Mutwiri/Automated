@@ -242,6 +242,9 @@ def main() -> int:
     ap.add_argument("--out", default="scenes")
     ap.add_argument("--liveportrait-root", default="third_party/LivePortrait")
     ap.add_argument("--no-measure", action="store_true")
+    ap.add_argument("--low-vram", action="store_true",
+                    help="stream modules to the GPU on demand; slower but "
+                         "survives a card shared with other applications")
     args = ap.parse_args()
 
     import torch
@@ -281,7 +284,26 @@ def main() -> int:
     pipe = StableDiffusionXLPipeline.from_pretrained(
         MODEL, vae=vae, torch_dtype=torch.float16, variant="fp16",
         use_safetensors=True,
-    ).to("cuda")
+    )
+
+    # This card is shared. Two batches died silently mid-run - no traceback,
+    # just a dead process - and the cause was not the generator: LM Studio's
+    # llama-server, VRoid Studio and a browser were holding roughly 10 GB of
+    # the 16 GB between them, leaving too little for SDXL at 1344x768.
+    #
+    # Auto-enable CPU offload when free VRAM is short. Offload keeps one module
+    # on the GPU at a time, so peak usage is bounded by the largest single
+    # module instead of the whole pipeline. It costs perhaps 30% throughput and
+    # removes the failure mode entirely - a good trade for a batch job that
+    # otherwise dies eight images in.
+    free, total = torch.cuda.mem_get_info()
+    free_gb = free / 1e9
+    if args.low_vram or free_gb < 9.0:
+        print(f"[scene] {free_gb:.1f} GB free of {total / 1e9:.1f} GB - "
+              f"enabling CPU offload (slower, but bounded)")
+        pipe.enable_model_cpu_offload()
+    else:
+        pipe = pipe.to("cuda")
     pipe.set_progress_bar_config(disable=True)
 
     # Decode the latents in tiles rather than all at once.
