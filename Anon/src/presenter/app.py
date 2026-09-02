@@ -164,6 +164,9 @@ def main() -> int:
     ap.add_argument("--source", default="",
                     help="source portrait for the photoreal renderer; "
                          "overrides the wardrobe's starting outfit")
+    ap.add_argument("--cameras", default="config/cameras.yaml",
+                    help="camera positions driving the camera buttons; "
+                         "'' disables them")
     ap.add_argument("--wardrobe", default="config/wardrobe.yaml",
                     help="outfit definitions driving the clothing and headwear "
                          "dropdowns; '' disables them")
