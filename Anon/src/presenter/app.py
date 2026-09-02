@@ -366,10 +366,6 @@ def main() -> int:
             still_frame = None
             camera = key
             cam_row.selected = key
-            if bar is not None:
-                # An outfit and a camera are different master frames; only one
-                # can be on screen, so stop claiming the outfit is.
-                bar.set_menus(build_menus())
             print(f"[app] camera -> {key} ({cam.label}, "
                   f"{'prepared' if fresh else 'cached'} in "
                   f"{time.perf_counter() - t0:.2f}s)")
