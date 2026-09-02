@@ -443,6 +443,12 @@ class LivePortraitRenderer:
             content * coverage + fill * (1.0 - coverage), 0, 255
         ).astype(np.uint8)
 
+        self._finish_blend_setup(crop, M_src2out, w, h, out_w, out_h)
+
+    def _finish_blend_setup(self, crop, M_src2out, w, h, out_w, out_h) -> None:
+        """Precompute the per-frame blend mask and its zones."""
+        from src.utils.crop import prepare_paste_back
+
         # Feather mask in output space, also once.
         mask = prepare_paste_back(
             self.cfg.mask_crop, crop["M_c2o"], dsize=(w, h)
@@ -453,6 +459,12 @@ class LivePortraitRenderer:
         self.mask_out = mask_out.astype(np.float32)
         if self.mask_out.max() > 1.5:
             self.mask_out /= 255.0
+
+        # With a replaced background, restrict the generated crop to the
+        # subject. Without this the crop's own (original) background is pasted
+        # back as a rectangle of old bokeh sitting over the new room.
+        if self.subject_alpha_out is not None:
+            self.mask_out = self.mask_out * self.subject_alpha_out
 
         # Blend only inside the mask's bounding box - outside it the output is
         # exactly the precomputed background, so those pixels never need
