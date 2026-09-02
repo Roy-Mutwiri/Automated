@@ -62,25 +62,32 @@ MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 WIDTH, HEIGHT = 1344, 768
 
 # Encoder 1: who he is and how he is framed. MUST stay under 77 CLIP tokens.
+# Encoder 1 (CLIP-L): who he is, framed close enough to animate.
+#
+# "medium close-up" and a 1.2 m camera replace the earlier "medium shot" at
+# 2 m. A room-scale shot put the face at 94 px, which is below LivePortrait's
+# 256 px inference input once cropped - the room looked superb and the face was
+# unusable. Closer framing trades a little visible room for a face that can
+# actually be driven.
 SUBJECT_PROMPT = (
-    "medium shot photo, waist up, "
+    "medium close-up photo, head and chest, camera 1.2m away, "
     "a brown-skinned Arab man in his 30s, short dark beard, charcoal shirt, "
-    "in a matte black high-back gaming chair with headrest, "
+    "sitting in a matte black high-back gaming chair with headrest, "
     "head straight to camera, symmetrical frontal face, looking into the lens, "
     "calm neutral expression, mouth closed, eyes open, natural skin texture"
 )
 
-# Encoder 2: where he is and how it is lit. Also under 77 tokens.
-# "dark walnut wood slat wall" appears twice on purpose. Diffusers has no
-# native (term:1.3) weighting, and the brief rules out simply making the prompt
-# longer, so repetition is the available emphasis mechanism - the previous
-# frame rendered this wall as curtains, which is the single biggest miss.
+# Encoder 2 (OpenCLIP-G): the room - but it MUST still lead with the man.
+#
+# SDXL weights OpenCLIP-G heavily. A room-only prompt here produced eight
+# candidates out of twelve with no human in them at all, even with "empty room,
+# no people" in the negative. Anchoring the sentence on the man keeps him
+# present while the wall still gets described.
 ROOM = (
-    "dark walnut wood slat wall, narrow vertical wooden battens with real wood "
-    "grain over matte black acoustic felt, dark walnut wood slat wall behind "
-    "him, luxury streamer man cave at night, dark walnut desk, large monitor, "
-    "broadcast microphone on a boom arm, headphones, matte black and charcoal, "
-    "warm amber practical lights, faint cool monitor glow, 45mm, photograph"
+    "a man seated close to camera in his luxury streamer man cave at night, "
+    "behind him a wall of narrow vertical dark walnut wood slats with real "
+    "wood grain, dark walnut desk, monitor, broadcast microphone on a boom, "
+    "matte black and charcoal, warm amber practical lights, 45mm, photograph"
 )
 
 CONCEPTS = {
