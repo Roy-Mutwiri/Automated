@@ -129,6 +129,10 @@ COMFORT_SHIFTS = {
         targets={"pelvis": (+2.2, 0.0, 0.0), "spine_lower": (+1.7, 0.0, 0.0),
                  "chest": (+0.8, 0.0, 0.0)},
     ),
+    "HAND_REPOSITION": dict(
+        weight=0.8, duration=(0.7, 1.4),
+        targets={"clavicle_l": (0.0, 0.0, -0.5), "shoulder_l": (+0.6, 0.0, 0.0)},
+    ),
     "TORSO_ROTATE": dict(
         weight=0.6, duration=(1.8, 3.2),
         targets={"spine_lower": (0.0, +1.5, 0.0), "spine_mid": (0.0, +1.2, 0.0),
@@ -159,6 +163,7 @@ class BodySystem:
         self._held: dict[str, list[float]] = {}
         self._next_at = None
         self._recent: list[str] = []
+        self._left_rest = "desk_rest_l"
         self.shift_count = 0
 
     # -- scheduling ----------------------------------------------------------
@@ -210,6 +215,11 @@ class BodySystem:
         if len(self._recent) > 4:
             self._recent.pop(0)
 
+        if kind == "HAND_REPOSITION":
+            # The left hand moves between the desk and the lap. Rare, and it
+            # persists - a hand that springs back was not repositioned.
+            self._left_rest = ("lap_rest_l" if self._left_rest == "desk_rest_l"
+                               else "desk_rest_l")
         if kind == "SMALL_LEAN_FORWARD":
             self._engagement_target = min(self._engagement_target + 0.55, 1.0)
         elif kind == "SETTLE_BACK":
@@ -290,6 +300,15 @@ class BodySystem:
                 j.rx += held[0]
                 j.ry += held[1]
                 j.rz += held[2]
+
+        # Resting hands. One natural arrangement, locked: the dominant hand on
+        # the mouse, the other resting on the desk. Hands that float in space
+        # are the clearest sign a body is not really in a room, so the default
+        # is contact, not free.
+        motion.hand_r.contact = "mouse"
+        motion.hand_r.contact_weight = 1.0
+        motion.hand_l.contact = self._left_rest
+        motion.hand_l.contact_weight = 1.0
 
         motion.posture = PostureState(
             engagement=self._engagement,

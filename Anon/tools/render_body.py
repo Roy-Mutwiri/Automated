@@ -34,12 +34,12 @@ RIG_BLEND = "assets/rig/body_rig.blend"
 # (location, look-at height, lens). Units are the rig's own, which are roughly
 # decimetres: the body spans about 18 units head to toe.
 CAMERAS = {
-    "front":   ((0.0, -26.0, 7.6), 6.4, 52.0),
-    "side":    ((22.0, -13.0, 7.2), 6.0, 55.0),
-    "three_q": ((14.0, -22.0, 8.2), 6.4, 52.0),
-    "rear":    ((-6.0, 20.0, 8.6), 6.2, 55.0),
-    "top":     ((0.5, -9.0, 22.0), 3.0, 40.0),
-    "torso":   ((0.0, -14.0, 6.2), 5.6, 70.0),
+    "front":   ((0.0, -17.0, 7.4), 6.2, 62.0),
+    "side":    ((15.5, -7.0, 7.2), 6.0, 62.0),
+    "three_q": ((10.0, -14.0, 7.8), 6.4, 60.0),
+    "rear":    ((-5.0, 14.0, 8.4), 6.2, 58.0),
+    "top":     ((0.5, -7.0, 18.0), 3.5, 45.0),
+    "torso":   ((0.0, -11.0, 6.4), 5.8, 72.0),
 }
 
 
@@ -72,13 +72,22 @@ def setup_scene(camera: str, width: int, height: int, samples: int = 16):
     world.node_tree.nodes["Background"].inputs[0].default_value = (0.05, 0.055, 0.065, 1)
     world.node_tree.nodes["Background"].inputs[1].default_value = 0.6
 
-    # Desk, chair, mouse. Blocks, on purpose.
-    j_desk = None
+    # Desk, chair, floor. Blocks, on purpose - what is being judged is the
+    # body, not the furniture.
+    #
+    # Placement is derived from the contact targets rather than typed in. The
+    # first version put the desk at +Y, which after the MakeHuman-to-Blender
+    # conversion is *behind* him: forward is -Y. He was sitting with his back
+    # to his own desk.
+    tgt = bpy.data.objects.get("target_mouse")
+    desk_z = tgt.location.z if tgt is not None else 2.0
+    desk_y = tgt.location.y if tgt is not None else -6.0
+
     for name, loc, size in (
-        ("desk", (0.0, 3.2, 0.0), (11.0, 3.4, 0.35)),
-        ("chair_seat", (0.0, 0.6, -0.4), (5.0, 4.6, 0.4)),
-        ("chair_back", (0.0, 3.0, 4.6), (5.0, 0.5, 5.2)),
-        ("floor", (0.0, 0.0, -9.2), (30.0, 30.0, 0.2)),
+        ("desk", (0.0, desk_y - 1.6, desk_z - 0.3), (8.5, 3.0, 0.28)),
+        ("chair_seat", (0.0, 1.2, 0.9), (4.6, 4.2, 0.35)),
+        ("chair_back", (0.0, 4.4, 5.6), (4.6, 0.45, 4.8)),
+        ("floor", (0.0, 0.0, -9.4), (26.0, 26.0, 0.2)),
     ):
         bpy.ops.mesh.primitive_cube_add(size=2.0, location=loc)
         o = bpy.context.object
@@ -87,21 +96,10 @@ def setup_scene(camera: str, width: int, height: int, samples: int = 16):
         m = bpy.data.materials.new(name + "_mat")
         m.use_nodes = True
         bsdf = m.node_tree.nodes["Principled BSDF"]
-        shade = 0.045 if name.startswith("chair") else (0.09 if name == "desk" else 0.16)
+        shade = 0.05 if name.startswith("chair") else (0.10 if name == "desk" else 0.17)
         bsdf.inputs["Base Color"].default_value = (shade, shade, shade * 1.06, 1)
         bsdf.inputs["Roughness"].default_value = 0.72
         o.data.materials.append(m)
-        if name == "desk":
-            j_desk = o
-
-    # The desk sits at the height the contact targets were derived from, so the
-    # hands land on it rather than through it.
-    tgt = bpy.data.objects.get("target_mouse")
-    if tgt is not None and j_desk is not None:
-        j_desk.location.z = tgt.location.z - 0.35
-        j_desk.location.y = tgt.location.y + 0.4
-        for n in ("chair_seat",):
-            pass
 
     for name, loc, energy, size in (
         ("key", (-9.0, -14.0, 13.0), 9000.0, 7.0),
