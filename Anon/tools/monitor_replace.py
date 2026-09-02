@@ -70,6 +70,10 @@ LUMA_TARGET_FRAC = 0.75
 # Ceiling on screen chroma, in OpenCV's 0-255 saturation units.
 MAX_SCREEN_SAT = 96.0
 
+# How far beyond the segmented human an occluder may reach, in plate pixels.
+# Sized for headphone cups and hair, not for content on the panel behind him.
+OCCLUDER_REACH_PX = 27
+
 
 # --- Masks ------------------------------------------------------------------
 
@@ -100,13 +104,22 @@ def occlusion_mask(img, quad_m, protect, dark_v: int = 62) -> np.ndarray:
     dark = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
     dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 
+    # Two conditions, both required. Connectivity alone was still too
+    # permissive: the old game content had a dark band along the bottom of the
+    # panel that touched the subject's shoulder, so a single component flooded
+    # from his head across the whole screen and left 62% of the old picture in
+    # place. A proximity band alone would clip long flyaway hair. Together they
+    # describe what actually occludes a screen - something attached to the
+    # subject and close to him.
     seed = cv2.dilate((protect > 0.5).astype(np.uint8), np.ones((9, 9), np.uint8))
+    near = cv2.dilate(seed, np.ones((OCCLUDER_REACH_PX, OCCLUDER_REACH_PX), np.uint8))
     n, labels = cv2.connectedComponents(dark, 8)
     keep = np.zeros_like(dark)
     for i in range(1, n):
         comp = labels == i
         if (comp & (seed > 0)).any():
             keep[comp] = 1
+    keep &= (near > 0)
     keep = cv2.dilate(keep, np.ones((5, 5), np.uint8))
 
     occ = np.maximum(protect, keep.astype(np.float32))
@@ -142,9 +155,15 @@ def reflection_layers(img, sel):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     lum = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
 
-    low = cv2.GaussianBlur(lum, (0, 0), 26.0)
+    # Blurred hard and clamped tight. At sigma 26 with a +-45% range the
+    # "envelope" still carried the old picture's composition - the right panel
+    # showed a bright sky at the top and a dark foreground at the bottom, and the
+    # new interface inherited that gradient wholesale. At sigma 70 only a genuine
+    # across-the-glass falloff survives, and the clamp stops even that from
+    # becoming a tonal signature.
+    low = cv2.GaussianBlur(lum, (0, 0), 70.0)
     ref = float(low[sel].mean()) if sel.any() else 1.0
-    env = np.clip(low / max(ref, 1e-3), 0.55, 1.6)
+    env = np.clip(low / max(ref, 1e-3), 0.82, 1.22)
 
     resid = np.clip(lum - low, 0, None)
     achromatic = (hsv[:, :, 1].astype(np.float32) < 40)
