@@ -155,6 +155,17 @@ def main() -> int:
                     help="seconds to run, 0 = until quit")
     ap.add_argument("--headless", action="store_true",
                     help="no window; renders and benchmarks only")
+    ap.add_argument("--renderer", default="schematic",
+                    choices=["schematic", "liveportrait"],
+                    help="schematic = behaviour-tuning rig preview; "
+                         "liveportrait = photoreal")
+    ap.add_argument("--source", default="assets/presenter_source.jpg",
+                    help="source portrait for the photoreal renderer")
+    ap.add_argument("--liveportrait-root", default="third_party/LivePortrait")
+    ap.add_argument("--compile", action="store_true",
+                    help="torch.compile the warping/generator modules; large "
+                         "first-run cost, needed because the workload is "
+                         "launch-bound rather than compute-bound")
     ap.add_argument("--save-frames", type=str, default="",
                     help="directory to write periodic frames for inspection")
     ap.add_argument("--frame-interval", type=float, default=5.0,
