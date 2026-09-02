@@ -162,6 +162,10 @@ def main() -> int:
     ap.add_argument("--source", default="assets/presenter_source.jpg",
                     help="source portrait for the photoreal renderer")
     ap.add_argument("--liveportrait-root", default="third_party/LivePortrait")
+    ap.add_argument("--framing", default="shoulders",
+                    choices=["shoulders", "close"],
+                    help="shoulders = head and shoulders, blurred side fill; "
+                         "close = tight 16:9 crop")
     ap.add_argument("--compile", action="store_true",
                     help="torch.compile the warping/generator modules; large "
                          "first-run cost, needed because the workload is "
