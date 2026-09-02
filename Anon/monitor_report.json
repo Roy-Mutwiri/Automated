@@ -2,32 +2,32 @@
   "byte_lock": 0,
   "monitors": {
     "centre": {
-      "visible_px": 41660,
-      "occluded_frac": 0.6187041799760202,
-      "luma_before": 77.25155067443848,
-      "luma_after": 78.95095825195312,
-      "p95_before": 188.0,
-      "p95_after": 127.0,
-      "exposure_gamma": 0.4916074424979797,
-      "defocus_sigma": 2.216154193878174,
-      "grain_plate": 2.4888832569122314,
-      "grain_new": 0.9675264954566956,
-      "grain_added": 2.2931271982005974,
-      "specular_frac": 0.02258761401824292
+      "visible_px": 48096,
+      "occluded_frac": 0.5597982774874382,
+      "luma_before": 71.0848445892334,
+      "luma_after": 72.67036437988281,
+      "p95_before": 183.0,
+      "p95_after": 108.0,
+      "exposure_gamma": 0.5265043675902692,
+      "defocus_sigma": 2.2007292747497558,
+      "grain_plate": 2.569535493850708,
+      "grain_new": 1.0561225414276123,
+      "grain_added": 2.3424597822902067,
+      "specular_frac": 0.023016467065868264
     },
     "right": {
       "visible_px": 45254,
       "occluded_frac": 0.0,
       "luma_before": 96.55582809448242,
-      "luma_after": 102.8742904663086,
+      "luma_after": 100.98234558105469,
       "p95_before": 226.0,
-      "p95_after": 167.0,
+      "p95_after": 140.0,
       "exposure_gamma": 0.3936386257414142,
       "defocus_sigma": 2.1492333793640137,
       "grain_plate": 2.926588296890259,
-      "grain_new": 0.8777370452880859,
-      "grain_added": 2.7918625931130574,
-      "specular_frac": 0.01858399257524197
+      "grain_new": 0.866375744342804,
+      "grain_added": 2.7954091165891044,
+      "specular_frac": 0.021898616696866574
     }
   }
 }
