@@ -496,3 +496,85 @@ def render_mic_foreground(
     alpha = cv2.resize(alpha, (width, height), interpolation=cv2.INTER_AREA)
     alpha = np.clip(alpha * style.mic_opacity, 0.0, 1.0)[..., None]
     return np.clip(layer, 0, 255).astype(np.uint8), alpha.astype(np.float32)
+
+
+# -- matching the plate to the subject --------------------------------------
+def luminance(bgr: np.ndarray) -> np.ndarray:
+    """Rec.601 luma of a BGR image, as float32."""
+    b, g, r = bgr[..., 0], bgr[..., 1], bgr[..., 2]
+    return (0.114 * b + 0.587 * g + 0.299 * r).astype(np.float32)
+
+
+def fit_exposure(
+    plate: np.ndarray,
+    face_luma: float,
+    ratio: float = 0.35,
+    limits: tuple[float, float] = (0.45, 1.9),
+) -> tuple[np.ndarray, float, float]:
+    """Scale the plate so it sits the conventional 1-2 stops under the face.
+
+    Returns ``(plate, scale, stops)``.
+
+    This is the one part of the background that is genuinely *measured* rather
+    than tuned by eye. Broadcast practice is unusually specific and unusually
+    consistent about it: the background wants to be one to two stops under the
+    key, or roughly a third to a fifth of the brightness of the face. Miss it
+    low and the presenter floats in a void; miss it high and the image goes
+    flat regardless of how good the key light is, because separation is carried
+    by the luminance step at the silhouette and there isn't one.
+
+    The plate statistic is the **median**, not the mean. The bokeh highlights
+    are supposed to be brighter than the face - they are practical lights, not
+    background - so a mean would be dragged up by exactly the pixels that are
+    meant to be exempt, and the wall would then be scaled down to compensate.
+    The median is the wall.
+
+    ``limits`` bounds the correction. If a source portrait ever needs a scale
+    outside it, the honest answer is that the plate is wrong for that portrait
+    and should be re-styled, not stretched until it fits.
+    """
+    plate_f = plate.astype(np.float32)
+    wall = float(np.median(luminance(plate_f)))
+    target = max(face_luma, 1e-3) * ratio
+    scale = float(np.clip(target / max(wall, 1e-3), *limits))
+    fitted = np.clip(plate_f * scale, 0, 255)
+    achieved = float(np.median(luminance(fitted)))
+    stops = math.log2(max(face_luma, 1e-3) / max(achieved, 1e-3))
+    return fitted.astype(np.uint8), scale, stops
+
+
+def light_wrap(
+    plate: np.ndarray,
+    alpha: np.ndarray,
+    width: float = 0.022,
+    strength: float = 0.55,
+) -> np.ndarray:
+    """Bleed the plate's light back onto the inside of the silhouette.
+
+    Returns an additive BGR float layer, zero everywhere except in a thin band
+    just *inside* the subject's edge.
+
+    This is the standard fix for the one defect a replaced background always
+    has: the subject was not lit by the room it is now sitting in, so its
+    outline is a clean algebraic cut where a photograph would show the
+    background's light spilling around the edge. Compositors treat the wrap as
+    the default first step for exactly this reason, and its absence is
+    perceptible long before anyone can say what is wrong.
+
+    The band comes from ``alpha - blur(alpha)``, which is positive on the
+    inside of any edge and negative on the outside - so clipping at zero gives
+    an inner rim of the right width with no separate mask to maintain, and it
+    automatically follows hair and shoulders rather than a drawn outline. The
+    colour comes from the plate blurred by the same kernel, so what bleeds onto
+    the left of the head is the magenta wash and what bleeds onto the right is
+    the teal one, which is the entire point: a uniform glow would just be a
+    sticker outline.
+    """
+    h, w = plate.shape[:2]
+    k = max(int(min(h, w) * width) | 1, 3)
+    spill = cv2.GaussianBlur(plate.astype(np.float32), (k, k), 0)
+    a = alpha.astype(np.float32)
+    if a.ndim == 3:
+        a = a[..., 0]
+    band = np.clip(a - cv2.GaussianBlur(a, (k, k), 0), 0.0, 1.0)
+    return spill * (band * strength)[..., None]
