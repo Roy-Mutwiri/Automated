@@ -59,9 +59,16 @@ OCULAR_LIMIT_DEG = 35.0
 GAZE_UNITS_PER_DEG = 0.42 / OCULAR_LIMIT_DEG
 
 # How much a target's appeal decays per recent visit, and the extra penalty for
-# being the target two shifts ago. The second is what breaks A-B-A cycles.
-RECENCY_DECAY = 0.38
-RETURN_PENALTY = 0.30
+# being the target two shifts ago. The second discourages A-B-A cycles.
+#
+# Both were briefly set far harder (0.38 / 0.30) to fight an apparent 44x
+# repetition that turned out to be an instrumentation bug. They are back to
+# gentle values on purpose: pushed hard enough, an anti-repetition rule stops
+# being a randomiser and becomes a deterministic least-recently-used
+# round-robin, which is a more obvious loop than the one it removes. That is
+# not hypothetical - it happened, and produced a locked five-target cycle.
+RECENCY_DECAY = 0.62
+RETURN_PENALTY = 0.55
 
 
 @dataclass(frozen=True)
@@ -277,7 +284,7 @@ class AttentionSystem:
         self.shift_count += 1
 
         self._recent.append(name)
-        if len(self._recent) > 6:
+        if len(self._recent) > 4:
             self._recent.pop(0)
 
         dwell = drives.rng.lognormal_interval(
