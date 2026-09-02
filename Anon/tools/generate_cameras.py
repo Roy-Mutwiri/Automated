@@ -127,8 +127,11 @@ def main() -> int:
         print(f"[cameras] {len(rig.cameras)} cameras, directory {rig.directory}")
         for cam in rig.ordered():
             state = "generated" if rig.exists(cam.key) else "MISSING"
-            kind = "live " if cam.animated else "still"
-            print(f"[cameras]   {cam.key:6s} {kind}  {state:9s}  {cam.label}")
+            if cam.derive:
+                kind, state = f"master/{cam.framing}", "derived"
+            else:
+                kind = "live " if cam.animated else "still"
+            print(f"[cameras]   {cam.key:6s} {kind:15s} {state:9s}  {cam.label}")
             if cam.hint:
                 print(f"[cameras]            {cam.hint}")
         return 0
