@@ -269,13 +269,27 @@ function Invoke-Push {
 
     # Only this worktree's own branch is ever pulled or pushed. A watcher must
     # not move a branch another terminal is sitting on.
-    $out = Invoke-Git @('pull', '--rebase', '--autostash', '-q', 'origin', $Branch)
-    if ($script:GitExitCode -ne 0) {
-        Write-Log "pull --rebase failed, push skipped - resolve by hand: $out" 'ERROR'
-        return
+    #
+    # A branch origin has never seen has nothing to pull: `pull origin <branch>`
+    # fails with "couldn't find remote ref", which would abort the push and
+    # leave a new terminal branch permanently local. Publish it instead, and
+    # let -u set the upstream so every later pass takes the pull path.
+    Invoke-Git @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}') | Out-Null
+    $hasUpstream = ($script:GitExitCode -eq 0)
+
+    if ($hasUpstream) {
+        $out = Invoke-Git @('pull', '--rebase', '--autostash', '-q', 'origin', $Branch)
+        if ($script:GitExitCode -ne 0) {
+            Write-Log "pull --rebase failed, push skipped - resolve by hand: $out" 'ERROR'
+            return
+        }
+        $out = Invoke-Git @('push', '-q', 'origin', $Branch)
+    }
+    else {
+        Write-Log "publishing $Branch to origin for the first time"
+        $out = Invoke-Git @('push', '-q', '-u', 'origin', $Branch)
     }
 
-    $out = Invoke-Git @('push', '-q', 'origin', $Branch)
     if ($script:GitExitCode -ne 0) {
         Write-Log "push failed, will retry on next change: $out" 'ERROR'
         return
