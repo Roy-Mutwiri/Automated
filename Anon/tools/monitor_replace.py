@@ -248,8 +248,8 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
     quad = np.float32(mon["quad"])
 
     qm = quad_mask(frame.shape, quad)
-    occ = occlusion_mask(frame, qm, protect)
-    screen = np.clip(qm * (1.0 - occ), 0.0, 1.0)
+    alpha, old_bg, frac_weak = screen_alpha(frame, qm, protect)
+    screen = np.clip(qm * alpha, 0.0, 1.0)
     sel = screen > 0.5
     if sel.sum() < 200:
         if verbose:
@@ -335,15 +335,10 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
     # pixel that is 30% screen loses 30% of the old screen's colour and gains
     # 30% of the new one; a pixel that is pure hair is untouched, because its
     # visibility is zero. `old_bg` is the plate's own screen content extended
-    # under the occluder by normalised convolution - it only has to be right
+    # under the occluder by normalised convolution, the same estimate the matte
+    # is solved against - it only has to be right
     # where the subject partially covers it, and the panel is defocused there.
     w = screen[..., None]
-    num = cv2.GaussianBlur(frame.astype(np.float32) * w, (0, 0), BG_FILL_SIGMA)
-    den = cv2.GaussianBlur(screen, (0, 0), BG_FILL_SIGMA)[..., None]
-    filled = num / np.maximum(den, 1e-4)
-    solid = (screen > 0.92)[..., None]
-    old_bg = np.where(solid, frame.astype(np.float32), filled)
-
     out = frame.astype(np.float32) + w * (np.clip(warped, 0, 255) - old_bg)
     out = np.clip(out, 0, 255).astype(np.uint8)
 
@@ -359,7 +354,8 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
     fin_lum = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY).astype(np.float32)
     info = dict(
         visible_px=int(sel.sum()),
-        occluded_frac=float((occ[qm > 0.5] > 0.5).mean()),
+        occluded_frac=float((alpha[qm > 0.5] < 0.5).mean()),
+        matte_fallback_frac=frac_weak,
         luma_before=tgt_mean, luma_after=float(fin_lum[sel].mean()),
         p95_before=tgt_p95, p95_after=float(np.percentile(fin_lum[sel], 95)),
         exposure_gain=float(gain), exposure_offset=float(offset),
@@ -369,7 +365,8 @@ def replace_monitor(frame: np.ndarray, mon: dict, source: np.ndarray,
     )
     if verbose:
         print(f"[mon] {mon['id']}: {info['visible_px']} px visible "
-              f"({100 * info['occluded_frac']:.0f}% of the panel occluded), "
+              f"({100 * info['occluded_frac']:.0f}% occluded, "
+              f"{100 * frac_weak:.1f}% matte fallback), "
               f"luma {tgt_mean:.1f} -> {info['luma_after']:.1f} "
               f"(p95 {tgt_p95:.0f} -> {info['p95_after']:.0f}), "
               f"gain {gain:.2f} offset {offset:+.1f}, defocus sigma {sigma:.2f}, "
@@ -448,8 +445,8 @@ def main() -> int:
             raise FileNotFoundError(content_path)
 
         qm = quad_mask(plate.shape, np.float32(mon["quad"]))
-        occ = occlusion_mask(frame, qm, protect)
-        total_mask = np.maximum(total_mask, np.clip(qm * (1 - occ), 0, 1))
+        a, _, _ = screen_alpha(frame, qm, protect)
+        total_mask = np.maximum(total_mask, np.clip(qm * a, 0, 1))
 
         frame, info = replace_monitor(frame, mon, src, protect)
         report[mon["id"]] = info
