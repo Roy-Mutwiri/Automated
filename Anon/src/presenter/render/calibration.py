@@ -56,56 +56,88 @@ class ExpressionChannel:
 
 
 # ---------------------------------------------------------------------------
-# UNVERIFIED hypotheses.
+# MEASURED, 2026-09-02, on assets/master/master_v04_final.png.
 #
-# Indices below follow the mapping used by community expression-editor tooling
-# built on LivePortrait, which converged on keypoints 11, 13, 15 and 16 as
-# eye-region and 1, 2, 9 as brow-region. That is circumstantial evidence from
-# third-party tools, not a measurement on this checkpoint, so every gain is
-# deliberately conservative and every entry is marked unverified.
+# Method and raw numbers: tools/calibrate_expression.py, which drives every one
+# of the 21 latent keypoints on each axis and reports where the face actually
+# moved, followed by visual inspection of the eye region at 4x.
+#
+# What the measurement changed:
+#
+# * The inherited map spread gaze_x across indices 11, 13, 15 and 16 at equal
+#   weight. Driven individually, **only 15 produces clean bilateral horizontal
+#   iris movement**; 11 on this axis deforms the eyelid and 16 drags the brow.
+#   Selectivity (effect in the eye box / mean effect elsewhere) rose from 1.4 to
+#   4.2 by using 15 alone.
+# * `brow_r` was mapped to index 9, which is inert: 1.31 mean change against
+#   12-19 for the working brow dimensions. **The right brow channel did nothing
+#   at all.**
+# * Lateralisation was measured by splitting the brow band in half. Index 16 is
+#   strongly biased to the subject's left brow (image-right/image-left ratio
+#   0.19-0.27); indices 10 and 0 to the subject's right (ratio 3.0-5.1).
+#
+# The two brows are not equally expressive in this latent. The subject-left
+# dimension is roughly 6x stronger than the best subject-right pair at the same
+# amplitude. `brow_r`'s gain is scaled up to compensate, but not all the way -
+# pushing it further starts to distort. A small residual imbalance remains and
+# is left in deliberately: it reads as facial asymmetry, which is wanted.
+#
+# Amplitudes are set against the behaviour engine's own scale, where
+# `saccade_max_amplitude = 0.42` is a large voluntary gaze shift and
+# `microsaccade_amplitude = 0.018` must stay near perceptual threshold.
 # ---------------------------------------------------------------------------
 CHANNELS: dict[str, ExpressionChannel] = {
     "gaze_x": ExpressionChannel(
         name="gaze_x",
-        targets=[(11, 0, 1.0), (13, 0, 1.0), (15, 0, 1.0), (16, 0, 1.0)],
-        gain=0.004,
-        verified=False,
-        note="horizontal iris movement; sign and index need calibration",
+        targets=[(15, 0, 1.0)],
+        gain=0.043,
+        verified=True,
+        note="horizontal iris. index 15 alone; 11/13/16 added distortion, not "
+             "gaze. 0.018 latent = eyes near their natural lateral limit, so "
+             "gain maps gaze_x=+-0.42 onto that limit",
     ),
     "gaze_y": ExpressionChannel(
         name="gaze_y",
-        targets=[(11, 1, 1.0), (13, 1, 1.0), (15, 1, 1.0), (16, 1, 1.0)],
-        gain=0.003,
-        verified=False,
-        note="vertical iris movement; couples with eyelid, calibrate together",
+        targets=[(13, 1, 1.0)],
+        gain=0.024,
+        verified=True,
+        note="vertical iris. couples with lid aperture, which is anatomically "
+             "correct - lids follow vertical gaze - but caps how far this can "
+             "be driven before the eye reads as widened rather than raised",
     ),
     "brow_l": ExpressionChannel(
         name="brow_l",
-        targets=[(1, 1, 1.0), (2, 1, 0.6)],
-        gain=0.004,
-        verified=False,
-        note="left brow raise",
+        targets=[(16, 1, 1.0)],
+        gain=0.012,
+        verified=True,
+        note="subject's LEFT brow. strongest brow dimension in the latent",
     ),
     "brow_r": ExpressionChannel(
         name="brow_r",
-        targets=[(9, 1, 1.0), (2, 1, 0.6)],
-        gain=0.004,
-        verified=False,
-        note="right brow raise",
+        targets=[(10, 1, 1.0), (0, 1, 0.9)],
+        gain=0.036,
+        verified=True,
+        note="subject's RIGHT brow. weaker pair, gain scaled ~3x to partly "
+             "compensate; a residual left/right imbalance is left in as "
+             "facial asymmetry",
     ),
     "brow_furrow": ExpressionChannel(
         name="brow_furrow",
-        targets=[(1, 0, -0.5), (9, 0, 0.5), (2, 1, -0.8)],
-        gain=0.003,
+        targets=[(16, 1, -0.55), (10, 1, -0.55), (0, 1, -0.5)],
+        gain=0.014,
         verified=False,
-        note="medial brow pull",
+        note="both brows driven down together. the lowering is measured; "
+             "whether this reads as a medial *pull* rather than a flat drop "
+             "has not been confirmed at expressive amplitude",
     ),
     "mouth_open": ExpressionChannel(
         name="mouth_open",
-        targets=[(14, 1, -1.0), (17, 1, -1.0), (19, 1, -0.6), (20, 1, -0.6)],
-        gain=0.006,
+        targets=[(20, 1, 1.0), (17, 1, 0.85), (19, 1, 0.6)],
+        gain=0.010,
         verified=False,
-        note="reserved for lip-sync; unused while mouth_open stays 0",
+        note="reserved for lip-sync, unused while mouth_open stays 0. indices "
+             "are the three most mouth-selective on axis 1 (27.1, 18.9, 17.0) "
+             "but sign and articulation quality are uncalibrated",
     ),
 }
 
