@@ -359,7 +359,13 @@ def main() -> int:
 
             t0 = time.perf_counter()
             try:
-                fresh = renderer.set_source(rig.path(key))
+                # A camera is a room-scale master frame: keep its own room and
+                # its own framing, and regenerate only the face. Preparing it
+                # with the portrait's settings mattes the man out of the room he
+                # was generated in and crops the shot away.
+                fresh = renderer.set_source(
+                    rig.path(key), framing="full", environment="source"
+                )
             except Exception as exc:  # noqa: BLE001 - keep the stream alive
                 print(f"[app] cannot cut to {key}: {exc}", file=sys.stderr)
                 return
