@@ -1,0 +1,151 @@
+"""What the presenter is wearing, and where to find the portrait of it.
+
+## Why an outfit is a whole source portrait
+
+The pipeline gives no other option. The torso in the output is static pixels
+lifted from the source image, and the head is warped from appearance features
+extracted from that same image once at startup. Nothing downstream can add a
+garment, because nothing downstream sees geometry - `AvatarPose` carries head
+angles and eyelid openness, not a body.
+
+So an outfit is not a layer, it is a *different source*, generated ahead of time
+by `tools/generate_wardrobe.py`. This module is the index: it maps a
+(clothing, headwear) selection onto the file that was generated for it, and it
+knows which combinations actually exist on disk so the UI can grey out the rest
+rather than failing when one is picked.
+
+## Why the prompts live here too
+
+`config/wardrobe.yaml` holds the label, the prompt and the mask parameters for
+every item, and both the generator and the UI read it. The alternative - prompts
+in the tool, labels in the UI - has nothing tying a generated file to a menu
+entry, so adding an outfit means editing two lists that fail silently when they
+disagree.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+
+__all__ = ["Item", "Wardrobe"]
+
+
+@dataclass(frozen=True)
+class Item:
+    """One entry in a dropdown."""
+
+    key: str
+    label: str
+    prompt: str | None          # None = leave this part of the portrait alone
+    drape: float = 0.9          # headwear only: how far the cloth falls, in face heights
+
+    @property
+    def edits(self) -> bool:
+        return self.prompt is not None
+
+
+@dataclass
+class Wardrobe:
+    clothing: dict[str, Item]
+    headwear: dict[str, Item]
+    base: Path
+    directory: Path
+    look: str = ""
+    negative: str = ""
+    headwear_negative: str = ""
+
+    # -- loading ------------------------------------------------------------
+    @classmethod
+    def load(cls, path: str | Path = "config/wardrobe.yaml",
+             root: str | Path | None = None) -> Wardrobe:
+        root = Path(root) if root else Path(__file__).resolve().parents[3]
+        path = Path(path)
+        if not path.is_absolute():
+            path = root / path
+        with open(path, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+
+        def items(section: str) -> dict[str, Item]:
+            out = {}
+            for key, spec in (data.get(section) or {}).items():
+                spec = spec or {}
+                out[key] = Item(
+                    key=key,
+                    label=str(spec.get("label", key)),
+                    prompt=spec.get("prompt"),
+                    drape=float(spec.get("drape", 0.9)),
+                )
+            return out
+
+        def resolve(value: str) -> Path:
+            p = Path(value)
+            return p if p.is_absolute() else root / p
+
+        return cls(
+            clothing=items("clothing"),
+            headwear=items("headwear"),
+            base=resolve(data["base"]),
+            directory=resolve(data["directory"]),
+            look=(data.get("look") or "").strip(),
+            negative=(data.get("negative") or "").strip(),
+            headwear_negative=(data.get("headwear_negative") or "").strip(),
+        )
+
+    # -- resolution ---------------------------------------------------------
+    def filename(self, clothing: str, headwear: str) -> str:
+        return f"{clothing}__{headwear}.png"
+
+    def path(self, clothing: str, headwear: str) -> Path:
+        """Where this combination's portrait lives, whether or not it exists."""
+        for key, table, name in ((clothing, self.clothing, "clothing"),
+                                 (headwear, self.headwear, "headwear")):
+            if key not in table:
+                raise KeyError(
+                    f"unknown {name} {key!r}; have {sorted(table)}"
+                )
+        if not self.clothing[clothing].edits and not self.headwear[headwear].edits:
+            # Nothing is edited, so this combination *is* the base portrait.
+            # Generating a byte-identical copy of it would be busywork.
+            return self.base
+        return self.directory / self.filename(clothing, headwear)
+
+    def exists(self, clothing: str, headwear: str) -> bool:
+        return self.path(clothing, headwear).exists()
+
+    def available(self) -> set[tuple[str, str]]:
+        """Every combination that has actually been generated."""
+        return {
+            (c, h)
+            for c in self.clothing
+            for h in self.headwear
+            if self.exists(c, h)
+        }
+
+    def missing(self) -> list[tuple[str, str]]:
+        return sorted(
+            (c, h)
+            for c in self.clothing
+            for h in self.headwear
+            if not self.exists(c, h)
+        )
+
+    def default(self) -> tuple[str, str]:
+        """The combination to start in: the base portrait if it is declared,
+        otherwise the first generated one, otherwise the first declared."""
+        first_c = next(iter(self.clothing))
+        first_h = next(iter(self.headwear))
+        if self.exists(first_c, first_h):
+            return first_c, first_h
+        return next(iter(sorted(self.available())), (first_c, first_h))
+
+    # -- prompting (used by tools/generate_wardrobe.py) ---------------------
+    def prompt_for(self, item: Item) -> str:
+        return f"{item.prompt}, {self.look}" if self.look else item.prompt
+
+    def negative_for(self, *, headwear: bool) -> str:
+        if headwear and self.headwear_negative:
+            return f"{self.negative}, {self.headwear_negative}"
+        return self.negative
