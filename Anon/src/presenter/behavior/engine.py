@@ -190,6 +190,7 @@ class BehaviorEngine:
             arousal=arousal,
             now=self.now,
             dt=dt,
+            frame_interval=self._frame_interval,
             time_since_gaze_shift=self.now - self.gaze.last_shift_time,
             time_since_head_move=self.now - self.head.last_move_time,
             motion_in_flight=self.blink.is_blinking or self.head.is_moving,
