@@ -98,3 +98,5 @@ Anon/body_render.log
 # Per-worktree sync watcher artefacts (tools/sync.ps1)
 .sync-message
 tools/sync-*.log
+Anon/eyehead_frames/
+Anon/calibration/
