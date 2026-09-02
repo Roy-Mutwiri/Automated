@@ -638,6 +638,16 @@ class LivePortraitRenderer:
             )
             box[self.feather_mask] = blended.astype(np.uint8)
 
+        # Foreground desk, composited last so it occludes the presenter. Only
+        # the bottom band is touched, and the desk colour is pre-multiplied at
+        # startup, so this is one multiply-add over ~17% of the frame.
+        if getattr(self, "desk_band", None) is not None:
+            dy0, dy1 = self.desk_band
+            region = frame[dy0:dy1].astype(np.float32)
+            frame[dy0:dy1] = np.clip(
+                region * self.desk_inv_alpha + self.desk_rgb_premul, 0, 255
+            ).astype(np.uint8)
+
         return frame
 
     @property
