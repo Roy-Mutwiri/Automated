@@ -42,7 +42,12 @@ import numpy as np
 
 from ..behavior.randomness import Rng
 
-__all__ = ["RoomStyle", "render_streaming_room", "render_desk_foreground"]
+__all__ = [
+    "RoomStyle",
+    "render_streaming_room",
+    "render_desk_foreground",
+    "render_mic_foreground",
+]
 
 
 @dataclass
@@ -103,6 +108,14 @@ class RoomStyle:
     desk: bool = True
     desk_y: float = 0.89
     desk_color: tuple[int, int, int] = (38, 40, 48)
+
+    # Boom microphone edging into frame. Foreground, so it is blurred harder
+    # than the wall - see render_mic_foreground.
+    mic: bool = True
+    mic_side: str = "right"          # "right" or "left"
+    mic_scale: float = 1.0
+    mic_color: tuple[int, int, int] = (30, 31, 36)
+    mic_opacity: float = 0.92
 
     # Defocus. The wall is far behind the subject, so it is blurred hard.
     blur: float = 0.055            # fraction of the short side
@@ -359,3 +372,84 @@ def render_desk_foreground(
         np.clip(desk, 0, 255).astype(np.uint8),
         np.clip(alpha, 0.0, 1.0)[..., None].astype(np.float32),
     )
+
+
+def render_mic_foreground(
+    width: int,
+    height: int,
+    style: RoomStyle | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """A boom microphone intruding into frame, in FRONT of the presenter.
+
+    Returns ``(bgr, alpha)`` at the output resolution.
+
+    Nothing says "live stream" faster than a mic edging into the shot, and it is
+    the cheapest realism cue available here - but only if it behaves like a real
+    one, which means two things:
+
+    **It is foreground, not scenery.** A boom mic is clamped to the desk, not to
+    the presenter. Prompting it into the source portrait would weld it to his
+    head, so it would swing every time he turned - the kind of error that is
+    invisible in a still and glaring in motion. Composited as a static layer, it
+    stays put while he moves behind it, which is what a real one does.
+
+    **It is blurred *more* than the background, not less.** This is the part
+    that is easy to get backwards. The mic sits nearer the lens than the
+    subject, so it falls on the opposite side of the focal plane and goes
+    heavily out of focus - much softer than the wall behind. A crisp mic in the
+    corner reads instantly as a pasted-on graphic.
+
+    Kept to one corner and well clear of the face; it is a framing cue, not a
+    subject.
+    """
+    style = style or RoomStyle()
+    if not style.mic:
+        return (
+            np.zeros((height, width, 3), np.uint8),
+            np.zeros((height, width, 1), np.float32),
+        )
+
+    w, h = width * 2, height * 2
+    short = min(w, h)
+    layer = np.zeros((h, w, 3), np.float32)
+    alpha = np.zeros((h, w), np.float32)
+
+    # Boom arm entering from a bottom corner and angling up toward the subject,
+    # with the capsule ending short of centre frame.
+    sign = 1.0 if style.mic_side == "right" else -1.0
+    cx = w * (0.86 if sign > 0 else 0.14)
+    base = (int(cx + sign * w * 0.18), int(h * 1.02))
+    tip = (int(cx - sign * w * 0.05), int(h * 0.60))
+
+    arm_w = max(int(short * 0.016 * style.mic_scale), 3)
+    for canvas, colour in ((layer, style.mic_color), (alpha, 1.0)):
+        cv2.line(canvas, base, tip, colour, arm_w)
+
+    # Shock mount ring and capsule body.
+    body_len = int(h * 0.20 * style.mic_scale)
+    body_w = max(int(short * 0.055 * style.mic_scale), 8)
+    ang = math.atan2(tip[1] - base[1], tip[0] - base[0])
+    bx = int(tip[0] - math.cos(ang) * body_len * 0.1)
+    by = int(tip[1] - math.sin(ang) * body_len * 0.1)
+    box = ((bx, by), (body_w, body_len), math.degrees(ang) + 90.0)
+    pts = cv2.boxPoints(box).astype(np.int32)
+    cv2.fillPoly(layer, [pts], style.mic_color)
+    cv2.fillPoly(alpha, [pts], 1.0)
+
+    # A soft highlight down one side of the capsule so it reads as a cylinder
+    # rather than a flat slab once blurred.
+    hi_box = ((bx - int(sign * body_w * 0.22), by), (max(body_w // 4, 2), body_len),
+              math.degrees(ang) + 90.0)
+    cv2.fillPoly(layer, [cv2.boxPoints(hi_box).astype(np.int32)],
+                 tuple(float(min(c * 3.0, 190)) for c in style.mic_color))
+
+    # Foreground defocus: stronger than the wall's, because this is nearer the
+    # lens than the subject is.
+    k = max(int(short * style.blur * 1.5) | 1, 9)
+    layer = cv2.GaussianBlur(layer, (k, k), 0)
+    alpha = cv2.GaussianBlur(alpha, (k, k), 0)
+
+    layer = cv2.resize(layer, (width, height), interpolation=cv2.INTER_AREA)
+    alpha = cv2.resize(alpha, (width, height), interpolation=cv2.INTER_AREA)
+    alpha = np.clip(alpha * style.mic_opacity, 0.0, 1.0)[..., None]
+    return np.clip(layer, 0, 255).astype(np.uint8), alpha.astype(np.float32)
