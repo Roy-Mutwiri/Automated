@@ -218,25 +218,8 @@ def render_streaming_room(
             * spill * style.monitor_strength
         )
 
-    # -- desk, added after the wall blur and blurred less --------------------
-    # The desk is nearer the camera than the wall, so it sits at a different
-    # point on the focus ramp. Giving it its own, weaker blur is what creates
-    # the sense of depth; blurring everything equally flattens the room into a
-    # painted backdrop.
-    if style.desk:
-        desk = np.zeros_like(room)
-        dy = int(h * style.desk_y)
-        cv2.rectangle(desk, (0, dy), (w, h), style.desk_color, -1)
-        # Faint sheen along the desk's front edge picking up the monitor.
-        cv2.line(desk, (0, dy), (w, dy),
-                 tuple(float(c * 2.1) for c in style.desk_color),
-                 max(int(h * 0.006), 2))
-        dk = max(int(short * style.blur * 0.45) | 1, 3)
-        desk = cv2.GaussianBlur(desk, (dk, dk), 0)
-        alpha = (desk.sum(axis=2, keepdims=True) > 1.0).astype(np.float32)
-        alpha = cv2.GaussianBlur(alpha, (dk, dk), 0)[..., None] \
-            if alpha.ndim == 3 else alpha
-        room = room * (1.0 - alpha) + desk * alpha
+    # NOTE: the desk is not drawn here. It belongs in *front* of the presenter,
+    # not behind, and is produced separately by render_desk_foreground().
 
     # -- vignette -----------------------------------------------------------
     if style.vignette > 0:
