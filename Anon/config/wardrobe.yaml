@@ -36,9 +36,8 @@ negative: >-
 # be in here because the base portrait has a prominent pair that the model
 # otherwise keeps rebuilding inside the mask.
 headwear_negative: >-
-  turban, wound cloth, wrapped around head, bandana, hijab, hat, hood,
-  hair, dreadlocks, braids, headphones, headset, cables, tassels, fringe,
-  embroidery, patterned edge
+  turban, wound cloth, bandana, hijab, hat, hood, hair, dreadlocks,
+  braids, headphones, headset, cables, tassels, fringe, embroidery
 
 clothing:
   tee:
