@@ -33,13 +33,13 @@ from .randomness import Cooldown
 __all__ = ["BlinkSystem"]
 
 
-@dataclass
 # How far visual demand can stretch the inter-blink interval. At demand 1.0 the
 # interval is 2.2x the baseline, which turns a ~15/min conversational rate into
 # ~7/min while reading - inside the measured range for both regimes.
 BLINK_DEMAND_SPAN = 1.2
 
 
+@dataclass
 class _ActiveBlink:
     """One blink in flight."""
 
