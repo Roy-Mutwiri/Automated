@@ -201,6 +201,9 @@ def render_streaming_room(
         gy0, gx0 = max(y0, 0), max(x0, 0)
         glow[gy0:gy0 + patch.shape[0], gx0:gx0 + patch.shape[1]] += patch
 
+    # Only a whisper of blur, to seat the sprites in the image without
+    # destroying the aperture rim that makes them read as glass.
+    glow = cv2.GaussianBlur(glow, (max(int(short * 0.006) | 1, 3),) * 2, 0)
     room += glow
 
     # -- monitor spill ------------------------------------------------------
