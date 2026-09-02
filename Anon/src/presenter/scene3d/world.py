@@ -534,10 +534,11 @@ class World:
             frame_h = 2.0 * depth * (cam.data.sensor_width * ph / pw
                                      / (2.0 * cam.data.lens))
             frame_w = frame_h * pw / ph
-            right = mw.to_3x3() @ (0, 0, 0)  # placeholder, replaced below
+            from mathutils import Vector
+
             cm = cam.matrix_world.to_3x3()
-            right = cm @ __import__("mathutils").Vector((1, 0, 0))
-            up = cm @ __import__("mathutils").Vector((0, 1, 0))
+            right = cm @ Vector((1.0, 0.0, 0.0))
+            up = cm @ Vector((0.0, 1.0, 0.0))
             ob.location = (ob.location
                            + right * (du * frame_w) + up * (dv * frame_h))
             bpy.context.view_layer.update()
