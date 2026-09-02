@@ -138,6 +138,7 @@ class BlinkSystem:
             offset_r=offset_r,
             close_fraction=rng.jitter(p.blink_close_fraction, 0.12),
             kind=kind,
+            brow_coupling=rng.jitter(p.blink_brow_coupling, 0.3),
         )
 
         self.last_blink_time = drives.now
