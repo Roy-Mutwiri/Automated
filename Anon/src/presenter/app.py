@@ -197,6 +197,7 @@ def main() -> int:
             source_image=args.source,
             liveportrait_root=args.liveportrait_root,
             output_size=(args.width, args.height),
+            framing=args.framing,
         )
         if args.compile:
             print("[app] torch.compile - first frames will be slow")
