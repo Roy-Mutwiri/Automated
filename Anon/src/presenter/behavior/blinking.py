@@ -216,6 +216,20 @@ class BlinkSystem:
         pose.eye_open_l = clamp(1.0 - closure_l, 0.0, 1.0)
         pose.eye_open_r = clamp(1.0 - closure_r, 0.0, 1.0)
 
+        # A blink is not just an eyelid. Orbicularis oculi wraps the whole eye
+        # socket, so a real blink pulls the brow down slightly and lifts the
+        # cheek a little, and the face relaxes back afterwards. Isolating the
+        # lid - moving nothing else on the face - is a large part of why a
+        # synthetic blink reads as a shutter rather than as a person blinking.
+        #
+        # Small, and proportional to how far the lid actually closed, so a
+        # partial blink gets a partial brow movement.
+        coupling = 0.5 * (closure_l + closure_r)
+        if coupling > 0.01:
+            pose.brow_l -= coupling * blink.brow_coupling
+            pose.brow_r -= coupling * blink.brow_coupling * 0.88
+            pose.cheek += coupling * blink.brow_coupling * 0.35
+
     # -- introspection -----------------------------------------------------
     @property
     def is_blinking(self) -> bool:
