@@ -93,7 +93,7 @@ SUBJECT_PROMPT = (
     "a brown-skinned Arab man in his 30s, short dark beard, "
     "in a matte black high-back gaming chair, facing directly at camera, "
     "head and upper torso large in frame, frontal face, looking into the lens, "
-    "calm neutral expression, mouth closed, eyes open, 40mm, natural skin"
+    "calm neutral expression, eyes open, 40mm, natural skin"
 )
 
 # Encoder B: the same man, then the room he is in.
