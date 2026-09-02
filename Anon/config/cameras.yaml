@@ -43,7 +43,7 @@ room: ""
 
 cameras:
   cam1:
-    label: "1 · Hero"
+    label: "1 Hero"
     animated: true
     hint: eye level, 50mm, head and shoulders - the default broadcast shot
     subject: >-
@@ -54,7 +54,7 @@ cameras:
       seated in a black gaming chair, 50mm portrait lens, eye level
 
   cam2:
-    label: "2 · Close"
+    label: "2 Close"
     animated: true
     hint: tighter than hero; the most animation resolution available
     subject: >-
@@ -64,7 +64,7 @@ cameras:
       85mm lens, shallow depth of field, eye level
 
   cam3:
-    label: "3 · Left 3/4"
+    label: "3 Left 3/4"
     animated: true
     # He turns to face this lens, so the *body* is three-quarter but the head is
     # frontal to camera and the yaw gate passes. Prompting a profile instead
@@ -76,7 +76,7 @@ cameras:
       beard, calm neutral, black gaming chair, 50mm lens, eye level
 
   cam4:
-    label: "4 · Right 3/4"
+    label: "4 Right 3/4"
     animated: true
     subject: >-
       photograph of one adult male streamer seated at his desk angled to the
@@ -85,7 +85,7 @@ cameras:
       neutral, black gaming chair, 50mm lens, eye level
 
   cam5:
-    label: "5 · High"
+    label: "5 High"
     animated: true
     # The design doc rules out high angle for the hero shot and is right to:
     # it foreshortens the face. It is legitimate as a *cut*, and he looks up
@@ -98,7 +98,7 @@ cameras:
       dark beard, calm neutral, black gaming chair, 35mm lens
 
   cam6:
-    label: "6 · Over shoulder"
+    label: "6 Over shoulder"
     animated: false
     hint: behind him, seeing his back, the desk and the monitors - a still
     subject: >-
@@ -117,7 +117,7 @@ cameras:
       watermark, cgi, 3d render, face, frontal face
 
   cam7:
-    label: "7 · Room wide"
+    label: "7 Room wide"
     animated: false
     hint: the whole room and setup, he is small in frame - a still
     subject: >-
