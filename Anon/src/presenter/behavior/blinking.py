@@ -44,6 +44,7 @@ class _ActiveBlink:
     offset_r: float         # right lid lags/leads the left, seconds
     close_fraction: float
     kind: str
+    brow_coupling: float = 0.0
 
     def finished(self, now: float) -> bool:
         # The right lid may lag, so the blink is not over until both are back.
