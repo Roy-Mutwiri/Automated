@@ -457,3 +457,28 @@ Two stages, both reusing machinery that already works here:
 Geometric room consistency - the same shelf in the same place from two angles -
 is beyond both, and needs depth reprojection from one master or a real 3D set.
 Worth saying plainly rather than implying seven prompts can produce it.
+
+---
+
+## Surgical finishing (phases 1-3) - complete
+
+The approved master frame is frozen and has been finished by deterministic
+compositing. No diffusion has touched the plate since generation. Full write-up
+in [docs/finishing_passes.md](finishing_passes.md).
+
+| Phase | Change | Byte lock outside its mask |
+|---|---|---|
+| 1 | Grey wall -> dark walnut acoustic slats, 16 px pitch | 0 |
+| 2 | Two architectural practicals, warm 3000 K | 0 |
+| 3 | Two LCDs replaced with a dark workstation UI | 0 |
+
+`master_v04_final.png` is the canonical plate. Runtime animation writes 24.15%
+of the frame and leaves everything else at **max diff 0**.
+
+**Throughput is the next problem, and it is compute-bound, not launch-bound.**
+Measured at 1920x1080: 5.27 FPS on the first clean round, settling to 3.7-3.8
+once the GPU reaches 73 C. SM clock falls 1995 -> 1867 MHz against a ~79 W power
+ceiling with utilisation at 88-96%. That rules out the easy explanation: there
+is no idle GPU waiting on kernel launches, so reaching 24-30 FPS needs less work
+per frame, not better scheduling. Roughly twenty other desktop applications hold
+GPU contexts during these measurements and none were closed.
