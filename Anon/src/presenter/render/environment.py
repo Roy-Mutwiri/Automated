@@ -79,7 +79,7 @@ class RoomStyle:
     # Desk edge across the bottom of frame, closer to camera than the wall and
     # therefore less blurred. This is what actually sells "seated at a desk".
     desk: bool = True
-    desk_y: float = 0.92
+    desk_y: float = 0.89
     desk_color: tuple[int, int, int] = (38, 40, 48)
 
     # Defocus. The wall is far behind the subject, so it is blurred hard.

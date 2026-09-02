@@ -481,7 +481,7 @@ class LivePortraitRenderer:
             # enough to leave the shoulders visible.
             edge = np.ones((out_h, out_w), np.float32)
             ex0, ey0, ew, eh = self.content_rect
-            band = max(int(min(ew, eh) * 0.06), 12)
+            band = max(int(min(ew, eh) * 0.13), 24)
             xs_e = np.arange(out_w, dtype=np.float32)
             ys_e = np.arange(out_h, dtype=np.float32)
             fx = np.clip((xs_e - ex0) / band, 0, 1) * np.clip(
