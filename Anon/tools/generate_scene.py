@@ -72,9 +72,9 @@ WIDTH, HEIGHT = 1344, 768
 SUBJECT_PROMPT = (
     "medium close-up photo, head and chest, camera 1.2m away, "
     "a brown-skinned Arab man in his 30s, short dark beard, charcoal shirt, "
-    "sitting in a matte black high-back gaming chair with headrest, "
-    "head straight to camera, symmetrical frontal face, looking into the lens, "
-    "calm neutral expression, mouth closed, eyes open, natural skin texture"
+    "in a matte black high-back gaming chair with headrest, "
+    "head straight to camera, frontal face, looking into the lens, "
+    "calm neutral expression, mouth closed, eyes open, natural skin"
 )
 
 # Encoder 2 (OpenCLIP-G): the room - but it MUST still lead with the man.
