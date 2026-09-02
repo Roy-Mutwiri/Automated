@@ -33,17 +33,25 @@ coordinates around the emitter and transmittance falls as
 through the chair, the monitors, the speaker or the person - it stops at their
 silhouette and leaves a shadow behind them.
 
-### Albedo, and why the felt stays black
-The added light is scaled by local reflectance, estimated as the ratio of
-luminance to its own local mean:
+### Multiplicative, not additive - and why the felt stays black
+The light is applied as `lin_out = lin * (1 + E * colour)`, not `lin + E`.
 
-    albedo = luma / blur(luma, 25)
+This is the single most important decision in the file. Irradiance does not add
+to a surface's radiance, it *scales* it: reflected = E x albedo, so under a
+brighter room every surface gains in proportion to its own reflectance. A first
+attempt added light in linear space and the felt gaps went 27.7 -> 49.4 luma,
+converging on the wood and turning the wall into grey stripes - the exact
+failure section 8 forbids. Adding a constant in linear space nearly doubles a
+near-black pixel while barely touching a mid-tone.
 
-A walnut batten sits above its local mean (~1.2); a felt gap sits below it
-(~0.65). Their ratio, ~1.8, is preserved exactly - so the same lamp lifts the
-battens nearly twice as much as the gaps. The felt can never converge on the
-wood and become grey stripes, and the grain is *revealed* by the light rather
-than drawn on, which is what section 7 asks for.
+Multiplying preserves the batten:felt ratio exactly, whatever the intensity.
+The gaps can never catch the wood up. It also *reveals* grain rather than
+drawing it: the absolute gap between light and dark grain widens with E while
+the ratio holds, which is what a real lamp does to a textured surface, and what
+section 7 asks for.
+
+A small additive term (`AMBIENT_ADD`) remains, because a genuinely black
+surface under a practical is not perfectly black. It is deliberately tiny.
 
 ## What is allowed to change
 
@@ -99,14 +107,14 @@ LIGHTS = [
     dict(name="left_wall_wash", kind="point",
          origin=(-70.0, 250.0), radius=430.0,
          direction=(1.0, 0.22), lobe_power=1.1,
-         intensity=0.115),
+         intensity=0.30),
 
     # Hidden warm LED under the walnut shelf, pointing down onto the AV gear.
     # The emitter itself is never visible - only what it lands on.
     dict(name="under_shelf_led", kind="line",
          p0=SHELF_P0, p1=SHELF_P1, radius=105.0,
          direction=(0.05, 1.0), lobe_power=1.9,
-         intensity=0.145),
+         intensity=0.44),
 
     # A soft bounce on the walnut in the gap between the centre monitor and the
     # chair. Weakest of the three; it exists to stop that panel going dead flat
@@ -114,14 +122,19 @@ LIGHTS = [
     dict(name="mid_wall_bounce", kind="point",
          origin=(1005.0, 235.0), radius=250.0,
          direction=(-0.35, 1.0), lobe_power=1.0,
-         intensity=0.062),
+         intensity=0.17),
 ]
 
 VARIANTS = {
-    "A": dict(scale=0.55, warm=0.48, haze=0.10),   # very subtle
-    "B": dict(scale=1.00, warm=0.60, haze=0.16),   # premium balanced
-    "C": dict(scale=1.55, warm=0.68, haze=0.24),   # maximum acceptable
+    "A": dict(scale=0.55, warm=0.48, haze=0.06),   # very subtle
+    "B": dict(scale=1.00, warm=0.60, haze=0.10),   # premium balanced
+    "C": dict(scale=1.55, warm=0.68, haze=0.15),   # maximum acceptable
 }
+
+# A black surface under a practical is not perfectly black. Small on purpose:
+# this is the only term that can lift the felt, so it is the only term that can
+# turn the gaps grey.
+AMBIENT_ADD = 0.05
 
 
 # --- Fields -----------------------------------------------------------------
@@ -254,18 +267,13 @@ def relight(img: np.ndarray, allow: np.ndarray, occl: np.ndarray,
     if haze > 0:
         E = E + cv2.GaussianBlur(E, (0, 0), 42.0) * haze
 
-    # Local reflectance. Battens sit above their local mean, felt gaps below,
-    # so one lamp lifts wood roughly 1.8x more than felt - the gaps stay black.
-    lum = luma(img)
-    local = cv2.GaussianBlur(lum, (0, 0), 25.0)
-    albedo = np.clip(lum / np.maximum(local, 1.0), 0.25, 1.8)
-
     colour = (1.0 - warm) + warm * TUNGSTEN_3000K       # lerp white -> tungsten
     colour = colour / colour.max()
 
     lin = np.power(img.astype(np.float32) / 255.0, 2.2)
-    add = (E * albedo * allow)[..., None] * colour[None, None, :]
-    out = np.power(np.clip(lin + add, 0.0, 1.0), 1.0 / 2.2) * 255.0
+    gain = 1.0 + (E * allow)[..., None] * colour[None, None, :]
+    amb = AMBIENT_ADD * (E * allow)[..., None] * colour[None, None, :]
+    out = np.power(np.clip(lin * gain + amb, 0.0, 1.0), 1.0 / 2.2) * 255.0
     out = np.clip(out, 0, 255).astype(np.uint8)
 
     # Structural byte lock: anything the mask does not reach comes back
