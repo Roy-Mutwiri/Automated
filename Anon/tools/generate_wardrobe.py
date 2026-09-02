@@ -114,6 +114,9 @@ def check_prompts(w: Wardrobe, model: str) -> list[str]:
         for item in section.values():
             if item.edits:
                 combos.append((f"{kind}/{item.key}", w.prompt_for(item)))
+            if item.agal:
+                combos.append((f"{kind}/{item.key} agal",
+                               f"{item.agal}, {w.look}"))
 
     over = []
     for name, text in combos:
