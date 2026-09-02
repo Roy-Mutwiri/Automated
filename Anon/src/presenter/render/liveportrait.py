@@ -110,6 +110,11 @@ class LivePortraitRenderer:
         self.person_matte = None
         self.subject_alpha_out = None
         self.desk_band = None
+        self.wrap_layer = None
+        self.wrap_mask = None
+        # Measured at startup: how far the plate sits under the face, in stops.
+        self.face_luma = None
+        self.background_stops = None
 
         weights = self.root / "pretrained_weights"
         cfg = InferenceConfig(
@@ -756,6 +761,12 @@ class LivePortraitRenderer:
                 + self.feather_bg_premul
             )
             box[self.feather_mask] = blended.astype(np.uint8)
+
+        # Light wrap over the freshly-copied silhouette edge.
+        if self.wrap_mask is not None:
+            box[self.wrap_mask] = np.clip(
+                box[self.wrap_mask].astype(np.float32) + self.wrap_add, 0, 255
+            ).astype(np.uint8)
 
         # Foreground desk, composited last so it occludes the presenter. Only
         # the bottom band is touched, and the desk colour is pre-multiplied at
