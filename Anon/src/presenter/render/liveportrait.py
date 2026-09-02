@@ -415,7 +415,13 @@ class LivePortraitRenderer:
         face_cx = float((lmk[:, 0].max() + lmk[:, 0].min()) * 0.5)
         head_top = float(lmk[:, 1].min())
 
-        if self.framing == "close":
+        if self.framing == "full":
+            # Master-frame mode. The source is already a composed 16:9
+            # photograph of the presenter in his room, so there is nothing to
+            # reframe: any anatomical crop would throw away the room that is
+            # the whole point of the image. Use the frame as shot.
+            frame_w, frame_h = float(w), float(h)
+        elif self.framing == "close":
             frame_w = min(float(w), face_w * 3.4)
             frame_h = frame_w * out_h / out_w
         else:
