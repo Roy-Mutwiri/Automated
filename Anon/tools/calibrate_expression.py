@@ -52,11 +52,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 # Regions of the *head crop*, in fractions of its width/height. The renderer's
 # generated crop is 512x512 and roughly face-centred, so these are stable.
+# Read off a gridded render of the actual 512x512 generated crop, not assumed.
+# The first version of this table put "eyes" at y 0.30-0.46, which on this
+# source is the brow and forehead - so the first index scan ranked candidates on
+# a region that contains no eyes at all. Measuring the wrong box produces
+# confident, precise, wrong numbers.
 REGIONS = {
-    "eyes":  (0.24, 0.30, 0.76, 0.46),
-    "brows": (0.24, 0.20, 0.76, 0.32),
-    "mouth": (0.32, 0.58, 0.68, 0.80),
-    "jaw":   (0.20, 0.70, 0.80, 0.95),
+    "brows": (0.26, 0.36, 0.66, 0.44),
+    "eyes":  (0.26, 0.42, 0.66, 0.53),
+    "mouth": (0.36, 0.62, 0.60, 0.74),
+    "jaw":   (0.28, 0.74, 0.68, 0.90),
 }
 
 
