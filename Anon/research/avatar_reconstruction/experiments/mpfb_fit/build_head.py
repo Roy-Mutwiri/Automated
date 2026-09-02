@@ -48,16 +48,37 @@ DATA = HERE.parents[1] / "env/mpfb/data"
 
 
 def load_base(path):
-    """Read base.obj. Keeps faces verbatim so topology is never disturbed."""
-    verts, faces, lines = [], [], []
+    """Read base.obj, separating the body from everything else.
+
+    `base.obj` is not just a human. It contains, in groups:
+
+    * `body` - 13,378 faces, the actual figure
+    * `helper-*` - clothing simulation shells that *envelope* the body
+    * `joint-*` - 6-face marker cubes at every skeleton joint
+
+    Exporting the file wholesale renders the helper shells, which look like a
+    smooth featureless mass wrapped around the person - and that is exactly
+    what the first attempt produced. The helpers are why MPFB ships a
+    `deletehelpers` operator.
+
+    The joint cubes are kept separately rather than discarded: their centroids
+    are the skeleton positions, which is what a rig will be built from.
+    """
+    verts, lines, keep_face, joints = [], [], [], {}
+    group = None
     with open(path, encoding="utf-8", errors="ignore") as fh:
         for line in fh:
             lines.append(line)
-            if line.startswith("v "):
+            if line[:2] in ("g ", "o "):
+                group = line.strip().split(None, 1)[1]
+            elif line.startswith("v "):
                 verts.append([float(x) for x in line.split()[1:4]])
             elif line.startswith("f "):
-                faces.append(line)
-    return np.array(verts, np.float64), faces, lines
+                keep_face.append(group == "body")
+                if group and group.startswith("joint-"):
+                    idx = [int(p.split("/")[0]) - 1 for p in line.split()[1:]]
+                    joints.setdefault(group, set()).update(idx)
+    return np.array(verts, np.float64), lines, keep_face, joints
 
 
 def load_target(path):
