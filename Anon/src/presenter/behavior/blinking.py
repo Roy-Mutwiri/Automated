@@ -33,10 +33,18 @@ from .randomness import Cooldown
 __all__ = ["BlinkSystem"]
 
 
-# How far visual demand can stretch the inter-blink interval. At demand 1.0 the
-# interval is 2.2x the baseline, which turns a ~15/min conversational rate into
-# ~7/min while reading - inside the measured range for both regimes.
-BLINK_DEMAND_SPAN = 1.2
+# How visual demand scales the inter-blink interval, measured about a baseline
+# rather than about zero.
+#
+# Applied about zero it stretched every interval, including at the lens, and the
+# overall rate fell to 7.4/min - below the 8-21/min measured for primary gaze.
+# Centring on the lens's own demand makes looking at the audience the neutral
+# case: reading a display stretches intervals from there, and gazing into the
+# middle distance shortens them. The resulting spread runs roughly 9/min while
+# reading to 23/min unfocused, against measured ranges of 1.4-14.4 and
+# 10.5-32.5.
+BLINK_DEMAND_SPAN = 1.4
+BLINK_DEMAND_BASE = 0.3
 
 
 @dataclass
@@ -97,7 +105,8 @@ class BlinkSystem:
         # so blink rate falls out of *what he is doing* rather than being a
         # constant of his personality.
         demand = clamp(drives.visual_demand, 0.0, 1.0)
-        interval *= 1.0 + BLINK_DEMAND_SPAN * demand
+        interval *= clamp(1.0 + BLINK_DEMAND_SPAN * (demand - BLINK_DEMAND_BASE),
+                          0.55, 2.4)
 
         self._next_at = drives.now + interval
 
