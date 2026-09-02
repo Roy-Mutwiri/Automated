@@ -48,6 +48,7 @@ __all__ = [
     "render_desk_foreground",
     "render_mic_foreground",
     "luminance",
+    "key_luminance",
     "fit_exposure",
     "light_wrap",
 ]

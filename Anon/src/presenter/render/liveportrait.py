@@ -447,8 +447,8 @@ class LivePortraitRenderer:
             from .environment import (
                 RoomStyle,
                 fit_exposure,
+                key_luminance,
                 light_wrap,
-                luminance,
                 render_desk_foreground,
                 render_mic_foreground,
                 render_streaming_room,
