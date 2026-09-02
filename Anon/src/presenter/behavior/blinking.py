@@ -34,6 +34,12 @@ __all__ = ["BlinkSystem"]
 
 
 @dataclass
+# How far visual demand can stretch the inter-blink interval. At demand 1.0 the
+# interval is 2.2x the baseline, which turns a ~15/min conversational rate into
+# ~7/min while reading - inside the measured range for both regimes.
+BLINK_DEMAND_SPAN = 1.2
+
+
 class _ActiveBlink:
     """One blink in flight."""
 
@@ -82,6 +88,16 @@ class BlinkSystem:
         fixation = drives.time_since_gaze_shift
         if fixation > 4.0:
             interval *= clamp(1.0 - 0.16 * (fixation - 4.0) / 6.0, 0.62, 1.0)
+
+        # Visual demand suppresses blinking. Measured spontaneous blink rate
+        # runs 1.4-14.4/min while reading against 10.5-32.5/min in
+        # conversation; the eye holds the lid open to avoid losing visual
+        # information it is actively using. The span below reproduces roughly
+        # that factor of three across the range of targets a streamer looks at,
+        # so blink rate falls out of *what he is doing* rather than being a
+        # constant of his personality.
+        demand = clamp(drives.visual_demand, 0.0, 1.0)
+        interval *= 1.0 + BLINK_DEMAND_SPAN * demand
 
         self._next_at = drives.now + interval
 
