@@ -52,7 +52,7 @@ MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 # Framing, lighting and technical qualities. Kept separate from the subject so
 # the subject can be changed without losing the parts that make the result
 # animatable.
-STYLE = (
+STYLE_STUDIO = (
     "professional studio headshot portrait, head and shoulders, "
     "looking directly into the camera lens, calm neutral relaxed expression, "
     "mouth closed, eyes open and clearly visible, symmetrical front-facing pose, "
@@ -62,6 +62,38 @@ STYLE = (
     "sharp detailed eyes with natural catchlights, high detail, "
     "photograph, raw photo"
 )
+
+# A live streamer does not sit like a corporate headshot. The difference is
+# posture and context, and both are baked into the source image - the behaviour
+# engine only applies a few degrees of head delta, so it cannot lean a body
+# forward or put headphones on someone.
+#
+# What actually reads as "live":
+#   * leaning slightly toward the camera - engaged, not posed
+#   * relaxed asymmetric shoulders rather than a squared-off portrait pose
+#   * over-ear headphones, the single clearest streaming signifier
+#   * webcam eye-level framing and a shorter lens, because a streamer sits
+#     close to a webcam rather than far from an 85mm portrait lens
+#
+# The microphone is deliberately NOT prompted here. A boom mic is mounted to
+# the desk, not to the presenter, so baking it into the portrait would make it
+# swing with his head. It is added as a static foreground element in
+# render/environment.py instead.
+STYLE_STREAMING = (
+    "seated at a desk in a home studio, leaning slightly forward toward the camera, "
+    "relaxed engaged posture, shoulders relaxed and slightly asymmetric, "
+    "wearing black over-ear headphones, casual clothing, "
+    "looking directly into the camera lens, calm friendly neutral expression, "
+    "mouth closed, eyes open and clearly visible, "
+    "head and shoulders and upper chest visible, webcam at eye level, "
+    "soft warm key light from the front, 50mm lens, shallow depth of field, "
+    "softly blurred warm room background with bokeh lights, "
+    "photorealistic, natural detailed skin texture with visible pores, "
+    "sharp detailed eyes with natural catchlights, high detail, "
+    "photograph, raw photo, candid livestream still"
+)
+
+STYLES = {"studio": STYLE_STUDIO, "streaming": STYLE_STREAMING}
 
 NEGATIVE = (
     "glasses, sunglasses, eyewear, hat brim covering eyes, hands, fingers, "
