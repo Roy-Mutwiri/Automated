@@ -295,6 +295,24 @@ def render_streaming_room(
     # Only a whisper of blur, to seat the sprites in the image without
     # destroying the aperture rim that makes them read as glass.
     glow = cv2.GaussianBlur(glow, (max(int(short * 0.006) | 1, 3),) * 2, 0)
+
+    # -- lateral chromatic aberration --------------------------------------
+    # Each channel focuses at a fractionally different scale, so a highlight
+    # picks up a colour fringe that is zero on axis and grows toward the
+    # corners. Applying it as a per-channel zoom about the frame centre is
+    # exactly what the aberration is, and it lands only on the glow layer -
+    # the wall has no edges left for a fringe to show up on.
+    if style.chromatic > 0:
+        for ch, s in ((0, 1.0 - style.chromatic), (2, 1.0 + style.chromatic)):
+            M = np.array(
+                [[s, 0.0, (1.0 - s) * w * 0.5], [0.0, s, (1.0 - s) * h * 0.5]],
+                np.float32,
+            )
+            glow[:, :, ch] = cv2.warpAffine(
+                glow[:, :, ch], M, (w, h),
+                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE,
+            )
+
     room += glow
 
     # -- monitor spill ------------------------------------------------------
