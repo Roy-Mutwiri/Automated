@@ -76,7 +76,7 @@ class LivePortraitRenderer:
         environment: str = "streaming_room",
         room_style=None,
         room_seed: int = 7,
-        neutralize_pose: float = 0.7,
+        neutralize_pose: float = 0.85,
     ) -> None:
         self.root = Path(liveportrait_root).resolve()
         if not self.root.exists():
