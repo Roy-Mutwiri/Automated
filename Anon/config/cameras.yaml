@@ -1,104 +1,75 @@
 # Camera positions. Seven of them, switched by the buttons in the preview window.
 #
-# A camera is a whole generated master frame, exactly as an outfit is a whole
-# generated portrait. There is no 3D scene here to move a virtual camera
-# through: LivePortrait warps a face crop out of one photograph and cannot
-# invent the back of a head, a ceiling, or a room it has never seen. So each
-# camera is photographed separately and the buttons switch between them.
+# ## The identity problem, and why the rig is shaped like this
 #
-# ## The constraint that shapes the whole list
+# The first version generated all seven cameras from text prompts. Every one
+# came back a different man - because independent text-to-image samples share a
+# *description*, not a person. Cutting between them read as cutting between
+# strangers, which destroys the whole premise.
 #
-# `tools/evaluate_scenes.py` rejects any master frame whose head yaw exceeds
-# 10 degrees, because past that LivePortrait starts hallucinating the parts of
-# the head the rotation reveals. That gate decides which cameras can be alive:
+# The fix is not a better prompt. It is to notice which frames actually show his
+# face:
 #
-#   * A camera he is **looking into** has a near-frontal face relative to *that*
-#     lens, whatever angle his body is at. It passes the gate and can be
-#     animated. This is also what a real multi-camera streamer does - they look
-#     at whichever camera is live - so the constraint and the realism point the
-#     same way.
-#   * A camera showing his **back**, or one far enough away that his face is a
-#     handful of pixels, has no drivable face. Those are stills.
+#   * **Cameras that show his face clearly are all the same photograph**,
+#     reframed. `derive: true` means the camera does not have an image of its
+#     own - it prepares the hero master frame at a different `framing`. Identity
+#     is then not "consistent", it is *identical*, because it is one photo. This
+#     is also exactly how a single-camera streamer fakes multicam: punch in and
+#     out of one clean feed.
 #
-# `animated: false` is not a limitation being hidden. A locked-off room camera
-# in a real multicam show is a static angle you cut to for a few seconds; it is
-# the *subject* that moves in it, and there is no subject motion to be had from
-# a photograph. Use them as short cuts, not as a resting shot.
+#   * **Cameras where his face is absent or tiny are generated separately.**
+#     Behind him, above him, and the wide room shot have no recognisable face,
+#     so a different sample cannot betray a different person. These are the
+#     angles that genuinely cannot be faked from the hero frame, and they are
+#     the ones worth spending generation on.
 #
-# ## Room consistency, honestly
+# What this does not buy: a true three-quarter angle *with his face in it*. That
+# needs identity conditioning (IP-Adapter or similar) rather than a prompt, and
+# is deliberately not attempted here rather than shipped looking wrong.
 #
-# Every camera shares the room and negative text from `tools/generate_scene.py`
-# verbatim, and only the composition clause changes. That makes them read as
-# the same *kind* of room with the same materials, palette and lighting. It does
-# not make them geometrically the same room - independent diffusion samples
-# cannot be. Making the shelf actually be in the same place across angles needs
-# depth reprojection from one master, or a real 3D set. Neither exists yet.
+# ## Live cameras and stills
+#
+# `tools/evaluate_scenes.py` rejects a master frame past 10 degrees of head yaw,
+# because LivePortrait hallucinates beyond it. Derived cameras inherit the hero
+# frame's yaw, so if the hero passes they all pass. Generated angles have no
+# drivable face at all and are stills: the application never calls the renderer
+# for them, which is why those cuts are instant and cost no VRAM.
+#
+# A still is a shot you cut *to* for a few seconds. There is no subject motion
+# available from a photograph, and pretending otherwise would be worse.
 
 directory: assets/cameras
 
-# Shared across every camera unless one overrides it. Empty means "take the
-# generator's default", which is imported from tools/generate_scene.py so the
-# room description has exactly one definition.
+# The photograph the derived cameras reframe. Everything about the man - who he
+# is, what he is wearing, the room he is in - is decided here, once.
+master: assets/cameras/cam1.png
+
 room: ""
 
 cameras:
   cam1:
     label: "1 Hero"
     animated: true
-    hint: eye level, 50mm, head and shoulders - the default broadcast shot
-    subject: >-
-      close-up portrait photograph of one adult male streamer seated close to
-      camera, his face fills much of the frame, head and shoulders,
-      a brown-skinned Arab man in his 30s, short dark beard,
-      looking straight into the camera lens, frontal face, calm neutral,
-      seated in a black gaming chair, 50mm portrait lens, eye level
+    derive: true
+    framing: full
+    hint: the master frame, full bleed
 
   cam2:
-    label: "2 Close"
+    label: "2 Medium"
     animated: true
-    hint: tighter than hero; the most animation resolution available
-    subject: >-
-      tight close-up photograph of one adult male streamer, his head fills the
-      frame, a brown-skinned Arab man in his 30s, short dark beard,
-      looking straight into the camera lens, frontal face, calm neutral,
-      85mm lens, shallow depth of field, eye level
+    derive: true
+    framing: shoulders
+    hint: head and shoulders, punched in from the master - the same photograph
 
   cam3:
-    label: "3 Left 3/4"
+    label: "3 Close"
     animated: true
-    # He turns to face this lens, so the *body* is three-quarter but the head is
-    # frontal to camera and the yaw gate passes. Prompting a profile instead
-    # would produce a beautiful frame the renderer cannot animate.
-    subject: >-
-      photograph of one adult male streamer seated at his desk turned three
-      quarters away from the desk, his head turned to look straight into this
-      camera, frontal face, a brown-skinned Arab man in his 30s, short dark
-      beard, calm neutral, black gaming chair, 50mm lens, eye level
+    derive: true
+    framing: close
+    hint: tight on the face; the most animation resolution available
 
   cam4:
-    label: "4 Right 3/4"
-    animated: true
-    subject: >-
-      photograph of one adult male streamer seated at his desk angled to the
-      other side, his head turned to look straight into this camera, frontal
-      face, a brown-skinned Arab man in his 30s, short dark beard, calm
-      neutral, black gaming chair, 50mm lens, eye level
-
-  cam5:
-    label: "5 High"
-    animated: true
-    # The design doc rules out high angle for the hero shot and is right to:
-    # it foreshortens the face. It is legitimate as a *cut*, and he looks up
-    # into the lens so the yaw gate still passes. Pitch is what may fail here,
-    # and the gate is allowed to reject it.
-    subject: >-
-      photograph of one adult male streamer seated at his desk shot from
-      slightly above, camera looking down at him, he tilts his head up and
-      looks straight into the lens, a brown-skinned Arab man in his 30s, short
-      dark beard, calm neutral, black gaming chair, 35mm lens
-
-  cam6:
-    label: "6 Over shoulder"
+    label: "4 Over shoulder"
     animated: false
     hint: behind him, seeing his back, the desk and the monitors - a still
     subject: >-
@@ -116,8 +87,25 @@ cameras:
       bedroom, rgb lighting, neon, purple, cyberpunk, text, signage, logo,
       watermark, cgi, 3d render, face, frontal face
 
-  cam7:
-    label: "7 Room wide"
+  cam5:
+    label: "5 Overhead"
+    animated: false
+    hint: looking down on him from above the desk - a still
+    subject: >-
+      overhead photograph looking straight down at one adult male streamer
+      seated at his desk, seen from above, the top of his head and his
+      shoulders, keyboard and desk surface below him, 35mm lens, top down view
+    negative: >-
+      frontal face, portrait, eye level, low angle, racing simulator, sim rig,
+      empty room, no people, rustic, cabin, antique, library, wooden room,
+      brown room, music studio, midi keyboard, piano
+    negative_2: >-
+      frontal face, eye level, racing simulator, empty room, no people, office
+      chair, mesh chair, bedroom, rgb lighting, neon, purple, cyberpunk, text,
+      signage, logo, watermark, cgi, 3d render, deformed hands
+
+  cam6:
+    label: "6 Room wide"
     animated: false
     hint: the whole room and setup, he is small in frame - a still
     subject: >-
@@ -133,3 +121,20 @@ cameras:
       close-up, portrait, racing simulator, empty room, no people, office
       chair, mesh chair, bedroom, rgb lighting, neon, purple, cyberpunk, text,
       signage, logo, watermark, cgi, 3d render, deformed hands
+
+  cam7:
+    label: "7 Desk"
+    animated: false
+    hint: the gear on the desk, no person - a cutaway
+    subject: >-
+      close photograph of a streaming desk surface, broadcast microphone on a
+      boom arm, mechanical keyboard, headphone stand, matte black desk,
+      shallow depth of field, 50mm lens, no person
+    negative: >-
+      person, man, face, portrait, hands, racing simulator, sim rig, rustic,
+      cabin, antique, library, wooden room, brown room, music studio,
+      midi keyboard, piano
+    negative_2: >-
+      person, man, face, hands, racing simulator, office chair, mesh chair,
+      bedroom, rgb lighting, neon, purple, cyberpunk, text, signage, logo,
+      watermark, cgi, 3d render
