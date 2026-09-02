@@ -401,17 +401,12 @@ class LiveSession:
             # Muted still generates and records -- only audio is withheld,
             # so the transcript stays complete and unmuting resumes a host
             # that is current rather than an hour behind.
-            if self.router is not None and not self.muted:
-                await self.router.submit(
-                    AudioRequest(
-                        utterance_id=response.utterance_id,
-                        session_id=response.session_id,
-                        trace_id=response.trace_id,
-                        segments=response.segments,
-                        voice_id=self.runtime.persona.voice_id,
-                        priority=response.trigger.priority,
-                    )
-                )
+            # Muting is enforced here rather than in the runtime, so a muted
+            # session still generates, records and traces normally -- unmuting
+            # then resumes a host that is current rather than an hour behind.
+            if self.router is not None and self.muted:
+                self.router.sink.stop()
+
                 METRICS.gauge(
                     "goldlive_queue_depth", self.router.queue_depth,
                     {"session": self.session_id, "queue": "audio"},
@@ -512,6 +507,9 @@ class LiveSession:
 
         self.router = AudioRouter(self.session_id, tts, Path(self.args.out))
         await self.router.start()
+        # The runtime submits through the router; live.py must not submit
+        # a second time or the utterance is queued (and rendered) twice.
+        self.runtime.router = self.router
 
         self.adapter = await build_adapter(
             self.args.adapter, self.session_id, os.environ.get("AUTHOR_SALT", "change-me")

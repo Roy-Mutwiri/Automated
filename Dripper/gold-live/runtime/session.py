@@ -56,6 +56,7 @@ class SessionRuntime:
         planner: ContentPlanner | None = None,
         proposer: TopicProposer | None = None,
         max_silence_s: float | None = None,
+        router=None,
     ) -> None:
         self.state = state
         self.persona = persona
@@ -64,6 +65,9 @@ class SessionRuntime:
         self.out_dir = out_dir / state.session_id
         self.planner = planner
         self.proposer = proposer
+        #: When set, the router owns synthesis; this runtime must not also
+        #: synthesise or every utterance is rendered twice.
+        self.router = router
         self.coverage = proposer.coverage if proposer else None
         self._candidates: deque[TopicCandidate] = deque()
         self.content_exhausted_at: datetime | None = None
@@ -457,7 +461,29 @@ class SessionRuntime:
         self.dropped_repetitive.append((last.text, similarity))
         return None
 
+    #: Speaking rate used to estimate an utterance's duration without
+    #: synthesising it. Only needs to be close: it tells the Director how long
+    #: to consider itself busy, and erring slightly long is safer than short.
+    WORDS_PER_MINUTE = 165
+
+    def _estimate_duration_ms(self, segments: list[str]) -> int:
+        words = sum(len(s.split()) for s in segments)
+        return int((max(1, words) / self.WORDS_PER_MINUTE) * 60_000)
+
     async def _speak(self, response: AIResponse, decision: Decision) -> int:
+        """Hand the utterance to whoever owns audio, and report how long it
+        will take so the Director knows it is busy.
+
+        When a router is attached it owns synthesis entirely -- queueing,
+        barge-in and deadline dropping all live there. This method used to
+        synthesise as well, which meant every utterance was rendered TWICE:
+        once here and once in the router, doubling TTS cost and leaving the
+        recorded file different from the audio actually played. The duration is
+        estimated instead, which is all it was ever needed for.
+
+        Without a router (the dry run) it still synthesises directly, since
+        there is nothing else to write the audio.
+        """
         req = AudioRequest(
             utterance_id=response.utterance_id,
             session_id=response.session_id,
@@ -467,6 +493,11 @@ class SessionRuntime:
             priority=decision.intent.priority,
             preempts=decision.preempts,
         )
+
+        if self.router is not None:
+            await self.router.submit(req)
+            return self._estimate_duration_ms(req.segments)
+
         total = 0
         for i, segment in enumerate(req.segments):
             path = self.out_dir / f"{len(self.transcript):03d}_{req.utterance_id.hex[:8]}_{i}.wav"
