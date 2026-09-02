@@ -289,10 +289,24 @@ class LivePortraitRenderer:
             self.blend_box = (0, 0, out_w, out_h)
         x0, y0, x1, y1 = self.blend_box
         self.mask_box = np.ascontiguousarray(self.mask_out[y0:y1, x0:x1])
-        self.inv_mask_box = 1.0 - self.mask_box
-        self.bg_box_premul = (
-            self.background[y0:y1, x0:x1].astype(np.float32) * self.inv_mask_box
+
+        # Split the mask into three zones. The crop scale is wide, so the mask
+        # covers most of the frame and a single float blend over all of it
+        # wastes most of its work on pixels that are fully opaque or fully
+        # transparent. Only the feather band actually needs per-pixel alpha:
+        #
+        #   opaque (>= 0.997)  -> straight copy, integer
+        #   clear  (<= 0.003)  -> leave the precomputed background
+        #   feather            -> float blend, a thin band
+        alpha = self.mask_box[:, :, 0]
+        self.opaque_mask = alpha >= 0.997
+        self.feather_mask = (alpha > 0.003) & (alpha < 0.997)
+        self.feather_alpha = self.mask_box[self.feather_mask]
+        bg_box = self.background[y0:y1, x0:x1].astype(np.float32)
+        self.feather_bg_premul = (
+            bg_box[self.feather_mask] * (1.0 - self.feather_alpha)
         )
+        self._opaque_frac = float(self.opaque_mask.mean())
 
     # -- per-frame ----------------------------------------------------------
     def _build_driving_keypoints(self, pose: AvatarPose) -> torch.Tensor:
