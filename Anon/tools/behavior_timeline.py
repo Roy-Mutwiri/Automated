@@ -93,7 +93,7 @@ def cv(values: list[float]) -> float:
 
 
 VOLUNTARY_KINDS = {
-    GAZE_KINDS,
+    *GAZE_KINDS,
     "head_yaw", "head_pitch", "head_roll", "expression", "posture_shift",
 }
 
@@ -132,7 +132,7 @@ def stillness_analysis(events: list[BehaviorEvent], total: float) -> dict:
     about genuine periods of not-doing-anything.
     """
     voluntary = {
-        GAZE_KINDS,
+        *GAZE_KINDS,
         "head_yaw", "head_pitch", "head_roll", "expression", "posture_shift",
     }
     times = [e.time for e in events if e.kind in voluntary]
