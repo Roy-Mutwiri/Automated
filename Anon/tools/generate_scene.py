@@ -142,32 +142,72 @@ def build_prompt(concept: str) -> str:
     return f"{CONCEPTS[concept]}, {SUBJECT}, {LIGHT_AND_CAMERA}"
 
 
-def measure_face(path: Path, root: Path) -> float:
-    """Face width in pixels, or 0 if no face is found.
+def _person_coverage(img_bgr: np.ndarray) -> float:
+    """Fraction of the frame occupied by a person, via segmentation."""
+    import torch
+    import torchvision
 
-    The acceptance gate from the design doc. A room-scale frame that looks
-    beautiful but leaves a 90 px face cannot be animated well, and that is far
-    easier to catch here than after wiring it into the renderer.
+    weights = torchvision.models.segmentation.DeepLabV3_ResNet101_Weights.DEFAULT
+    model = torchvision.models.segmentation.deeplabv3_resnet101(
+        weights=weights
+    ).eval().cuda()
+    rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    batch = weights.transforms()(
+        torch.from_numpy(rgb).permute(2, 0, 1)
+    ).unsqueeze(0).cuda()
+    with torch.no_grad():
+        probs = model(batch)["out"][0].softmax(0)[15].cpu().numpy()
+    del model
+    torch.cuda.empty_cache()
+    return float((probs > 0.5).mean())
+
+
+def measure_scene(path: Path, root: Path, coverage: float) -> tuple[float, str]:
+    """Return ``(face_width_px, verdict)`` for a generated scene.
+
+    **This must first establish that a person exists.** An earlier version
+    measured the landmark span and nothing else, and reported 600 px faces on
+    eight images that contained no human being at all - the landmark model
+    happily returns a full set of points for an empty room, and their span is
+    meaningless. A gate that passes every candidate is worse than no gate,
+    because it is trusted.
+
+    So person segmentation runs first and decides whether there is anyone to
+    measure. Only then is the face size meaningful, and it is sanity-checked
+    against the frame: a "face" wider than a third of the image is the model
+    fitting a face template to furniture, not a detection.
     """
+    if coverage < 0.02:
+        return 0.0, "NO PERSON"
+
     sys.path.insert(0, str(root))
     try:
         from src.utils.human_landmark_runner import LandmarkRunner
     except Exception:
-        return -1.0
+        return -1.0, "n/a"
 
     weights = root / "pretrained_weights/liveportrait/landmark.onnx"
     if not weights.exists():
-        return -1.0
+        return -1.0, "n/a"
     runner = LandmarkRunner(ckpt_path=str(weights), onnx_provider="cpu", device_id=0)
     runner.warmup()
 
     img = cv2.imread(str(path))
+    h, w = img.shape[:2]
     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     try:
         lmk = runner.run(rgb, runner.run(rgb))
     except Exception:
-        return 0.0
-    return float(lmk[:, 0].max() - lmk[:, 0].min())
+        return 0.0, "no face"
+
+    face = float(lmk[:, 0].max() - lmk[:, 0].min())
+    if face > w / 3.0:
+        # Implausible for a room-scale frame; the detector has latched onto
+        # something that is not a face.
+        return face, "SUSPECT"
+    if face < 120.0:
+        return face, "too small"
+    return face, "PASS"
 
 
 def main() -> int:
