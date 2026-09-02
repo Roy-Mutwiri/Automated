@@ -474,6 +474,79 @@ class World:
                                          h["eye_height"] + 0.045)
         return ob
 
+    def align_head_to_plate(self, ob, landmarks_path, camera_id="cam1",
+                            iterations=4):
+        """Move the figure so his head projects where the plate's head is.
+
+        Front-projecting the plate only works if the mesh lands on the man. The
+        first attempt skipped this and the mesh sampled the *wall* - it rendered
+        with walnut slats across its face, which is a very clear way of being
+        told the projection has no idea where the subject is.
+
+        The plate is the authority on where he sits in frame; the canonical
+        world position was my invention. So the figure is translated until its
+        projected head box matches the measured face box, solved directly in
+        camera space rather than by eye. Depth is left alone - moving him
+        toward or away from the lens would change his size in the room, and
+        his size is anatomy, not a free parameter.
+        """
+        import json
+
+        from bpy_extras.object_utils import world_to_camera_view
+
+        cam = self.cameras.get(camera_id)
+        path = Path(landmarks_path)
+        if cam is None or not path.exists():
+            return False
+        lm = json.loads(path.read_text(encoding="utf-8"))
+        pw, ph = lm["plate_size"]
+        box = lm["face_box"]
+        # Measured face box, normalised, with v measured from the bottom to
+        # match Blender's camera-view convention.
+        target_u = ((box["x0"] + box["x1"]) / 2) / pw
+        target_v = 1.0 - ((box["y0"] + box["y1"]) / 2) / ph
+        target_h = (box["y1"] - box["y0"]) / ph
+
+        scene = bpy.context.scene
+        mesh = ob.data
+        for it in range(iterations):
+            mw = ob.matrix_world
+            # The face region only: MediaPipe's box is brow-to-chin, so the
+            # whole skull would bias the match upward.
+            world_z = [(mw @ v.co).z for v in mesh.vertices]
+            top = max(world_z)
+            face_verts = [mw @ v.co for v, z in zip(mesh.vertices, world_z)
+                          if z > top - 0.20]
+            if not face_verts:
+                return False
+            proj = [world_to_camera_view(scene, cam, p) for p in face_verts]
+            us = [p.x for p in proj]
+            vs = [p.y for p in proj]
+            cur_u, cur_v = (min(us) + max(us)) / 2, (min(vs) + max(vs)) / 2
+            cur_h = max(vs) - min(vs)
+
+            du, dv = target_u - cur_u, target_v - cur_v
+            if abs(du) < 0.002 and abs(dv) < 0.002:
+                break
+            # Convert a screen-space error into a world translation at the
+            # subject's depth, using the camera's own basis.
+            depth = sum(p.z for p in proj) / len(proj)
+            frame_h = 2.0 * depth * (cam.data.sensor_width * ph / pw
+                                     / (2.0 * cam.data.lens))
+            frame_w = frame_h * pw / ph
+            right = mw.to_3x3() @ (0, 0, 0)  # placeholder, replaced below
+            cm = cam.matrix_world.to_3x3()
+            right = cm @ __import__("mathutils").Vector((1, 0, 0))
+            up = cm @ __import__("mathutils").Vector((0, 1, 0))
+            ob.location = (ob.location
+                           + right * (du * frame_w) + up * (dv * frame_h))
+            bpy.context.view_layer.update()
+
+        print(f"[world] head aligned to plate: face box height "
+              f"{cur_h:.3f} vs target {target_h:.3f} of frame "
+              f"({cur_h / max(target_h, 1e-6):.2f}x)")
+        return True
+
     def project_identity_texture(self, ob, plate_path, camera_id="cam1"):
         """Project the approved plate onto the mesh through Camera 1.
 
