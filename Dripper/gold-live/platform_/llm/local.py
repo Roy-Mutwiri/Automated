@@ -50,14 +50,24 @@ class LocalLLM(LLMBackend):
         base_url: str | None = None,
         model: str | None = None,
         api_key: str = "not-needed",
-        timeout_s: float = 60.0,
+        connect_timeout_s: float = 5.0,
+        read_timeout_s: float = 15.0,
+        total_timeout_s: float = 60.0,
     ) -> None:
         self.base_url = (
             base_url or os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8000/v1")
         ).rstrip("/")
         self.model = model or os.environ.get("LLM_MODEL", "local-model")
         self.api_key = os.environ.get("LLM_API_KEY", api_key)
-        self.timeout_s = timeout_s
+        # Separate read timeout, and a short one. It applies between reads, so
+        # once tokens are flowing the gaps are milliseconds -- the only window
+        # it really bounds is time-to-first-token. A single flat 60s timeout
+        # means a server that drops a stream mid-generation (OOM, restart, load
+        # shedding) freezes the session for a full minute of dead air before
+        # anyone notices. Detect it in seconds instead.
+        self.connect_timeout_s = connect_timeout_s
+        self.read_timeout_s = read_timeout_s
+        self.total_timeout_s = total_timeout_s
         self.name = f"local:{self.model}"
         self._client: Any = None
 
@@ -72,11 +82,13 @@ class LocalLLM(LLMBackend):
 
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
-                timeout=httpx.Timeout(self.timeout_s, connect=5.0),
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                limits=__import__("httpx").Limits(
-                    max_keepalive_connections=16, max_connections=32
+                timeout=httpx.Timeout(
+                    self.total_timeout_s,
+                    connect=self.connect_timeout_s,
+                    read=self.read_timeout_s,
                 ),
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                limits=httpx.Limits(max_keepalive_connections=16, max_connections=32),
             )
         return self._client
 
@@ -168,6 +180,20 @@ class LocalLLM(LLMBackend):
         except Exception as exc:  # noqa: BLE001 - health must never raise
             log.warning("local LLM health check failed: %s", exc)
             return False
+
+    async def first_model(self) -> str | None:
+        """Whatever the server is actually serving.
+
+        Saves the recipient of a shared build from having to know the exact
+        model string -- if the server has one model loaded, use it.
+        """
+        try:
+            client = await self._http()
+            resp = await client.get("/models", timeout=3.0)
+            data = resp.json().get("data") or []
+            return data[0].get("id") if data else None
+        except Exception:  # noqa: BLE001
+            return None
 
     async def close(self) -> None:
         if self._client is not None:

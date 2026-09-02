@@ -19,7 +19,11 @@
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_dynamic_libs,
+    collect_submodules,
+)
 
 ROOT = Path(SPECPATH).parent
 
@@ -37,22 +41,34 @@ hiddenimports = [
     *collect_submodules("pydantic"),
 ]
 
-# Optional heavy extras. Present only if installed at build time -- the base
-# build stays small and the capture-enabled build is a superset.
-optional = {
-    "httpx": "httpx",
-    "numpy": "numpy",
-    "sounddevice": "sounddevice",
-    "soundfile": "soundfile",
-    "mss": "mss",
-}
-for module, package in optional.items():
+# Optional extras. Present only if installed at build time, so the base build
+# stays small and a fully-capable build is a superset.
+#
+# sounddevice and soundfile wrap native libraries (PortAudio, libsndfile) that
+# are NOT Python modules -- collect_data_files alone misses them and the built
+# exe fails at import with an opaque OSError on a machine that has no system
+# copy. collect_dynamic_libs is what actually ships the DLLs.
+binaries = []
+optional = ["httpx", "numpy", "sounddevice", "soundfile", "mss"]
+missing = []
+for package in optional:
     try:
-        __import__(module)
-        hiddenimports.append(package)
-        datas += collect_data_files(package)
+        __import__(package)
     except ImportError:
-        print(f"[spec] optional dependency not installed, skipping: {package}")
+        missing.append(package)
+        continue
+    hiddenimports.append(package)
+    datas += collect_data_files(package)
+    binaries += collect_dynamic_libs(package)
+
+if missing:
+    print(
+        f"[spec] NOT BUNDLED: {', '.join(missing)}\n"
+        "[spec] The build will run but those capabilities are unavailable "
+        "to anyone you share it with. Install them and rebuild for a full build."
+    )
+else:
+    print("[spec] full-capability build: audio and screen capture included")
 
 excludes = [
     # Never ship a test framework or notebook stack to a customer.
@@ -66,7 +82,7 @@ excludes = [
 a = Analysis(
     [str(ROOT / "runtime" / "cli.py")],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

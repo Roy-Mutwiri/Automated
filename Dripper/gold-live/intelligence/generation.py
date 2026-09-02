@@ -397,18 +397,16 @@ async def build_generator(mode: str = "auto") -> tuple[Generator, LLMBackend | N
         return OfflineGenerator(), None
 
     if mode in ("auto", "local"):
-        from platform_.llm.local import LocalLLM
+        # Probe the well-known ports rather than requiring the recipient of a
+        # shared build to know that vLLM is 8000 and Ollama is 11434.
+        from platform_.llm.discovery import discover, endpoint_hints
 
-        llm = LocalLLM()
-        if await llm.health():
+        llm = await discover()
+        if llm is not None:
             log.info("using local model at %s (%s)", llm.base_url, llm.model)
             return LocalGenerator(llm), llm
-        await llm.close()
         if mode == "local":
-            raise RuntimeError(
-                f"No local model server responding at {LocalLLM().base_url}. "
-                "Start vLLM/Ollama, or run with --mode offline."
-            )
+            raise RuntimeError(endpoint_hints())
         log.warning("no local model server; falling back to offline templates")
         return OfflineGenerator(), None
 

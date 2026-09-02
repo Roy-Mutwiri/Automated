@@ -28,6 +28,31 @@ def run(cmd: list[str], **kw) -> int:
     return subprocess.call(cmd, cwd=ROOT, **kw)  # noqa: S603
 
 
+def purge(path: Path, attempts: int = 5) -> None:
+    """Remove a directory, tolerating transient Windows file locks.
+
+    A sync client or scanner holding a handle for a moment is normal and
+    self-resolving; failing the whole build over it is not.
+    """
+    import time
+
+    for attempt in range(attempts):
+        if not path.exists():
+            return
+        try:
+            shutil.rmtree(path)
+            return
+        except (PermissionError, OSError):
+            if attempt == attempts - 1:
+                print(
+                    f"warning: could not remove {path} (a file is locked).\n"
+                    "         Building on top of it; run --clean later if the "
+                    "output looks stale."
+                )
+                return
+            time.sleep(0.6 * (attempt + 1))
+
+
 def check_toolchain() -> None:
     try:
         import PyInstaller  # noqa: F401
@@ -67,7 +92,7 @@ def write_version_info() -> None:
 
 def stage_extras() -> None:
     """Files that sit beside the exe rather than inside it."""
-    for name in ("THIRD_PARTY_NOTICES.md", "README.md"):
+    for name in ("THIRD_PARTY_NOTICES.md", "SETUP.md"):
         source = ROOT / "build_tools" / name
         if not source.exists():
             source = ROOT / name
@@ -85,27 +110,21 @@ def stage_extras() -> None:
     (DIST / "START HERE.txt").write_text(
         f"""Gold Live {VERSION}
 
-1.  GoldLive.exe setup
-       Creates the configuration directory for this machine.
+Read SETUP.md - it walks through the whole thing.
 
-2.  Start a language model server (this is NOT bundled -- it is tens of GB):
-       vllm serve <model> --port 8000 --enable-prefix-caching
-    or Ollama, LM Studio, llama.cpp -- anything OpenAI-compatible.
+The short version:
 
-3.  GoldLive.exe doctor
-       Reports every dependency and what is missing.
+  1.  GoldLive.exe setup
+  2.  Install Ollama from ollama.com, then:  ollama serve
+      (Gold Live finds it automatically - no configuration needed)
+  3.  GoldLive.exe doctor      tells you what is missing
+  4.  GoldLive.exe dryrun      hear it before setting up anything else
 
-4.  GoldLive.exe calibrate --session SESSION_001
-       Only if using screen capture. Drag a box around the comment panel.
+Then, when you want it on a real stream, SETUP.md covers audio,
+comment capture, and running several sessions at once.
 
-5.  GoldLive.exe supervise
-       Runs every configured session.
-
-6.  GoldLive.exe dashboard
-       http://127.0.0.1:8080
-
-Configuration and data live outside this folder so upgrades do not overwrite
-them. Run "GoldLive.exe paths" to see where.
+Your settings live outside this folder so upgrades do not overwrite
+them. "GoldLive.exe paths" shows where.
 """,
         encoding="utf-8",
     )
@@ -122,7 +141,7 @@ def main() -> int:
 
     if args.clean:
         for path in (ROOT / "build", ROOT / "dist"):
-            shutil.rmtree(path, ignore_errors=True)
+            purge(path)
         print("cleaned build/ and dist/")
 
     if not args.skip_tests:
@@ -132,10 +151,17 @@ def main() -> int:
 
     write_version_info()
 
+    # PyInstaller's own --clean uses a plain rmtree, which fails on Windows
+    # when a sync client (OneDrive, Dropbox) or an antivirus scanner still has
+    # a handle on the previous build. Do it ourselves with retries instead, and
+    # do not pass --clean.
+    purge(ROOT / "build")
+    purge(DIST.parent / "GoldLive")
+
     code = run([
         sys.executable, "-m", "PyInstaller",
         str(ROOT / "build_tools" / "GoldLive.spec"),
-        "--noconfirm", "--clean",
+        "--noconfirm",
     ])
     if code != 0:
         sys.exit(f"PyInstaller failed ({code})")

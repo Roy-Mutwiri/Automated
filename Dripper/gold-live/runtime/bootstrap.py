@@ -80,23 +80,38 @@ def seed_config(force: bool = False) -> list[str]:
 
 
 def check_llm() -> Check:
+    """Probe every well-known endpoint, not just one.
+
+    Someone running this for the first time should not have to know that vLLM
+    listens on 8000 and Ollama on 11434.
+    """
     import os
     import urllib.error
     import urllib.request
 
-    url = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8000/v1")
-    try:
-        with urllib.request.urlopen(f"{url}/models", timeout=3) as resp:  # noqa: S310
-            body = json.loads(resp.read())
-        models = [m.get("id") for m in body.get("data", [])]
-        return Check("language model", True, f"{url} serving {models or 'a model'}")
-    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
-        return Check(
-            "language model", False,
-            f"nothing answering at {url} - start vLLM or Ollama. "
-            "Without it the host falls back to canned text.",
-            fatal=True,
-        )
+    from platform_.llm.discovery import KNOWN_ENDPOINTS
+
+    configured = os.environ.get("LLM_BASE_URL")
+    candidates = (
+        [("configured", configured)] if configured else list(KNOWN_ENDPOINTS)
+    )
+
+    for label, url in candidates:
+        try:
+            with urllib.request.urlopen(f"{url}/models", timeout=2) as resp:  # noqa: S310
+                body = json.loads(resp.read())
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+            continue
+        models = [m.get("id") for m in body.get("data", [])] or ["a model"]
+        return Check("language model", True, f"{label} at {url}: {models[0]}")
+
+    tried = ", ".join(url.split("//")[-1].split("/")[0] for _l, url in candidates)
+    return Check(
+        "language model", False,
+        f"no server on {tried}. Start Ollama (`ollama serve`) or vLLM. "
+        "Without one the host falls back to canned text.",
+        fatal=True,
+    )
 
 
 def check_tts(voices_dir: Path) -> Check:
