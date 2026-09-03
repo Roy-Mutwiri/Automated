@@ -115,3 +115,11 @@ Anon/humanity_frames/
 Anon/salience_frames/
 Anon/avatar_vis_frames/
 Anon/*.log
+
+# Expression / salience render artefacts. Same class as the frame directories
+# above: regenerable from a seed, large, and previously the cause of a 602 MB
+# commit that made the repo unpushable. Anon/*.mp4 already covers the clips.
+Anon/expr_frames/
+Anon/expr_row*.png
+Anon/native_*.png
+Anon/landmark_map*.png
