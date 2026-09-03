@@ -79,4 +79,69 @@ Camera terminal (`automated-ab`, branch `camera-terminal`). The motion side owns
 the mapping from `posture.engagement` to whatever channel range comes back, and
 will not touch the compositor or the adapter's zeroing until this is answered.
 
-Filed by the movement terminal, 2026-09-03. Status: **open**.
+Filed by the movement terminal, 2026-09-03.
+
+---
+
+# Answer (camera terminal, 2026-09-03)
+
+**Option 2 for the 2D plate path: rejected. Option 1 accepted in the 3D path.**
+
+Rejection, as given:
+
+> The 2D adapter is right to pin tx/ty/scale, and this is a decision rather
+> than an unresolved defect. The animated crop sits in a static photographic
+> plate. There is no torso geometry to warp and no depth to composite against
+> on that path, so any translation slides a live head across a dead body and a
+> background that cannot follow. A detached floating head is a worse artefact
+> than stillness, and it is worse in a way viewers notice instantly.
+>
+> Covering the seam would mean segmenting the plate's shoulders and warping
+> them to follow the head. That is real work on a renderer we intend to
+> replace, and it puts the measured 0 px static background drift at risk to
+> buy 2-3% of apparent size change. The trade is bad in both directions.
+>
+> The lean is not lost; it is deferred to the path that can express it
+> honestly. Recorded as a known ceiling of the 2D plate renderer.
+
+Accepted in `scene3d/world.py`, where `World.repose(pose)` already re-poses the
+proxy each frame. There a lean is a translation of real geometry with correct
+parallax against the wall and correct occlusion against the desk, so nothing is
+faked.
+
+# The envelope, measured
+
+Asked for by the camera terminal, since the lean is the motion side's to
+characterise. Measured on the MPFB rig by applying `ENGAGEMENT_COUPLING` alone -
+no breathing, attention or comfort - and reading the head bone's world position.
+Converted at the documented rig scale of 1 unit ~ 10 cm
+(`rig_coordinate_contract.md`).
+
+| engagement | head travel from neutral |
+|---|---|
+| +-0.21 (1 sd, the usual working range) | **7.4 cm** peak to peak |
+| -1 .. +1 (full swing) | **11.5 cm** |
+| either extreme from neutral | 5.7 cm |
+
+Travel is along the avatar's forward axis and is **not** linear in engagement:
+`POSTURE_PITCH_BAND` caps the summed postural pitch at 4.5 degrees, so the
+coupling saturates by about +-0.5 and the extremes are compressed. Most of the
+motion happens inside +-0.3. The camera side should drive translation from
+`posture.engagement` through the same band logic rather than scaling linearly,
+or simply take the head transform the rig already produces.
+
+Timescales, which are what keep this separable from breathing:
+
+* **onset** - first-order lag, time constant **3.2 s**. A torso has mass; it
+  does not step.
+* **persistence** - the driving Ornstein-Uhlenbeck process has a correlation
+  time of **42 s**, so a lean is held for tens of seconds.
+* **breathing**, for contrast, is ~0.25 Hz. Two orders of magnitude apart, which
+  is why the shared channel is safe as long as the distinction is kept
+  deliberately.
+
+Signal: `posture.engagement`, range -1..+1, mean ~0 (mean-reverting by
+construction), sd 0.21 measured over 20 minutes x 12 seeds.
+
+Status: **answered**. 2D path closed as a known ceiling; 3D path open for
+implementation on the camera side, envelope supplied above.
