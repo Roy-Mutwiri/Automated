@@ -10,7 +10,7 @@ work.
 | Terminal | Branch | Worktree |
 |---|---|---|
 | Camera | `camera-terminal` | `C:\Users\mutwi\Documents\Automated-camera` |
-| Movement | `movement-terminal` | `C:SERSMUTWIDOCUMENTSAUTOMATED-MOVEMENT` |
+| Movement | `movement-terminal` | `C:\Users\mutwi\Documents\Automated-movement` |
 | — | `main` | `C:\Users\mutwi\Documents\Automated` (integration) |
 
 The camera worktree is deliberately **outside** the repository root. The sync
@@ -22,6 +22,17 @@ cannot be swept into someone else's commit.
 worktree. Both terminals therefore run identical dependency versions, which is
 what lets a validated number reproduce across worktrees rather than merely
 appearing to.
+**It has one sharp edge.** That venv contains an editable install of
+`presenter` pointing at the *main* worktree, so `python -m presenter.app` run
+from here silently executes main's source, not yours. Edits appear to do
+nothing. Prefix the command:
+
+    PYTHONPATH=src .venv/Scripts/python.exe -m presenter.app --renderer liveportrait
+
+`PYTHONPATH` precedes site-packages, so the worktree's own `src/` wins. Anything
+under `tools/` is unaffected — those scripts insert their own `src` path at
+import time, which is why the camera bridge and depth tests were genuinely
+running this worktree's code.
 
 ## Ownership
 

@@ -98,6 +98,13 @@ Anon/body_render.log
 # Per-worktree sync watcher artefacts (tools/sync.ps1)
 .sync-message
 tools/sync-*.log
+
+# Generated output.
+#
+# Anon/eyehead_frames/ is the one that matters: 990 tracked PNGs auto-committed
+# by the old folder-based sync watcher before the rule existed. Without this
+# rule, removing them from history would leave them untracked AND unignored,
+# and the next `git add -A` would put all of it straight back.
 Anon/eyehead_frames/
 Anon/calibration/
 # Full-resolution inspection sheets. Derived, large, and regenerable from the
@@ -107,7 +114,6 @@ Anon/clip_gaze.png
 Anon/clip_contact_sheet.png
 Anon/seated_frames/
 Anon/seated_debug_frames/
-Anon/eyehead_frames/
 Anon/finger_tmp/
 Anon/seated_render.log
 Anon/seated_debug.log
@@ -117,8 +123,9 @@ Anon/avatar_vis_frames/
 Anon/*.log
 
 # Expression / salience render artefacts. Same class as the frame directories
-# above: regenerable from a seed, large, and previously the cause of a 602 MB
-# commit that made the repo unpushable. Anon/*.mp4 already covers the clips.
+# above: regenerable from a seed, and caught at 51 MB before being committed -
+# the same failure as eyehead_frames, spotted in time on the second occasion.
+# Anon/*.mp4 already covers the clips.
 Anon/expr_frames/
 Anon/expr_row*.png
 Anon/native_*.png
