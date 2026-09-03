@@ -51,6 +51,7 @@ from shared.contracts import (
 )
 from shared.store import TraceStore
 
+from shared.provisioning import author_salt
 from shared.paths import config_dir, config_path, data_path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -376,13 +377,47 @@ class LiveSession:
             self.engine.on_bar_close_check(datetime.now(timezone.utc))
 
     async def _comment_loop(self) -> None:
+        """Ingest viewer comments.
+
+        Every stage is logged and every failure is contained. Previously an
+        exception anywhere in on_comment propagated out of the `async for`,
+        killed this task, and -- because nothing ever retrieves a cancelled
+        task's exception -- did so in total silence. The session carried on
+        looking healthy while comment ingestion was permanently dead, which is
+        indistinguishable from "no viewer has said anything yet".
+        """
         if self.adapter is None or self.runtime is None:
             return
-        async for comment in self.adapter.comments():
-            if self.stopping.is_set():
+        while not self.stopping.is_set():
+            try:
+                async for comment in self.adapter.comments():
+                    if self.stopping.is_set():
+                        return
+                    METRICS.inc("goldlive_comments_total", {"session": self.session_id})
+                    log.info(
+                        "[%s] comment received: %r (id=%s)",
+                        self.session_id, comment.text_raw[:120],
+                        comment.platform_msg_id[:12],
+                    )
+                    try:
+                        await self.runtime.on_comment(comment)
+                        log.info(
+                            "[%s] comment queued for reply (director depth=%d)",
+                            self.session_id, self.runtime.director.queue_depth,
+                        )
+                    except Exception:
+                        # One bad comment must not end comment ingestion.
+                        log.exception(
+                            "[%s] failed to handle comment %s",
+                            self.session_id, comment.platform_msg_id[:12],
+                        )
                 return
-            METRICS.inc("goldlive_comments_total", {"session": self.session_id})
-            await self.runtime.on_comment(comment)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("[%s] comment stream failed; reconnecting in 5s",
+                              self.session_id)
+                await asyncio.sleep(5)
 
     async def _speak_loop(self) -> None:
         assert self.runtime is not None
@@ -597,7 +632,7 @@ class LiveSession:
         self.runtime.router = self.router
 
         self.adapter = await build_adapter(
-            self.args.adapter, self.session_id, os.environ.get("AUTHOR_SALT", "change-me")
+            self.args.adapter, self.session_id, author_salt()
         )
 
         self.health_server = HealthServer(
@@ -688,6 +723,33 @@ class LiveSession:
         log.info("%s stopped cleanly", self.session_id)
 
 
+def _add_session_log_file(session_id: str) -> None:
+    """Also write this session's log to a file that outlives the process.
+
+    A supervised session inherits the supervisor's stdout, and when that is
+    itself redirected the child's output did not reliably reach the file -- so
+    after a crash there was nothing at all to read. A session that dies at 3am
+    has to leave evidence behind, which is the whole point of running it under
+    a supervisor.
+
+    Rotating, because this runs 24/7 and an unbounded log is its own outage.
+    """
+    from logging.handlers import RotatingFileHandler
+
+    try:
+        path = data_path("logs", f"{session_id}.log")
+        handler = RotatingFileHandler(
+            path, maxBytes=16 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        )
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+        )
+        logging.getLogger().addHandler(handler)
+        log.info("session log: %s", path)
+    except OSError as exc:
+        log.warning("could not open session log file: %s", exc)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Run one live session")
     ap.add_argument("--session", required=True)
@@ -731,6 +793,7 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
     )
+    _add_session_log_file(args.session)
 
     session = LiveSession(args)
     loop = asyncio.new_event_loop()

@@ -289,3 +289,84 @@ async def test_screen_adapter_reports_missing_ocr():
 async def test_an_unknown_adapter_is_rejected():
     result = await gate_comments("carrier-pigeon")
     assert not result.ok and "unknown adapter" in result.reason
+
+
+# -- config_valid must read what the SESSION reads -------------------------
+
+
+async def test_config_valid_reads_the_persona_voice_not_the_installer_default(
+    tmp_path, monkeypatch
+):
+    """Regression from a real soak run.
+
+    config_valid resolved the voice through DEFAULT_PROFILE in
+    scripts/get_voices.py, while the session loaded it from the persona YAML.
+    On a machine whose config predated the real voice ids the two disagreed:
+    the gate validated en_US-john-medium and passed, the session asked for
+    'voice_fast', and every utterance died with FileNotFoundError. Six
+    utterances were generated and zero audio files produced, while /health
+    reported the session ready.
+    """
+    import runtime.readiness as mod
+
+    class FakePersona:
+        voice_id = "voice_fast"  # the stale placeholder
+
+    monkeypatch.setattr(
+        "intelligence.personas.load_personas", lambda _d: {"scalper": FakePersona()}
+    )
+    monkeypatch.setattr(mod, "_catalogue_ids", lambda: {"en_US-john-medium"})
+
+    result = await mod.gate_config_valid("SESSION_001", tmp_path)
+    assert not result.ok
+    assert "voice_fast" in result.reason
+    assert "out of date" in result.reason
+    assert "setup --force" in result.action
+
+
+async def test_config_valid_flags_a_persona_with_no_voice(tmp_path, monkeypatch):
+    import runtime.readiness as mod
+
+    class FakePersona:
+        voice_id = "default"
+
+    monkeypatch.setattr(
+        "intelligence.personas.load_personas", lambda _d: {"scalper": FakePersona()}
+    )
+    result = await mod.gate_config_valid("SESSION_001", tmp_path)
+    assert not result.ok and "names no voice" in result.reason
+
+
+# -- FULL_LIVE_READY is never inferred -------------------------------------
+
+
+def test_full_live_ready_is_not_reached_by_local_checks_alone():
+    """No amount of device enumeration proves a TikTok viewer heard anything.
+    Passing every local gate earns BROADCAST_READY and stops there."""
+    r = Readiness(gates=[ok(n) for n in (*SESSION_GATES, *BROADCAST_GATES)])
+    assert r.level is Level.BROADCAST_READY
+    assert "NOT yet FULL LIVE READY" in r.render()
+
+
+def test_full_live_ready_requires_explicit_human_verification():
+    r = Readiness(gates=[ok(n) for n in (*SESSION_GATES, *BROADCAST_GATES)])
+    r.broadcast_verified = True
+    assert r.level is Level.FULL_LIVE_READY
+    assert "verified by a human" in r.render()
+
+
+def test_human_verification_cannot_paper_over_a_broken_session():
+    """Claiming the broadcast was verified must not promote a session whose
+    core chain is failing."""
+    gates = [ok(n) for n in SESSION_GATES if n != "market_live"]
+    gates += [bad("market_live"), *[ok(n) for n in BROADCAST_GATES]]
+    r = Readiness(gates=gates)
+    r.broadcast_verified = True
+    assert r.level is Level.NOT_READY
+
+
+def test_human_verification_cannot_skip_the_broadcast_route():
+    gates = [ok(n) for n in SESSION_GATES] + [bad("broadcast_route"), ok("comments")]
+    r = Readiness(gates=gates)
+    r.broadcast_verified = True
+    assert r.level is Level.SESSION_READY

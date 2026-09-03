@@ -262,3 +262,159 @@ def test_a_deleted_artifact_forces_repair(tmp_path):
     blob.unlink()
     needed, why = needs_provisioning(state)
     assert needed and "voice:a" in why
+
+
+# -- download integrity (regressions from physical testing) ----------------
+
+
+class _FakeResponse:
+    """Stands in for urlopen's response: declares a length, delivers less."""
+
+    def __init__(self, payload: bytes, declared: int | None):
+        self._payload = payload
+        self.headers = {} if declared is None else {"Content-Length": str(declared)}
+        self._pos = 0
+
+    def read(self, n=-1):
+        chunk = self._payload[self._pos:] if n in (-1, None) else self._payload[self._pos:self._pos + n]
+        self._pos += len(chunk)
+        return chunk
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_a_truncated_download_is_refused_not_blessed(tmp_path, monkeypatch):
+    """Found by physically deleting a voice and letting it re-download: a
+    63.5 MB file arrived as 42.6 MB, was hashed, and was recorded as a verified
+    artifact -- so the corruption became the new "correct" state and no later
+    verification could ever detect it. urllib returns a short read without
+    raising, and copyfileobj stops happily at EOF.
+    """
+    from runtime import provision as prov
+
+    monkeypatch.setattr(
+        prov.urllib.request, "urlopen",
+        lambda *_a, **_kw: _FakeResponse(b"x" * 100, declared=500),
+    )
+    dest = tmp_path / "voice.onnx"
+    with pytest.raises(prov.ProvisionError) as exc:
+        prov._download_once("https://example/voice.onnx", dest)
+
+    assert "truncated" in exc.value.reason
+    assert "100" in exc.value.reason and "500" in exc.value.reason
+    assert not dest.exists(), "a truncated download must not become the artifact"
+    assert not (tmp_path / "voice.onnx.part").exists(), "the .part must be cleaned up"
+
+
+def test_a_complete_download_is_accepted(tmp_path, monkeypatch):
+    from runtime import provision as prov
+
+    monkeypatch.setattr(
+        prov.urllib.request, "urlopen",
+        lambda *_a, **_kw: _FakeResponse(b"x" * 500, declared=500),
+    )
+    dest = tmp_path / "voice.onnx"
+    assert prov._download_once("https://example/voice.onnx", dest) == 500
+    assert dest.read_bytes() == b"x" * 500
+
+
+def test_a_server_without_content_length_is_still_accepted(tmp_path, monkeypatch):
+    """Not every host declares a length; refusing those would break provisioning
+    on mirrors that use chunked encoding."""
+    from runtime import provision as prov
+
+    monkeypatch.setattr(
+        prov.urllib.request, "urlopen",
+        lambda *_a, **_kw: _FakeResponse(b"x" * 42, declared=None),
+    )
+    dest = tmp_path / "voice.onnx"
+    assert prov._download_once("https://example/voice.onnx", dest) == 42
+
+
+def test_a_good_artifact_survives_a_failed_download(tmp_path, monkeypatch):
+    """The rule the whole design rests on: never destroy a working artifact
+    until its replacement has been verified."""
+    from runtime import provision as prov
+
+    dest = tmp_path / "voice.onnx"
+    dest.write_bytes(b"the good original")
+
+    monkeypatch.setattr(
+        prov.urllib.request, "urlopen",
+        lambda *_a, **_kw: _FakeResponse(b"short", declared=999),
+    )
+    with pytest.raises(prov.ProvisionError):
+        prov._download_once("https://example/voice.onnx", dest)
+
+    assert dest.read_bytes() == b"the good original"
+
+
+def test_downloads_are_retried_before_giving_up(tmp_path, monkeypatch):
+    from runtime import provision as prov
+
+    calls = {"n": 0}
+
+    def flaky(*_a, **_kw):
+        calls["n"] += 1
+        payload = b"x" * (500 if calls["n"] >= 3 else 10)
+        return _FakeResponse(payload, declared=500)
+
+    monkeypatch.setattr(prov.urllib.request, "urlopen", flaky)
+    monkeypatch.setattr(prov.time, "sleep", lambda _s: None)
+
+    dest = tmp_path / "voice.onnx"
+    assert prov._download("https://example/voice.onnx", dest, attempts=3) == 500
+    assert calls["n"] == 3
+
+
+def test_provision_verifies_checksums_not_just_size(tmp_path):
+    """Found by corrupting a voice in place: provision short-circuited on
+    looks_present(), which is size-only, so ensure_voice's checksum check was
+    never reached and a corrupt artifact reported as "already installed"."""
+    blob = tmp_path / "voice.onnx"
+    blob.write_bytes(b"a" * 256)
+    art = Artifact(kind="voice", artifact_id="voice:v", path=str(blob),
+                   bytes=256, sha256=sha256_file(blob))
+
+    blob.write_bytes(b"b" * 256)  # same size, different content
+    assert art.looks_present(), "size-only check cannot see this"
+    assert not art.verify()[0], "the checksum must"
+
+
+def test_the_provisioned_salt_is_actually_used(tmp_path, monkeypatch):
+    """Regression: provisioning generated a per-install salt and wrote it to
+    state, but live.py read os.environ["AUTHOR_SALT"] with a "change-me"
+    default and never looked at it. The salt existed and did nothing, so every
+    install hashed viewer handles identically -- which is the exact problem it
+    was added to solve."""
+    import shared.provisioning as mod
+
+    monkeypatch.delenv("AUTHOR_SALT", raising=False)
+    monkeypatch.setattr(mod, "state_path", lambda: tmp_path / "provisioning.json")
+
+    state = Provisioning()
+    state.author_salt = "0123456789abcdef0123456789abcdef"
+    save(state, tmp_path / "provisioning.json")
+
+    assert mod.author_salt() == "0123456789abcdef0123456789abcdef"
+
+
+def test_an_explicit_env_salt_overrides_the_provisioned_one(tmp_path, monkeypatch):
+    import shared.provisioning as mod
+
+    monkeypatch.setenv("AUTHOR_SALT", "operator-supplied")
+    monkeypatch.setattr(mod, "state_path", lambda: tmp_path / "provisioning.json")
+    assert mod.author_salt() == "operator-supplied"
+
+
+def test_an_unprovisioned_machine_falls_back_and_warns(tmp_path, monkeypatch, caplog):
+    import shared.provisioning as mod
+
+    monkeypatch.delenv("AUTHOR_SALT", raising=False)
+    monkeypatch.setattr(mod, "state_path", lambda: tmp_path / "absent.json")
+    assert mod.author_salt() == "change-me"
+    assert "provision" in caplog.text.lower()

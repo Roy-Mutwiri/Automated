@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -37,6 +38,11 @@ log = logging.getLogger(__name__)
 HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 OLLAMA_DEFAULT = "http://127.0.0.1:11434"
 DOWNLOAD_TIMEOUT_S = 60.0
+#: Truncated reads are a normal fact of real networks -- hotel wifi, tethering,
+#: a proxy that closes early. Now that a short read is refused rather than
+#: silently blessed, a retry is what turns that from a hard failure into a
+#: recoverable one.
+DOWNLOAD_ATTEMPTS = 3
 
 
 class ProvisionError(RuntimeError):
@@ -247,7 +253,23 @@ def ensure_model(
 # -- voices ----------------------------------------------------------------
 
 
-def _download(url: str, dest: Path) -> int:
+def _download(url: str, dest: Path, attempts: int = DOWNLOAD_ATTEMPTS) -> int:
+    """Download with bounded retries; see _download_once for the integrity rules."""
+    last: ProvisionError | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return _download_once(url, dest)
+        except ProvisionError as exc:
+            last = exc
+            if attempt < attempts:
+                log.warning("download attempt %d/%d failed (%s); retrying",
+                            attempt, attempts, exc.reason)
+                time.sleep(2.0 * attempt)
+    assert last is not None
+    raise last
+
+
+def _download_once(url: str, dest: Path) -> int:
     """Download to `dest`, via a .part file, never touching a good `dest`.
 
     Returns the byte count. The temporary file lives beside the target so the
@@ -256,13 +278,30 @@ def _download(url: str, dest: Path) -> int:
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_suffix(dest.suffix + ".part")
     try:
-        with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_S) as resp, \
-                part.open("wb") as fh:
+        with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_S) as resp,                 part.open("wb") as fh:
+            declared = resp.headers.get("Content-Length")
+            expected = int(declared) if declared and declared.isdigit() else None
             shutil.copyfileobj(resp, fh, length=1 << 20)
+
         size = part.stat().st_size
         if size == 0:
             raise ProvisionError("voice", f"{url} returned an empty file",
                                  "check the network and try again")
+
+        # A connection dropped mid-stream does not always raise: urllib can
+        # return a short read and copyfileobj stops happily at EOF. Without
+        # this check a truncated file is written, hashed, and recorded as a
+        # verified artifact -- so the corruption becomes the new "correct"
+        # state and no later verification can ever detect it. Observed here:
+        # a 63.5 MB voice silently arriving as 42.6 MB and being blessed.
+        if expected is not None and size != expected:
+            raise ProvisionError(
+                "voice",
+                f"download of {url} was truncated: got {size} bytes, "
+                f"server declared {expected}",
+                "check the network connection and run provisioning again",
+            )
+
         part.replace(dest)
         return size
     except ProvisionError:
@@ -337,16 +376,48 @@ def required_voices(session_id: str | None = None) -> list[str]:
     """
     import yaml
 
-    mapping = personas_voices()
     try:
         cfg = yaml.safe_load(config_path("sessions.yaml").read_text(encoding="utf-8"))
         sessions = (cfg or {}).get("sessions") or []
     except Exception:
-        return sorted(set(mapping.values()))
+        return sorted(set(personas_voices().values()))
 
     if session_id:
         sessions = [s for s in sessions if s.get("session_id") == session_id]
-    wanted = {mapping[s["persona_id"]] for s in sessions if s.get("persona_id") in mapping}
+
+    # Resolve through the persona configs the SESSION reads, not through the
+    # installer's DEFAULT_PROFILE. The two disagreed on a machine whose config
+    # predated the real voice ids, so provisioning downloaded one voice while
+    # the session asked for another and died on the first utterance.
+    catalogue = voice_catalogue()
+    wanted: set[str] = set()
+    try:
+        from intelligence.personas import load_personas
+        from shared.paths import config_dir
+
+        personas = load_personas(config_dir("personas"))
+    except Exception:
+        personas = {}
+
+    fallback = personas_voices()
+    for spec in sessions:
+        persona_id = spec.get("persona_id")
+        if not persona_id:
+            continue
+        persona = personas.get(persona_id)
+        voice = getattr(persona, "voice_id", None) if persona else None
+        if voice in catalogue:
+            wanted.add(voice)
+        elif persona_id in fallback:
+            # Stale or placeholder config: readiness reports this properly, but
+            # provisioning should still fetch something usable rather than
+            # nothing at all.
+            log.warning(
+                "persona %r names voice %r, which is not a real voice; "
+                "provisioning %r instead. Run `setup --force` to refresh config.",
+                persona_id, voice, fallback[persona_id],
+            )
+            wanted.add(fallback[persona_id])
     return sorted(wanted)
 
 
@@ -413,10 +484,20 @@ def provision(
         echo(f"\n  Voices needed: {', '.join(wanted) or 'none'}")
         for voice_id in wanted:
             existing = state.artifacts.get(f"voice:{voice_id}")
-            if not force and existing and existing.looks_present():
+            # Full checksum, not the cheap size check. `provision` is an
+            # explicit repair action, and the whole point of recording a hash
+            # is to catch corruption that leaves the size unchanged -- a
+            # partially rewritten file passes looks_present() every time.
+            # Hashing 60 MB costs a fraction of a second; the per-launch fast
+            # path in needs_provisioning() still uses the cheap check.
+            intact, detail = existing.verify() if existing else (False, "not recorded")
+            if not force and intact:
                 echo(f"    {voice_id} ... already installed")
                 continue
-            echo(f"    {voice_id} ... downloading (about 60 MB)")
+            if existing and not intact:
+                echo(f"    {voice_id} ... FAILED verification ({detail}); repairing")
+            else:
+                echo(f"    {voice_id} ... downloading (about 60 MB)")
             ensure_voice(voice_id, voices_dir, state, force=force)
             save(state)
 

@@ -50,9 +50,26 @@ SILENCE_FLOOR = 0.01
 
 
 class Level(str, Enum):
+    """Three levels, deliberately distinct.
+
+    NOT_READY        cannot run a real session at all.
+    SESSION_READY    the host genuinely speaks real words about real live
+                     prices, through real synthesis, to a real audio device.
+                     Nothing is simulated. It is not reaching an audience.
+    BROADCAST_READY  additionally, audio is routed to a device broadcast
+                     software can capture, and a comment source is connected.
+    FULL_LIVE_READY  additionally, the route has been *physically verified*
+                     end to end -- a human confirmed a viewer heard it.
+
+    The last one can never be inferred from local checks. No amount of device
+    enumeration proves a TikTok viewer heard anything, so it is only ever set
+    by explicit human confirmation and is otherwise absent.
+    """
+
     NOT_READY = "not_ready"
     SESSION_READY = "session_ready"
     BROADCAST_READY = "broadcast_ready"
+    FULL_LIVE_READY = "full_live_ready"
 
 
 @dataclass
@@ -90,12 +107,19 @@ class Readiness:
     def failed(self, names: tuple[str, ...]) -> list[GateResult]:
         return [g for g in self.gates if g.name in names and not g.ok]
 
+    #: Set only by a human who confirmed a viewer actually heard the audio.
+    #: See Level.FULL_LIVE_READY -- this is not something a local check can
+    #: establish, so it is never inferred.
+    broadcast_verified: bool = False
+
     @property
     def level(self) -> Level:
         if self.failed(SESSION_GATES):
             return Level.NOT_READY
         if self.failed(BROADCAST_GATES):
             return Level.SESSION_READY
+        if self.broadcast_verified:
+            return Level.FULL_LIVE_READY
         return Level.BROADCAST_READY
 
     def render(self) -> str:
@@ -109,8 +133,12 @@ class Readiness:
             names = ", ".join(g.name for g in self.failed(BROADCAST_GATES))
             out.append("  SESSION READY -- the host can speak about real prices.")
             out.append(f"  Broadcasting is not set up ({names}).")
+        elif level is Level.BROADCAST_READY:
+            out.append("  BROADCAST READY -- audio is routed to a capture device.")
+            out.append("  NOT yet FULL LIVE READY: nobody has confirmed a viewer")
+            out.append("  actually heard it, and that cannot be checked from here.")
         else:
-            out.append("  BROADCAST READY.")
+            out.append("  FULL LIVE READY -- the broadcast path was verified by a human.")
         return "\n".join(out)
 
     def to_json(self) -> dict:
@@ -178,10 +206,36 @@ async def gate_config_valid(session_id: str, voices_dir: Path) -> GateResult:
         return GateResult(name, False, reason=f"persona {persona_id!r} has no config",
                           action=f"expected {persona_file}")
 
-    voice_id = _voice_for_persona(persona_id)
-    if voice_id is None:
-        return GateResult(name, False, reason=f"no voice mapped for persona {persona_id!r}",
-                          action="add it to DEFAULT_PROFILE in scripts/get_voices.py")
+    # Read the voice the SESSION will actually use, from the same loader
+    # live.py uses. This gate previously read DEFAULT_PROFILE in
+    # scripts/get_voices.py, which is a different mapping -- so it validated
+    # one voice while the session loaded another, and passed while the session
+    # was guaranteed to fail. A gate that checks something other than the code
+    # under test is worse than no gate.
+    try:
+        from intelligence.personas import load_personas
+
+        persona = load_personas(config_dir("personas"))[persona_id]
+        voice_id = persona.voice_id
+    except Exception as exc:
+        return GateResult(name, False, reason=f"persona {persona_id!r} is unreadable: {exc}",
+                          action="run: GoldLive.exe setup --force")
+
+    if not voice_id or voice_id == "default":
+        return GateResult(name, False, reason=f"persona {persona_id!r} names no voice",
+                          action=f"set voice_id in {persona_file}")
+
+    # A voice that is not in the catalogue cannot be provisioned, so no amount
+    # of repair will fix it. That means stale configuration, not a missing
+    # download -- seed_config only copies files that are ABSENT, so a config
+    # written by an older version is kept forever and silently misread.
+    if voice_id not in _catalogue_ids():
+        return GateResult(
+            name, False,
+            reason=(f"persona {persona_id!r} names voice {voice_id!r}, which is not a "
+                    "real voice -- this configuration is out of date"),
+            action="run: GoldLive.exe setup --force   (then: GoldLive.exe provision)",
+        )
 
     model = voices_dir / f"{voice_id}.onnx"
     if not model.is_file():
@@ -193,11 +247,23 @@ async def gate_config_valid(session_id: str, voices_dir: Path) -> GateResult:
     return GateResult(name, True, evidence=f"{session_id} -> {persona_id} -> {voice_id}")
 
 
-def _voice_for_persona(persona_id: str) -> str | None:
+def _catalogue_ids() -> set[str]:
+    """Voice ids that can actually be downloaded."""
     try:
-        from scripts.get_voices import DEFAULT_PROFILE
+        from scripts.get_voices import CATALOGUE
 
-        return DEFAULT_PROFILE.get(persona_id)
+        return set(CATALOGUE)
+    except Exception:
+        return set()
+
+
+def _voice_for_persona(persona_id: str) -> str | None:
+    """The voice a persona actually uses, from its config -- not from the
+    installer's default mapping, which can and did disagree."""
+    try:
+        from intelligence.personas import load_personas
+
+        return load_personas(config_dir("personas"))[persona_id].voice_id
     except Exception:
         return None
 

@@ -339,3 +339,31 @@ def load(path: Path | None = None) -> Provisioning:
         return Provisioning()
 
     return Provisioning.from_json(raw)
+
+
+def author_salt() -> str:
+    """The salt used to hash viewer handles, resolved once per process.
+
+    Order: an explicit AUTHOR_SALT override, then the per-install value written
+    at provisioning time, then the placeholder.
+
+    The placeholder matters: without a per-install salt every copy of the
+    application hashes the same handle to the same value, so hashes are
+    correlatable across installs and the pseudonymisation is largely
+    decorative. Provisioning generates 16 random bytes precisely to stop that,
+    but the value was being written and never read.
+    """
+    override = os.environ.get("AUTHOR_SALT")
+    if override:
+        return override
+    try:
+        stored = load().author_salt
+    except Exception:
+        stored = None
+    if stored:
+        return stored
+    log.warning(
+        "no per-install author salt found; viewer handles will hash "
+        "identically to every other install. Run: GoldLive.exe provision"
+    )
+    return "change-me"
