@@ -20,5 +20,13 @@ One file per request, named `NNN-short-slug.md`:
 Open requests stay here until the owning terminal implements or rejects them.
 A rejection is recorded in the same file, with the reason.
 
-No requests are open. The camera terminal has not needed a shared-interface
-change: it consumes `pose` read-only and owns everything else it touches.
+## Open
+
+* [001-head-translation-channels](001-head-translation-channels.md) - the 2D
+  face adapter pins `tx`/`ty`/`scale`, so the presenter's torso lean never
+  reaches the picture and his apparent face width varies 2.6% over five
+  minutes. Asks the camera terminal for a safe envelope, or an explicit
+  rejection recording that the body rig is the answer. Owner: camera terminal.
+
+The camera terminal has not needed a shared-interface change of its own: it
+consumes `pose` read-only and owns everything else it touches.

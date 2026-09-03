@@ -192,9 +192,19 @@ def main() -> int:
 
     if writer is not None:
         writer.release()
+        # Written at half width, deliberately. These are review thumbnails
+        # under six *fixed* filenames, so every render pass rewrites all six
+        # and each new blob stays in git history forever. At full 1080p that is
+        # 15 MB added per pass, and because no single commit looks unreasonable
+        # nothing would ever flag it - the slow-motion version of the 602 MB
+        # frame dump. The full-resolution frames are in the video, which is
+        # what to open when a detail actually matters.
         for st, frame in shots.items():
             if frame is not None:
-                cv2.imwrite(f"silent_human_t{int(st):03d}s.png", frame)
+                thumb = cv2.resize(frame, (frame.shape[1] // 2, frame.shape[0] // 2),
+                                   interpolation=cv2.INTER_AREA)
+                cv2.imwrite(f"silent_human_t{int(st):03d}s.png", thumb,
+                            [cv2.IMWRITE_PNG_COMPRESSION, 9])
         print(f"[silent] video -> {args.video}")
 
     with open(args.csv, "w", newline="", encoding="utf-8") as fh:
