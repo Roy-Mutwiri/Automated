@@ -167,7 +167,13 @@ def engine_loop(width, height, samples, fps_cap):
                 engine.set_state(s)
 
         pose = engine.update(dt)
-        world.repose(pose)
+        # The postural lean rides on HumanMotionState, not on AvatarPose - the
+        # face-facing pose has no channel for it. Read it here and hand the
+        # scalar to the world, so world.py stays independent of the movement
+        # terminal's schema.
+        engagement = getattr(getattr(engine.motion, "posture", None),
+                             "engagement", 0.0)
+        world.repose(pose, engagement=engagement)
 
         cam_ob = world.cameras.get(want["camera"])
         if cam_ob is not None:
