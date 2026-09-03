@@ -61,6 +61,10 @@ Anon/logs/
 .DS_Store
 Thumbs.db
 
+# Qt/Chromium writes locale warnings here when a Qt-based tool starts in the
+# repo root. Runtime noise from the toolchain, no project content.
+/debug.log
+
 # --- Vendored upstream projects ---------------------------------------------
 # Cloned from upstream, not our code. Pinned commit recorded in
 # Anon/docs/avatar_model_research.md so the environment is reproducible.
