@@ -64,10 +64,23 @@ SEATED_JOINT_LIMITS: dict[str, tuple[tuple[float, float], ...]] = {
     "elbow_r":     ((-2.0, 150.0), (-25.0, 25.0), (-15.0, 15.0)),
     "wrist_l":     ((-60.0, 60.0), (-25.0, 25.0), (-30.0, 30.0)),
     "wrist_r":     ((-60.0, 60.0), (-25.0, 25.0), (-30.0, 30.0)),
-    "neck":        ((-25.0, 30.0), (-45.0, 45.0), (-22.0, 22.0)),
-    "head":        ((-20.0, 22.0), (-35.0, 35.0), (-25.0, 25.0)),
-    "eye_l":       ((-30.0, 30.0), (-42.0, 42.0), (-2.0, 2.0)),
-    "eye_r":       ((-30.0, 30.0), (-42.0, 42.0), (-2.0, 2.0)),
+    # Widened after the attention targets were spread out. A mouse sits 30
+    # degrees below the lens and a keyboard 34, so looking at one's own hands
+    # legitimately needs more downward travel than the first pass allowed - the
+    # limits were clamping ordinary behaviour 82 times in five minutes, which
+    # means they were describing a body that cannot look at its own desk.
+    "neck":        ((-25.0, 34.0), (-45.0, 45.0), (-22.0, 22.0)),
+    "head":        ((-22.0, 26.0), (-35.0, 35.0), (-25.0, 25.0)),
+    # Asymmetric on purpose: the eye travels further down than up. Looking at a
+    # keyboard 34 degrees below the lens is ordinary, looking 34 degrees up is
+    # not.
+    # Deliberately just outside the gaze system's own clamp (+-0.45 / +-0.55
+    # gaze units, i.e. +-37.5 / +-45.8 degrees), which is the real ocular
+    # authority and predates this table. Setting these tighter made the
+    # backstop bind during ordinary gaze - a limit that fires in normal
+    # operation is not a backstop, it is a second, disagreeing opinion.
+    "eye_l":       ((-38.5, 38.5), (-46.5, 46.5), (-2.5, 2.5)),
+    "eye_r":       ((-38.5, 38.5), (-46.5, 46.5), (-2.5, 2.5)),
 }
 
 

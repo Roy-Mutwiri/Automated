@@ -69,38 +69,71 @@ class StateSpec:
 # are long, reading a display is medium, thinking is short, and the positive
 # state is brief because a smile that outlasts its cause reads as a mask.
 IDLE_STATE_GRAPH: dict[str, StateSpec] = {
+    # The intention layer. A state is not a label, it is a *reason* for the
+    # next few seconds of attention, posture and blink rate - which is why the
+    # successors are not uniform: finishing a read is a reason to settle back,
+    # and checking chat is a reason to come back to the audience.
     "IDLE_ATTENTIVE": StateSpec(
-        min_duration=12.0, median_duration=38.0, max_duration=150.0,
-        successors={"IDLE_RELAXED": 2.2, "READING": 1.6, "FOCUSED": 1.0,
-                    "THINKING": 0.7, "MILD_POSITIVE": 0.45},
+        min_duration=6.0, median_duration=16.0, max_duration=46.0,
+        successors={"READING": 2.4, "CHECKING_CHAT": 1.5, "WAITING": 1.3,
+                    "FOCUSED": 1.1, "IDLE_RELAXED": 1.0, "THINKING": 0.7,
+                    "MILD_POSITIVE": 0.4},
     ),
     "IDLE_RELAXED": StateSpec(
-        min_duration=14.0, median_duration=46.0, max_duration=180.0,
-        successors={"IDLE_ATTENTIVE": 3.0, "READING": 1.1, "THINKING": 0.6,
-                    "MILD_POSITIVE": 0.5},
+        min_duration=8.0, median_duration=22.0, max_duration=60.0,
+        successors={"IDLE_ATTENTIVE": 2.0, "WAITING": 1.6, "READING": 1.3,
+                    "CHECKING_CHAT": 0.9, "THINKING": 0.6},
     ),
     "READING": StateSpec(
-        min_duration=4.0, median_duration=11.0, max_duration=34.0,
-        successors={"IDLE_ATTENTIVE": 2.6, "FOCUSED": 1.4, "IDLE_RELAXED": 1.0,
-                    "MILD_POSITIVE": 0.4},
-        cooldown=20.0,
+        min_duration=7.0, median_duration=19.0, max_duration=48.0,
+        # Having read something, he comes back to the audience or sits back.
+        successors={"IDLE_ATTENTIVE": 2.2, "FOCUSED": 1.6, "IDLE_RELAXED": 1.4,
+                    "CHECKING_CHAT": 1.0, "MILD_POSITIVE": 0.5,
+                    "THINKING": 0.5},
+        cooldown=14.0,
     ),
-    "FOCUSED": StateSpec(
-        min_duration=6.0, median_duration=17.0, max_duration=52.0,
-        successors={"IDLE_ATTENTIVE": 2.4, "READING": 1.5, "IDLE_RELAXED": 1.2},
+    "CHECKING_CHAT": StateSpec(
+        min_duration=2.5, median_duration=5.5, max_duration=13.0,
+        successors={"IDLE_ATTENTIVE": 2.8, "READING": 1.2,
+                    "MILD_POSITIVE": 0.9, "IDLE_RELAXED": 0.8},
+        cooldown=22.0,
+    ),
+    "WAITING": StateSpec(
+        min_duration=8.0, median_duration=20.0, max_duration=55.0,
+        successors={"IDLE_ATTENTIVE": 2.2, "IDLE_RELAXED": 1.8,
+                    "CHECKING_CHAT": 1.2, "READING": 1.0},
         cooldown=25.0,
     ),
+    "FOCUSED": StateSpec(
+        min_duration=6.0, median_duration=15.0, max_duration=40.0,
+        # Concentration is tiring; it resolves into sitting back.
+        successors={"IDLE_RELAXED": 2.0, "IDLE_ATTENTIVE": 1.8, "READING": 1.4,
+                    "WAITING": 0.8},
+        cooldown=20.0,
+    ),
     "THINKING": StateSpec(
-        min_duration=2.2, median_duration=5.0, max_duration=13.0,
-        successors={"IDLE_ATTENTIVE": 3.2, "READING": 1.0, "IDLE_RELAXED": 0.8},
-        cooldown=45.0,
+        min_duration=2.0, median_duration=4.5, max_duration=11.0,
+        successors={"IDLE_ATTENTIVE": 2.6, "READING": 1.4, "FOCUSED": 0.9,
+                    "IDLE_RELAXED": 0.8},
+        cooldown=38.0,
     ),
     "MILD_POSITIVE": StateSpec(
-        min_duration=1.8, median_duration=4.2, max_duration=9.0,
-        successors={"IDLE_ATTENTIVE": 3.0, "IDLE_RELAXED": 1.6},
-        cooldown=70.0,
+        min_duration=1.8, median_duration=4.0, max_duration=9.0,
+        successors={"IDLE_ATTENTIVE": 2.8, "IDLE_RELAXED": 1.4,
+                    "CHECKING_CHAT": 0.6},
+        cooldown=55.0,
     ),
 }
+
+
+# Intentions that point him at a screen. Chaining these indefinitely produces
+# exactly the failure this whole cycle is about: measured pitch sat at -15 to
+# -17 degrees for the last two minutes of a five-minute clip, because READING
+# and FOCUSED kept handing off to each other and he never looked up.
+#
+# People surface. Whatever they are reading, they periodically lift their eyes.
+SCREEN_STATES = frozenset({"READING", "FOCUSED", "CHECKING_CHAT"})
+MAX_SCREEN_RUN = 42.0     # seconds before surfacing is forced
 
 
 class StateScheduler:
@@ -114,6 +147,7 @@ class StateScheduler:
         self._last_exit: dict[str, float] = {}
         self.transitions = 0
         self._pending: str | None = None
+        self._screen_run = 0.0
 
     def _sample_duration(self, name: str, rng) -> float:
         spec = self.graph[name]
@@ -128,6 +162,24 @@ class StateScheduler:
 
     def _choose_successor(self, now: float, rng) -> str:
         spec = self.graph[self.state]
+
+        # Surface. After a long uninterrupted stretch of screen-directed
+        # intention he looks up, whatever the weights say - which is what a
+        # person does and what the graph on its own would not.
+        if self._screen_run >= MAX_SCREEN_RUN:
+            self._screen_run = 0.0
+            surf = {k: v for k, v in
+                    {"IDLE_ATTENTIVE": 3.0, "IDLE_RELAXED": 1.6,
+                     "WAITING": 1.2, "THINKING": 0.5}.items()
+                    if k in self.graph}
+            total = sum(surf.values())
+            r = rng.uniform(0.0, total)
+            acc = 0.0
+            for name, w in surf.items():
+                acc += w
+                if r <= acc:
+                    return name
+
         options = {}
         for name, w in spec.successors.items():
             if name not in self.graph:
@@ -175,6 +227,10 @@ class StateScheduler:
             return None
         if now < self.leave_at:
             return None
+
+        held = now - self.entered_at
+        self._screen_run = (self._screen_run + held
+                            if self.state in SCREEN_STATES else 0.0)
 
         nxt = self._choose_successor(now, rng)
         self._last_exit[self.state] = now

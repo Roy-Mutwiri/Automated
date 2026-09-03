@@ -62,15 +62,21 @@ SEATED_NEUTRAL: dict[str, tuple[float, float, float]] = {
 # How the body changes from settled-back (-1) to forward-focus (+1), in degrees
 # per unit of engagement. Leaning forward is mostly hips and lumbar, not neck:
 # a lean driven from the neck is a person craning, which reads as strain.
+# Roughly doubled after watching the output: the previous amplitudes were
+# physically defensible and perceptually invisible. Across the full range they
+# moved the head about 8 cm, which at a normal viewing size is nothing. The
+# point of a posture state is that a viewer can tell the difference between
+# "leaning in at something" and "sitting back", and if they cannot, the state
+# does not exist as far as the product is concerned.
 ENGAGEMENT_COUPLING: dict[str, tuple[float, float, float]] = {
-    "pelvis":      (-3.6, 0.0, 0.0),
-    "spine_lower": (-2.8, 0.0, 0.0),
-    "spine_mid":   (-1.9, 0.0, 0.0),
-    "chest":       (-1.2, 0.0, 0.0),
-    "clavicle_l":  (-0.5, 0.0, 0.0),
-    "clavicle_r":  (-0.5, 0.0, 0.0),
-    "neck":        (+1.4, 0.0, 0.0),
-    "head":        (+0.6, 0.0, 0.0),
+    "pelvis":      (-6.0, 0.0, 0.0),
+    "spine_lower": (-5.2, 0.0, 0.0),
+    "spine_mid":   (-3.8, 0.0, 0.0),
+    "chest":       (-2.4, 0.0, 0.0),
+    "clavicle_l":  (-1.2, 0.0, +0.4),
+    "clavicle_r":  (-1.2, 0.0, -0.4),
+    "neck":        (+2.4, 0.0, 0.0),
+    "head":        (+1.1, 0.0, 0.0),
 }
 
 
@@ -112,8 +118,8 @@ class _Shift:
 COMFORT_SHIFTS = {
     "SHOULDER_SETTLE": dict(
         weight=1.4, duration=(1.1, 2.2),
-        targets={"clavicle_l": (0.0, 0.0, -1.6), "clavicle_r": (0.0, 0.0, +0.9),
-                 "shoulder_l": (+0.8, 0.0, -0.7), "shoulder_r": (+0.5, 0.0, +0.4)},
+        targets={"clavicle_l": (0.0, 0.0, -3.0), "clavicle_r": (0.0, 0.0, +1.8),
+                 "shoulder_l": (+1.6, 0.0, -1.4), "shoulder_r": (+1.0, 0.0, +0.8)},
     ),
     "PELVIS_COMFORT_SHIFT": dict(
         weight=1.0, duration=(1.6, 3.0),
@@ -121,13 +127,17 @@ COMFORT_SHIFTS = {
     ),
     "SMALL_LEAN_FORWARD": dict(
         weight=0.9, duration=(2.2, 4.0),
-        targets={"pelvis": (-2.4, 0.0, 0.0), "spine_lower": (-1.8, 0.0, 0.0),
-                 "spine_mid": (-1.2, 0.0, 0.0), "neck": (+0.9, 0.0, 0.0)},
+        targets={"pelvis": (-4.2, 0.0, 0.0), "spine_lower": (-3.4, 0.0, 0.0),
+                 "spine_mid": (-2.4, 0.0, 0.0), "neck": (+1.6, 0.0, 0.0)},
     ),
     "SETTLE_BACK": dict(
         weight=1.1, duration=(2.6, 4.6),
-        targets={"pelvis": (+2.2, 0.0, 0.0), "spine_lower": (+1.7, 0.0, 0.0),
-                 "chest": (+0.8, 0.0, 0.0)},
+        targets={"pelvis": (+3.8, 0.0, 0.0), "spine_lower": (+3.0, 0.0, 0.0),
+                 "chest": (+1.5, 0.0, 0.0)},
+    ),
+    "MOVE_MOUSE_SMALL": dict(
+        weight=2.2, duration=(0.55, 1.1),
+        targets={"clavicle_r": (0.0, 0.0, -0.35), "shoulder_r": (+0.5, 0.0, 0.0)},
     ),
     "HAND_REPOSITION": dict(
         weight=0.8, duration=(0.7, 1.4),
@@ -135,10 +145,20 @@ COMFORT_SHIFTS = {
     ),
     "TORSO_ROTATE": dict(
         weight=0.6, duration=(1.8, 3.2),
-        targets={"spine_lower": (0.0, +1.5, 0.0), "spine_mid": (0.0, +1.2, 0.0),
-                 "chest": (0.0, +0.9, 0.0)},
+        targets={"spine_lower": (0.0, +2.6, 0.0), "spine_mid": (0.0, +2.1, 0.0),
+                 "chest": (0.0, +1.6, 0.0)},
     ),
 }
+
+
+# How far accumulated comfort adjustments may carry a joint from neutral, and
+# how quickly they unwind.
+HELD_LIMIT_DEG = 2.2
+HELD_DECAY_TIME = 110.0
+
+# Engagement mean-reverts toward this. A posture that wanders freely is a
+# posture that eventually parks somewhere and stays.
+ENGAGEMENT_CENTRE_PULL = 0.35
 
 
 def _min_jerk(t: float) -> float:
@@ -164,6 +184,8 @@ class BodySystem:
         self._next_at = None
         self._recent: list[str] = []
         self._left_rest = "desk_rest_l"
+        self._mouse_goal = (0.0, 0.0, 0.0)
+        self._mouse_now = (0.0, 0.0, 0.0)
         self.shift_count = 0
 
         # How far the pelvis may slide back before the spine meets the
@@ -228,6 +250,19 @@ class BodySystem:
         if len(self._recent) > 4:
             self._recent.pop(0)
 
+        if kind == "MOVE_MOUSE_SMALL":
+            # A purposeful nudge: the hand stays on the mouse and moves it a
+            # centimetre or two, then holds. Not jitter - it happens, it stops,
+            # and it stays where it ended up.
+            rng = drives.rng
+            self._mouse_goal = (
+                self._mouse_goal[0] + rng.uniform(-0.55, 0.55),
+                0.0,
+                self._mouse_goal[2] + rng.uniform(-0.40, 0.40),
+            )
+            self._mouse_goal = (
+                max(min(self._mouse_goal[0], 1.1), -1.1), 0.0,
+                max(min(self._mouse_goal[2], 0.9), -0.9))
         if kind == "HAND_REPOSITION":
             # The left hand moves between the desk and the lap. Rare, and it
             # persists - a hand that springs back was not repositioned.
@@ -263,7 +298,9 @@ class BodySystem:
         self._engagement_target += (pull - self._engagement_target) * min(
             drives.dt / 6.0, 1.0)
         wander = self._drift.step(drives.dt, drives.rng)
-        want = max(min(self._engagement_target + wander, 1.0), -1.0)
+        want = self._engagement_target + wander
+        want -= ENGAGEMENT_CENTRE_PULL * want * min(drives.dt / 8.0, 1.0)
+        want = max(min(want, 1.0), -1.0)
         self._engagement += (want - self._engagement) * (
             1.0 - math.exp(-drives.dt / 3.2))
 
@@ -302,13 +339,22 @@ class BodySystem:
                 still_active.append(sh)
         self._active = still_active
 
-        # 4. Held offsets decay very slowly back toward the neutral pose, so
-        #    adjustments accumulate for minutes rather than forever.
-        decay = math.exp(-drives.dt / 240.0)
+        # 4. Held offsets decay back toward the neutral pose, and are bounded.
+        #
+        # Both parts matter. Without the bound, successive comfort shifts in the
+        # same direction accumulate into a permanent lean: measured pose pitch
+        # drifted from -3 degrees in the first minute to -17 in the fifth and
+        # stayed there, which read as the presenter getting stuck looking down.
+        # Without the decay they would never come back at all.
+        #
+        # 240 s was too slow to unwind a run of same-signed shifts inside a
+        # five-minute clip.
+        decay = math.exp(-drives.dt / HELD_DECAY_TIME)
         for joint, held in self._held.items():
             j = joints.get(joint)
             for i in range(3):
                 held[i] *= decay
+                held[i] = max(min(held[i], HELD_LIMIT_DEG), -HELD_LIMIT_DEG)
             if j is not None:
                 j.rx += held[0]
                 j.ry += held[1]
@@ -318,8 +364,14 @@ class BodySystem:
         # the mouse, the other resting on the desk. Hands that float in space
         # are the clearest sign a body is not really in a room, so the default
         # is contact, not free.
+        # The mouse eases toward wherever the last nudge left it.
+        k = 1.0 - math.exp(-drives.dt / 0.30)
+        self._mouse_now = tuple(
+            self._mouse_now[i] + (self._mouse_goal[i] - self._mouse_now[i]) * k
+            for i in range(3))
         motion.hand_r.contact = "mouse"
         motion.hand_r.contact_weight = 1.0
+        motion.hand_r.offset = self._mouse_now
         motion.hand_l.contact = self._left_rest
         motion.hand_l.contact_weight = 1.0
 

@@ -356,6 +356,14 @@ class BehaviorEngine:
         self.motion = motion
         pose = to_avatar_pose(motion)
 
+        # Anatomy on the renderer-facing pose, last of all.
+        #
+        # This call went missing in the motion refactor - imported and never
+        # invoked - and nothing caught it, because until head recruitment was
+        # increased no pose ever came close to a limit. An unused import is a
+        # quiet way to lose a safety stage.
+        apply_constraints(pose)
+
         after = (
             self.blink.blink_count,
             self.attention.shift_count,

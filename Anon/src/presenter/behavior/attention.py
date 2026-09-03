@@ -56,6 +56,30 @@ __all__ = ["AttentionTarget", "AttentionSystem", "DEFAULT_TARGETS"]
 # (0.42 in profile units). Measured against the expression calibration: 0.42
 # puts the irises at their natural lateral limit on this face.
 OCULAR_LIMIT_DEG = 35.0
+
+# What the eye can actually reach in its orbit, in degrees. Asymmetric
+# vertically: the eye travels further down than up.
+OCULAR_MAX_AZ = 41.0
+OCULAR_MAX_UP = 27.0
+OCULAR_MAX_DOWN = 39.0
+
+
+def _hold_eye(az: float, el: float) -> tuple[float, float, float, float]:
+    """Clamp an eye residual to the orbit, returning the overflow.
+
+    During a large target change the eyes lead and the head lags, so the
+    residual the eye is asked for can briefly exceed its range - going from a
+    keyboard 29 degrees down to a thinking point 14 up asks the eye for 43
+    degrees of upward travel before the neck has moved.
+
+    The eye simply cannot do that, so it is clamped and the gaze is briefly
+    short of its target until the head arrives. That is what happens to a
+    person, too. Handing the excess straight to the head was tried and is
+    wrong: it teleports the neck, which the frame-jump test caught immediately.
+    """
+    caz = min(max(az, -OCULAR_MAX_AZ), OCULAR_MAX_AZ)
+    cel = min(max(el, -OCULAR_MAX_DOWN), OCULAR_MAX_UP)
+    return caz, cel, az - caz, el - cel
 GAZE_UNITS_PER_DEG = 0.42 / OCULAR_LIMIT_DEG
 
 # How much a target's appeal decays per recent visit, and the extra penalty for
@@ -97,13 +121,36 @@ class AttentionTarget:
 # only a few degrees apart. SECOND_DISPLAY and CHAT are the off-axis glances
 # that make a streamer look like they are working rather than performing.
 DEFAULT_TARGETS: tuple[AttentionTarget, ...] = (
-    AttentionTarget("LENS", 0.0, 0.6, dwell_median=9.3, weight=3.4, spread=0.9),
-    AttentionTarget("MAIN_DISPLAY", -2.0, -4.5, dwell_median=5.8, weight=2.2, spread=2.2),
-    AttentionTarget("SECOND_DISPLAY", -21.0, -3.5, dwell_median=2.8, weight=0.75, spread=3.0),
-    AttentionTarget("CHAT", 17.5, -5.5, dwell_median=3.3, weight=0.7, spread=2.6),
-    AttentionTarget("DESK", -6.0, -17.0, dwell_median=2.0, weight=0.5, spread=3.2),
-    AttentionTarget("MIDDLE_DISTANCE", 10.0, 8.0, dwell_median=3.8, weight=0.5, spread=4.0),
+    AttentionTarget("CAMERA_LENS", 0.0, 1.0, dwell_median=4.6, weight=2.4, spread=1.0),
+    AttentionTarget("MAIN_MONITOR_CENTER", -4.0, -12.0, dwell_median=6.5, weight=2.3, spread=3.0),
+    AttentionTarget("MAIN_MONITOR_LOWER", -5.0, -20.0, dwell_median=4.0, weight=1.2, spread=3.2),
+    AttentionTarget("SECONDARY_MONITOR", -32.0, -7.0, dwell_median=4.2, weight=1.0, spread=4.0),
+    AttentionTarget("CHAT_REGION", 26.0, -11.0, dwell_median=3.4, weight=1.0, spread=3.6),
+    AttentionTarget("DESK_MOUSE", -15.0, -30.0, dwell_median=1.9, weight=0.6, spread=3.0),
+    AttentionTarget("KEYBOARD_REGION", -3.0, -34.0, dwell_median=1.7, weight=0.4, spread=3.4),
+    AttentionTarget("DESK_GENERAL", 9.0, -28.0, dwell_median=2.0, weight=0.4, spread=4.0),
+    AttentionTarget("THINKING_POINT_LEFT", -25.0, 14.0, dwell_median=2.2, weight=0.35, spread=4.5),
+    AttentionTarget("THINKING_POINT_RIGHT", 23.0, 16.0, dwell_median=2.2, weight=0.3, spread=4.5),
 )
+
+# The target layout is the single thing that decides whether this reads as a
+# person or a photograph, and the previous one was the reason it read as a
+# photograph.
+#
+# It had the lens and the main display **5.5 degrees apart**, on the reasoning
+# that a webcam sits on top of a monitor. That is true and it was the wrong
+# conclusion: those two targets carried 75% of all dwell time, 5.5 degrees is
+# below the threshold that recruits any head movement, so three quarters of the
+# time the presenter was looking at what a viewer perceives as one single point
+# with a frozen head. Measured mean head yaw over five minutes: 0.91 degrees.
+#
+# A monitor is not a point. Its centre sits about 12 degrees below the lens and
+# its lower third about 20; a second display is 30-plus degrees off axis; a
+# mouse is 30 degrees *down*. Spreading the targets to where they physically are
+# is what makes a glance visible, and it costs nothing.
+#
+# Vertical spread matters as much as horizontal and was almost absent before.
+# People look down at their hands.
 
 # Dwell times were raised 1.45x from a first pass that felt reasonable and
 # measured badly. With the original figures the stillness audit failed: median
@@ -120,32 +167,52 @@ DEFAULT_TARGETS: tuple[AttentionTarget, ...] = (
 # State -> multiplicative bias on each target's selection weight. This is how a
 # state means something: READING is not "a label", it is "the main display is
 # 9x more interesting than usual and the lens is half as interesting".
-STATE_BIAS: dict[str, dict[str, float]] = {
-    "READING":        {"MAIN_DISPLAY": 9.0, "LENS": 0.45, "MIDDLE_DISTANCE": 0.2},
-    "FOCUSED":        {"MAIN_DISPLAY": 4.0, "LENS": 0.8, "DESK": 1.6},
-    "THINKING":       {"MIDDLE_DISTANCE": 6.0, "LENS": 0.35, "MAIN_DISPLAY": 0.6},
-    "IDLE_RELAXED":   {"LENS": 0.8, "MIDDLE_DISTANCE": 1.8, "SECOND_DISPLAY": 1.4},
-    "IDLE_ATTENTIVE": {"LENS": 1.4},
-    "LISTENING":      {"LENS": 2.2, "MIDDLE_DISTANCE": 0.5},
-    "SPEAKING":       {"LENS": 2.0, "MAIN_DISPLAY": 0.7},
-}
-
-
-# Eye-head recruitment constants.
+# Eye-head recruitment.
 #
-# Raised from an initial 11 / 42 / 0.62, which produced the side-eye the review
-# found: a 17.5 degree glance recruited 2.6 degrees of head, so the eyes carried
-# it alone. Human coordination puts roughly a quarter to a third of a 20 degree
-# shift on the head in casual conditions and more with intent.
-EYE_ONLY_DEG = 8.0            # below this, eyes alone
-HEAD_SHARE_FULL_DEG = 35.0    # eccentricity at which the head takes its full share
-HEAD_SHARE_MAX = 0.75         # the eyes always keep some eccentricity
+# Loosened from 8 / 35 / 0.75 after watching the output. The old thresholds were
+# tuned against a target layout whose two dominant targets were 5.5 degrees
+# apart, so nothing ever crossed them: measured mean head yaw was 0.91 degrees
+# over five minutes, which is a frozen head.
+#
+# A person turns their head. Being conservative here does not produce subtlety,
+# it produces a photograph.
+EYE_ONLY_DEG = 6.0            # below this, eyes alone
+HEAD_SHARE_FULL_DEG = 30.0    # eccentricity at which the head takes its full share
+HEAD_SHARE_MAX = 0.85         # the eyes always keep some eccentricity
+HEAD_SHARE_CURVE = 0.65       # <1 front-loads the near range
+
+# Vertical share. A dropped chin is far more readable than the same angle of
+# yaw, and people really do tilt their head down to read a screen or look at
+# their hands rather than rolling their eyes down.
+PITCH_SHARE = 1.05
+
+
+STATE_BIAS: dict[str, dict[str, float]] = {
+    "READING":        {"MAIN_MONITOR_CENTER": 7.0, "MAIN_MONITOR_LOWER": 5.0,
+                       "CAMERA_LENS": 0.30, "THINKING_POINT_LEFT": 0.2,
+                       "THINKING_POINT_RIGHT": 0.2},
+    "CHECKING_CHAT":  {"CHAT_REGION": 9.0, "CAMERA_LENS": 0.7,
+                       "MAIN_MONITOR_CENTER": 0.5},
+    "FOCUSED":        {"MAIN_MONITOR_CENTER": 4.0, "MAIN_MONITOR_LOWER": 2.5,
+                       "DESK_MOUSE": 1.8, "CAMERA_LENS": 0.5},
+    "THINKING":       {"THINKING_POINT_LEFT": 5.0, "THINKING_POINT_RIGHT": 4.0,
+                       "CAMERA_LENS": 0.3, "MAIN_MONITOR_CENTER": 0.4},
+    "WAITING":        {"CAMERA_LENS": 1.8, "DESK_GENERAL": 1.6,
+                       "SECONDARY_MONITOR": 1.4, "MAIN_MONITOR_CENTER": 0.7},
+    "IDLE_RELAXED":   {"CAMERA_LENS": 1.1, "DESK_GENERAL": 1.5,
+                       "SECONDARY_MONITOR": 1.4},
+    "IDLE_ATTENTIVE": {"CAMERA_LENS": 1.5, "MAIN_MONITOR_CENTER": 1.2},
+    "LISTENING":      {"CAMERA_LENS": 2.4, "MAIN_MONITOR_CENTER": 0.6},
+    "SPEAKING":       {"CAMERA_LENS": 2.2, "MAIN_MONITOR_CENTER": 0.7},
+}
 
 
 # How much more (or less) head a state recruits at the same angle. Reading and
 # focusing turn the head; idle glancing does not.
 STATE_HEAD_RECRUITMENT = {
-    "READING": 1.35,
+    "READING": 1.45,
+    "CHECKING_CHAT": 1.30,
+    "WAITING": 1.05,
     "FOCUSED": 1.25,
     "LISTENING": 1.15,
     "IDLE_ATTENTIVE": 1.0,
@@ -187,7 +254,7 @@ class AttentionSystem:
         self.targets = {t.name: t for t in targets}
         self.profile = profile
 
-        self.current = "LENS"
+        self.current = "CAMERA_LENS"
         self.point_az = 0.0
         self.point_el = 0.6
         self.dwell_until = 0.0
@@ -214,7 +281,7 @@ class AttentionSystem:
         out: dict[str, float] = {}
         for name, t in self.targets.items():
             w = t.weight * bias.get(name, 1.0)
-            if name == "LENS":
+            if name == "CAMERA_LENS":
                 # camera_affinity is the state's pull toward the audience.
                 w *= 1.0 + 1.6 * affinity
             # Behavioural memory, and specifically an anti-alternation term.
@@ -249,7 +316,7 @@ class AttentionSystem:
             acc += weight
             if r <= acc:
                 return name
-        return "LENS"
+        return "CAMERA_LENS"
 
     # -- the shift ----------------------------------------------------------
     def _hold_share(self, az: float, dwell: float = 3.0,
@@ -295,7 +362,12 @@ class AttentionSystem:
 
         span = max(getattr(p, "head_share_full_deg", HEAD_SHARE_FULL_DEG)
                    - eye_only, 1e-3)
-        share = min((mag - eye_only) / span, 1.0)
+        # Concave, not linear. A linear ramp gives a 14 degree look - which is
+        # what reading your own monitor is - only 12% of the head's share, so
+        # the most frequent glance in the whole performance stayed invisible.
+        # The exponent front-loads the curve so near targets still turn the
+        # head a little, without changing what a large turn does.
+        share = min((mag - eye_only) / span, 1.0) ** HEAD_SHARE_CURVE
         share *= getattr(p, "head_share_max", HEAD_SHARE_MAX)
 
         # Intent. A 0.6 s glance keeps ~55% of the geometric share; a 5 s read
@@ -335,7 +407,7 @@ class AttentionSystem:
         planned = t.dwell_median
         share = self._hold_share(to_az, planned, drives.state.value, to_el)
         head_to_yaw = to_az * share
-        head_to_pitch = to_el * share * 0.85
+        head_to_pitch = to_el * share * PITCH_SHARE
         self._planned_dwell = planned
         self._state_at_shift = drives.state.value
 
@@ -427,8 +499,8 @@ class AttentionSystem:
             # covered so far, recomputed every frame. That is the counter-roll:
             # as the head continues toward the target the eyes ease back toward
             # centre, and the combined gaze stays put instead of overshooting.
-            res_az = s.to_az - self.head_yaw
-            res_el = s.to_el - self.head_pitch
+            res_az, res_el, _, _ = _hold_eye(
+                s.to_az - self.head_yaw, s.to_el - self.head_pitch)
             k = _min_jerk(te)
             self.eye_az = s.from_az + (res_az - s.from_az) * k
             self.eye_el = s.from_el + (res_el - s.from_el) * k
@@ -454,7 +526,7 @@ class AttentionSystem:
         share = self._hold_share(self.point_az, self._planned_dwell,
                                  self._state_at_shift, self.point_el) * ramp
         want_yaw = self.point_az * share
-        want_pitch = self.point_el * share * 0.85
+        want_pitch = self.point_el * share * PITCH_SHARE
         k = 1.0 - math.exp(-drives.dt / 1.4)
         self.head_yaw += (want_yaw - self.head_yaw) * k
         self.head_pitch += (want_pitch - self.head_pitch) * k
@@ -462,8 +534,8 @@ class AttentionSystem:
         self.torso_yaw += (want_torso - self.torso_yaw) * (
             1.0 - math.exp(-drives.dt / 2.6))
 
-        self.eye_az = self.point_az - self.head_yaw
-        self.eye_el = self.point_el - self.head_pitch
+        self.eye_az, self.eye_el, _, _ = _hold_eye(
+            self.point_az - self.head_yaw, self.point_el - self.head_pitch)
 
         if self._requested is not None:
             name, dwell = self._requested
@@ -489,7 +561,7 @@ class AttentionSystem:
 
     @property
     def on_lens(self) -> bool:
-        return self.current == "LENS"
+        return self.current == "CAMERA_LENS"
 
     @property
     def visual_demand(self) -> float:
@@ -502,10 +574,14 @@ class AttentionSystem:
         constant.
         """
         return {
-            "MAIN_DISPLAY": 0.85,
-            "SECOND_DISPLAY": 0.75,
-            "CHAT": 0.7,
-            "DESK": 0.45,
-            "LENS": 0.3,
-            "MIDDLE_DISTANCE": 0.0,
+            "MAIN_MONITOR_CENTER": 0.85,
+            "MAIN_MONITOR_LOWER": 0.88,
+            "SECONDARY_MONITOR": 0.75,
+            "CHAT_REGION": 0.72,
+            "KEYBOARD_REGION": 0.5,
+            "DESK_MOUSE": 0.45,
+            "DESK_GENERAL": 0.35,
+            "CAMERA_LENS": 0.3,
+            "THINKING_POINT_LEFT": 0.0,
+            "THINKING_POINT_RIGHT": 0.0,
         }.get(self.current, 0.3)

@@ -90,6 +90,11 @@ class HandPose:
     # None means the hand is posed by its joint chain alone.
     contact: str | None = None
     contact_weight: float = 1.0  # 0 releases IK, 1 pins to the contact
+    # Offset from the contact target, in rig units. This is how a hand moves
+    # without leaving the surface - nudging a mouse, shifting a resting palm.
+    # Measured at 10 px of total wrist travel at 1080p before this existed,
+    # which is to say the hands were static.
+    offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 @dataclass

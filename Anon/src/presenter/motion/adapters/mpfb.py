@@ -206,7 +206,13 @@ class MPFBAdapter:
                 continue
             con.influence = hand.contact_weight if hand.contact else 0.0
             if hand.contact and hand.contact in self._targets:
-                con.target = self._targets[hand.contact]
+                obj = self._targets[hand.contact]
+                con.target = obj
+                base = self._rest_target[hand.contact]
+                ox, oy, oz = hand.offset
+                # Offsets are given in the motion state's frame (+Z forward);
+                # the scene is Blender's (-Y forward).
+                obj.location = (base[0] + ox, base[1] - oz, base[2] + oy)
 
 
 def _scene_objects():

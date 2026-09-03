@@ -1,16 +1,16 @@
 [app] wardrobe: 17 combination(s) not generated
 [app] loading LivePortrait, source=assets/master/master_v04_final.png (full/source)
-[22:21:21] Load appearance_feature_extractor from   live_portrait_wrapper.py:46
+[06:37:56] Load appearance_feature_extractor from   live_portrait_wrapper.py:46
            C:\Users\mutwi\Documents\Automated\Anon\                            
            third_party\LivePortrait\pretrained_weig                            
            hts\liveportrait\base_models\appearance_                            
            feature_extractor.pth done.                                         
-[22:21:22] Load motion_extractor from               live_portrait_wrapper.py:49
+           Load motion_extractor from               live_portrait_wrapper.py:49
            C:\Users\mutwi\Documents\Automated\Anon\                            
            third_party\LivePortrait\pretrained_weig                            
            hts\liveportrait\base_models\motion_extr                            
            actor.pth done.                                                     
-           Load warping_module from                 live_portrait_wrapper.py:52
+[06:37:57] Load warping_module from                 live_portrait_wrapper.py:52
            C:\Users\mutwi\Documents\Automated\Anon\                            
            third_party\LivePortrait\pretrained_weig                            
            hts\liveportrait\base_models\warping_mod                            
@@ -25,7 +25,7 @@
            third_party\LivePortrait\pretrained_weig                            
            hts\liveportrait\retargeting_models\stit                            
            ching_retargeting_module.pth done.                                  
-[22:21:23] LandmarkRunner warmup time: 0.044s       human_landmark_runner.py:95
+           LandmarkRunner warmup time: 0.027s       human_landmark_runner.py:95
 [render] background lock: human region 29.4% of frame, grown 29 px
 expression channel calibration:
   [VERIFIED  ] gaze_x       gain=0.0430  horizontal iris. index 15 alone; 11/13/16 added distortion, not gaze. 0.018 latent = eyes near their natural lateral limit, so gain maps gaze_x=+-0.42 onto that limit
@@ -37,10 +37,8 @@ expression channel calibration:
   [VERIFIED  ] smile_asym   gain=0.0100  lateral pull, carrying the left/right difference so one corner can lead. Measured as the most laterally-biased mouth dimension
   [UNVERIFIED] mouth_open   gain=0.0100  reserved for lip-sync, unused while mouth_open stays 0. indices are the three most mouth-selective on axis 1 (27.1, 18.9, 17.0) but sign and articulation quality are uncalibrated
 [app] warming up (3 frames)...
-[app] warmup took 19.8s
-[render] background lock: human region 29.2% of frame, grown 29 px
-[app] camera -> cam2 (2 Medium, prepared in 1.67s)
-[render] background lock: human region 36.9% of frame, grown 29 px
-[app] camera -> cam3 (3 Close, prepared in 1.63s)
+[app] warmup took 13.1s
+[render] background lock: human region 29.3% of frame, grown 29 px
+[app] camera -> cam2 (2 Medium, prepared in 1.35s)
 [render] background lock: human region 29.8% of frame, grown 29 px
-[app] camera -> cam1 (1 Hero, prepared in 2.91s)
+[app] camera -> cam1 (1 Hero, prepared in 2.48s)

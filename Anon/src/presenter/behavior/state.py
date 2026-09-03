@@ -38,6 +38,8 @@ class BehaviorState(str, Enum):
     SPEAKING = "SPEAKING"
     POST_SPEECH = "POST_SPEECH"
     READING = "READING"
+    CHECKING_CHAT = "CHECKING_CHAT"
+    WAITING = "WAITING"
     FOCUSED = "FOCUSED"
     MILD_POSITIVE = "MILD_POSITIVE"
     MILD_CONCERN = "MILD_CONCERN"
@@ -71,6 +73,10 @@ class StateModulation:
 # roughly doubles the resting rate, sustained focus and reading roughly halve
 # it. See docs/human_behavior.md for the sources behind each number.
 STATE_MODULATION: dict[BehaviorState, StateModulation] = {
+    BehaviorState.CHECKING_CHAT: StateModulation(
+        blink_rate=1.15, gaze_rate=1.5, camera_affinity=0.15, stillness=0.9),
+    BehaviorState.WAITING: StateModulation(
+        blink_rate=1.05, gaze_rate=0.75, camera_affinity=0.35, stillness=1.25),
     BehaviorState.IDLE_ATTENTIVE: StateModulation(
         camera_affinity=0.55,
     ),
