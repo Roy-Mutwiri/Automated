@@ -98,3 +98,26 @@ Anon/body_render.log
 # Per-worktree sync watcher artefacts (tools/sync.ps1)
 .sync-message
 tools/sync-*.log
+
+# Generated output, brought forward from main so this branch matches it.
+#
+# camera-terminal forked from main at 25a1a0d, before these rules were added,
+# so its .gitignore was 17 lines behind. Anon/eyehead_frames/ is the one that
+# matters: 990 tracked PNGs auto-committed by the old folder-based sync
+# watcher before the rule existed. Without this rule here, removing them from
+# history would leave them untracked AND unignored on this branch, and the
+# next `git add -A` would put all of it straight back.
+Anon/eyehead_frames/
+Anon/calibration/
+Anon/clip_blink.png
+Anon/clip_gaze.png
+Anon/clip_contact_sheet.png
+Anon/seated_frames/
+Anon/seated_debug_frames/
+Anon/finger_tmp/
+Anon/seated_render.log
+Anon/seated_debug.log
+Anon/humanity_frames/
+Anon/salience_frames/
+Anon/avatar_vis_frames/
+Anon/*.log
