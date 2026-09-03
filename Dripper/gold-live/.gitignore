@@ -21,3 +21,15 @@ build_tools/version_info.txt
 # voice models (large; install with scripts/get_voices.py)
 voices/*.onnx
 voices/*.onnx.json
+
+# runtime data (data_root() is the checkout when running from source)
+data/
+provisioning.json
+*.part
+
+# runtime-provisioned artifacts
+voices/*.onnx
+voices/*.onnx.json
+models/
+comments.txt
+selftest/

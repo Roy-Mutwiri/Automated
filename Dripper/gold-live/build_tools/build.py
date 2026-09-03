@@ -20,7 +20,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist" / "GoldLive"
-VERSION = "0.4.0"
+# pyproject.toml is the single source of truth; see shared/version.py.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared.version import app_version  # noqa: E402
+
+VERSION = app_version()
 
 
 def run(cmd: list[str], **kw) -> int:

@@ -172,6 +172,10 @@ class LiveSession:
         self.adapter = None
         self.store = TraceStore(args.db)
         self.health_server: HealthServer | None = None
+        #: The session's event loop, captured once run() starts. The health
+        #: server answers on its own THREAD, so it cannot drive this loop
+        #: directly -- it has to hand work across the boundary.
+        self.loop: asyncio.AbstractEventLoop | None = None
         self._tasks: list[asyncio.Task] = []
         self.started_at = datetime.now(timezone.utc)
         self.paused = False
@@ -179,6 +183,43 @@ class LiveSession:
         self.state_status = SessionStatus.LIVE
 
     # -- health -----------------------------------------------------------
+
+    def _adapter_health(self) -> ServiceHealth:
+        """Ask the adapter for its health from the health server's thread.
+
+        This used to call `asyncio.get_event_loop().run_until_complete(...)`
+        inside a `contextlib.suppress(Exception)`. The health server runs in a
+        separate thread by design -- so it keeps answering when the event loop
+        is stalled -- and driving an already-running loop from another thread
+        raises every time. Suppressed, that meant the adapter component simply
+        never appeared in /health or /ready: comment ingestion could be dead
+        for hours and the endpoint would look perfectly healthy.
+
+        run_coroutine_threadsafe is the correct way across that boundary. A
+        timeout is essential: this call is on the path of every health probe,
+        and a wedged adapter must not wedge the endpoint that reports it.
+        """
+        adapter = self.adapter
+        loop = self.loop
+        if loop is None or not loop.is_running():
+            return ServiceHealth(
+                component="comment_adapter", session_id=self.session_id,
+                state=HealthState.DEGRADED,
+                checks=[HealthCheck(name="loop", ok=False, detail="session not started")],
+                degraded_reason="session loop is not running",
+            )
+        try:
+            future = asyncio.run_coroutine_threadsafe(adapter.health(), loop)
+            return future.result(timeout=2.0)
+        except Exception as exc:
+            # Report the failure rather than hiding it: an adapter that cannot
+            # answer within two seconds is itself the news.
+            return ServiceHealth(
+                component="comment_adapter", session_id=self.session_id,
+                state=HealthState.DEGRADED,
+                checks=[HealthCheck(name="health", ok=False, detail=str(exc) or type(exc).__name__)],
+                degraded_reason=f"adapter health unavailable: {exc or type(exc).__name__}",
+            )
 
     def health(self) -> list[ServiceHealth]:
         out: list[ServiceHealth] = []
@@ -216,8 +257,7 @@ class LiveSession:
             )
 
         if self.adapter is not None:
-            with contextlib.suppress(Exception):
-                out.append(asyncio.get_event_loop().run_until_complete(self.adapter.health()))
+            out.append(self._adapter_health())
 
         if self.runtime is not None:
             out.append(
@@ -413,9 +453,55 @@ class LiveSession:
 
             log.info("[%s] %s", self.session_id, response.text)
 
+    # -- startup readiness ------------------------------------------------
+
+    async def _preflight(self) -> bool:
+        """Refuse to start a session that could only produce placeholder output.
+
+        Every subsystem here degrades quietly by design -- the synthetic feed,
+        the offline generator, the placeholder tone, the simulated audio sink --
+        so a session with nothing installed starts happily and broadcasts
+        nothing of value. That is the failure this gate exists to make loud.
+
+        Skipped when supervised: the supervisor has already run the same gates
+        once, and N sessions each opening a market socket and generating a test
+        utterance would be slow and pointless.
+        """
+        if os.environ.get("GOLDLIVE_SUPERVISED") == "1":
+            return True
+        if getattr(self.args, "allow_degraded", False):
+            log.warning(
+                "--allow-degraded: skipping readiness checks. Market data, "
+                "model output or audio may be simulated."
+            )
+            return True
+
+        from runtime.readiness import Level, check
+
+        result = await check(
+            session_id=self.session_id, market=self.args.market,
+            adapter=self.args.adapter, include_broadcast=False,
+        )
+        if result.level is Level.NOT_READY:
+            print()
+            print(result.render())
+            print()
+            log.error("not starting. Run `GoldLive.exe provision`, or pass "
+                      "--allow-degraded to start anyway (development only).")
+            return False
+        log.info("readiness: %s", result.level.value)
+        return True
+
     # -- lifecycle --------------------------------------------------------
 
     async def run(self) -> int:
+        # Captured here so the health server's thread can hand coroutines back
+        # to this loop; see _adapter_health.
+        self.loop = asyncio.get_running_loop()
+
+        if not await self._preflight():
+            return 2
+
         spec = load_session_config(self.session_id)
         personas = load_personas(config_dir("personas"))
         persona = personas[spec["persona_id"]]
@@ -618,6 +704,12 @@ def main() -> None:
         help="file = tail a text file you type into (development)",
     )
     ap.add_argument("--tts", default="file", choices=["file", "piper"])
+    ap.add_argument(
+        "--allow-degraded", action="store_true",
+        help="start even when readiness gates fail. Development only: the "
+             "session may use simulated market data, canned text or a "
+             "placeholder tone.",
+    )
     ap.add_argument("--voices", default=str(data_path("voices", create_parent=False)))
     ap.add_argument("--voice", help="override the persona's voice for this run")
     ap.add_argument(

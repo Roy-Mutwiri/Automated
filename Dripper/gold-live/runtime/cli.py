@@ -21,11 +21,17 @@ from __future__ import annotations
 import sys
 
 from shared.paths import data_root, describe
+from shared.version import app_version
 
-VERSION = "0.4.0"
+#: Resolved from pyproject.toml -- see shared/version.py. Kept as a module
+#: attribute because existing callers and the USAGE banner reference it.
+VERSION = app_version()
 
 USAGE = f"""Gold Live {VERSION}
 
+  provision   Set this PC up: check it, download the model and voices
+  ready       Check whether SESSION_001 can actually start right now
+  selftest    Exercise the real components (--imports for a quick check)
   setup       Seed configuration into this machine's data directory
   doctor      Check every dependency and report what is missing
   calibrate   Locate the comment panel on this screen
@@ -38,8 +44,28 @@ USAGE = f"""Gold Live {VERSION}
 
 Data directory: {data_root()}
 
-Start with:  setup, then doctor.
+Start with:  provision, then ready.
 """
+
+
+def _code(result: object) -> int:
+    """Turn a subcommand's return value into a process exit code.
+
+    Every subcommand used to be called for its side effects and followed by a
+    bare `return 0`, so a session that refused to start, a failed selftest or a
+    readiness gate that did not pass all exited 0. A scheduled task or a shell
+    script had no way to tell success from failure.
+
+    None means "ran to completion without a verdict" and stays 0; an int is
+    passed through; anything else is a programming error, not a status.
+    """
+    if result is None:
+        return 0
+    if isinstance(result, bool):  # bool is an int subclass; catch it first
+        return 0 if result else 1
+    if isinstance(result, int):
+        return result
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -59,6 +85,47 @@ def main(argv: list[str] | None = None) -> int:
         print(describe())
         return 0
 
+    if command == "provision":
+        from runtime.provision import main as provision
+
+        return _code(provision())
+
+    if command == "selftest":
+        from runtime.selftest import main as selftest
+
+        return _code(selftest())
+
+    if command == "ready":
+        import argparse
+        import asyncio
+
+        from runtime.bootstrap import seed_config
+        from runtime.readiness import check
+
+        ap = argparse.ArgumentParser(prog="GoldLive ready")
+        ap.add_argument("--session", default="SESSION_001")
+        ap.add_argument("--market", default="gold")
+        ap.add_argument("--adapter", default="file")
+        ap.add_argument("--session-only", action="store_true",
+                        help="skip the broadcast gates")
+        ready_args = ap.parse_args(rest)
+
+        seed_config()
+        result = asyncio.run(check(
+            session_id=ready_args.session, market=ready_args.market,
+            adapter=ready_args.adapter,
+            include_broadcast=not ready_args.session_only,
+        ))
+        print()
+        print(result.render())
+        print()
+        # 0 session-ready or better, 1 not ready. Broadcast-only failures are
+        # deliberately not an error: a session that can speak about real prices
+        # is a success even before VB-CABLE is installed.
+        from runtime.readiness import Level
+
+        return 0 if result.level is not Level.NOT_READY else 1
+
     if command == "setup":
         from runtime.bootstrap import setup
 
@@ -73,48 +140,41 @@ def main(argv: list[str] | None = None) -> int:
     if command == "calibrate":
         from scripts.calibrate_capture import main as calibrate
 
-        calibrate()
-        return 0
+        return _code(calibrate())
 
     if command == "run":
         from runtime.bootstrap import seed_config
         from runtime.live import main as live
 
         seed_config()
-        live()
-        return 0
+        return _code(live())
 
     if command == "supervise":
         from runtime.bootstrap import seed_config
         from runtime.supervisor import main as supervise
 
         seed_config()
-        supervise()
-        return 0
+        return _code(supervise())
 
     if command == "dashboard":
         from dashboard.server import main as dashboard
 
-        dashboard()
-        return 0
+        return _code(dashboard())
 
     if command == "bench":
         from scripts.bench_llm import main as bench
 
-        bench()
-        return 0
+        return _code(bench())
 
     if command == "dryrun":
         from runtime.dryrun import main as dryrun
 
-        dryrun()
-        return 0
+        return _code(dryrun())
 
     if command == "soak":
         from runtime.soak import main as soak
 
-        soak()
-        return 0
+        return _code(soak())
 
     print(f"Unknown command: {command}\n")
     print(USAGE)

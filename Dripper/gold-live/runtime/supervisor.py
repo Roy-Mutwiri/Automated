@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import os
 import random
 import signal
 import subprocess
@@ -36,10 +37,30 @@ from pathlib import Path
 
 import yaml
 
-from shared.paths import config_path
+from shared.paths import config_path, data_root, is_frozen
 
 ROOT = Path(__file__).resolve().parent.parent
 log = logging.getLogger("supervisor")
+
+
+def session_command(session_id: str, health_port: int, args: list[str]) -> list[str]:
+    """Build the argv that starts one session, correctly in both modes.
+
+    Frozen builds were spawning `GoldLive.exe -m runtime.live ...`, because
+    sys.executable is the exe rather than a Python interpreter. The exe has its
+    own subcommand dispatcher and answered "Unknown command: -m", so every
+    supervised session died instantly and the restart logic turned that into a
+    spawn loop. `GoldLive.exe supervise` had therefore never worked in the
+    artifact intended for distribution.
+
+    Pure function on purpose: the argv is the thing that was wrong, so it needs
+    to be assertable without starting a process.
+    """
+    tail = ["--session", session_id, "--health-port", str(health_port), *args]
+    if is_frozen():
+        return [sys.executable, "run", *tail]
+    return [sys.executable, "-m", "runtime.live", *tail]
+
 
 
 @dataclass
@@ -77,22 +98,84 @@ class Supervisor:
         max_backoff_s: float = 60.0,
         unready_grace_s: float = 120.0,
         term_grace_s: float = 10.0,
+        allow_degraded: bool = False,
+        market: str = "gold",
+        adapter: str = "file",
     ) -> None:
         self.sessions = {s.session_id: s for s in sessions}
+        self.allow_degraded = allow_degraded
+        self.market = market
+        self.adapter = adapter
         self.crash_loop_threshold = crash_loop_threshold
         self.max_backoff_s = max_backoff_s
         self.unready_grace_s = unready_grace_s
         self.term_grace_s = term_grace_s
         self.stopping = asyncio.Event()
 
+    # -- startup readiness ------------------------------------------------
+
+    async def preflight(self) -> bool:
+        """Refuse to start sessions this machine cannot actually run.
+
+        Without this, a machine with no model and no voices spawns sessions
+        that come up "healthy" and broadcast canned text over a placeholder
+        tone -- and the supervisor dutifully keeps them alive. Failing here,
+        loudly, is the whole point of the readiness work.
+
+        Development modes bypass it explicitly via --allow-degraded, which is
+        logged so a degraded run is never mistaken for a real one.
+        """
+        if self.allow_degraded:
+            log.warning(
+                "--allow-degraded: starting without readiness checks. "
+                "Market data, model output or audio may be simulated."
+            )
+            return True
+
+        from runtime.readiness import Level, check
+
+        log.info("checking readiness before starting any session ...")
+        result = await check(
+            session_id=next(iter(self.sessions), "SESSION_001"),
+            market=self.market, adapter=self.adapter, include_broadcast=True,
+        )
+        print()
+        print(result.render())
+        print()
+
+        if result.level is Level.NOT_READY:
+            log.error(
+                "not starting: %s",
+                ", ".join(g.name for g in result.failed(("config_valid", "market_live",
+                                                         "model_real", "voice_real",
+                                                         "audio_out"))),
+            )
+            log.error("run `GoldLive.exe provision` to fix, or pass --allow-degraded "
+                      "to start anyway (development only).")
+            return False
+
+        if result.level is Level.SESSION_READY:
+            log.warning("session ready, but NOT broadcast ready -- "
+                        "audio will not reach LIVE Studio.")
+        return True
+
     # -- process control --------------------------------------------------
 
     def spawn(self, session: ManagedSession) -> None:
-        cmd = [sys.executable, "-m", "runtime.live", "--session", session.session_id,
-               "--health-port", str(session.health_port), *session.args]
-        log.info("starting %s: %s", session.session_id, " ".join(cmd[2:]))
+        cmd = session_command(session.session_id, session.health_port, session.args)
+        log.info("starting %s: %s", session.session_id, " ".join(cmd[1:]))
+
+        # Children skip their own provisioning and readiness work: the
+        # supervisor has already done it once, and N sessions each probing the
+        # market feed and generating a test utterance would be both slow and
+        # pointless.
+        env = {**os.environ, "GOLDLIVE_SUPERVISED": "1"}
+
+        # cwd must be writable and must outlive the process. ROOT resolves
+        # inside PyInstaller's temporary _MEIPASS directory when frozen, which
+        # is deleted on exit and read-only in practice.
         session.process = subprocess.Popen(
-            cmd, cwd=ROOT, stdout=None, stderr=None
+            cmd, cwd=str(data_root()), env=env, stdout=None, stderr=None
         )
         session.started_at = time.time()
         session.last_ready_at = time.time()
@@ -183,6 +266,9 @@ class Supervisor:
             await asyncio.sleep(10)
 
     async def run(self) -> int:
+        if not await self.preflight():
+            return 2
+
         for session in self.sessions.values():
             self.spawn(session)
             await asyncio.sleep(2)  # stagger startup; model load is expensive
@@ -251,10 +337,17 @@ def build_sessions(only: list[str] | None, passthrough: list[str]) -> list[Manag
 def main() -> None:
     ap = argparse.ArgumentParser(description="Supervise session processes")
     ap.add_argument("--sessions", nargs="*", help="defaults to all in sessions.yaml")
+    # Production defaults. `supervise` with no arguments must run the real
+    # thing: a real feed, real speech, a real model. synthetic/mock/file are
+    # development modes and have to be asked for by name.
     ap.add_argument("--mode", default="auto")
-    ap.add_argument("--market", default="synthetic")
-    ap.add_argument("--adapter", default="mock")
-    ap.add_argument("--tts", default="file")
+    ap.add_argument("--market", default="gold")
+    ap.add_argument("--adapter", default="file")
+    ap.add_argument("--tts", default="piper")
+    ap.add_argument(
+        "--allow-degraded", action="store_true",
+        help="start even when readiness gates fail (development only)",
+    )
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -266,7 +359,12 @@ def main() -> None:
         "--mode", args.mode, "--market", args.market,
         "--adapter", args.adapter, "--tts", args.tts,
     ]
-    supervisor = Supervisor(build_sessions(args.sessions, passthrough))
+    supervisor = Supervisor(
+        build_sessions(args.sessions, passthrough),
+        allow_degraded=args.allow_degraded,
+        market=args.market,
+        adapter=args.adapter,
+    )
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

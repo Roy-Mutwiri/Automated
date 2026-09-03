@@ -1,17 +1,31 @@
 [project]
 name = "gold-live"
-version = "0.1.0"
+version = "0.5.0"
 description = "24/7 multi-session AI broadcasting system for XAUUSD commentary"
 requires-python = ">=3.12"
+# The set the runtime actually imports. Six of these were previously
+# undeclared and reached the packaged build only if they happened to be in the
+# build machine's virtualenv; websockets and piper-tts are load-bearing --
+# without them there is no live price and no speech.
 dependencies = [
-    "anthropic>=0.40",
     "pydantic>=2.9",
     "pyyaml>=6.0",
-    "redis>=5.0",
+    "websockets>=13.0",
+    "piper-tts>=1.2",
+    "onnxruntime>=1.17",
+    "httpx>=0.27",
+    "numpy>=1.26",
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12",
+    "mss>=9.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.6"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.6", "pyinstaller>=6.0"]
+# Comparison against a hosted model. Never used in production.
+hosted = ["anthropic>=0.40"]
+# Screen-capture comment ingestion. Large ML stack; opt in deliberately.
+ocr = ["paddleocr>=2.7"]
 
 [project.scripts]
 gold-dryrun = "runtime.dryrun:main"
@@ -21,7 +35,11 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["shared", "intelligence", "platform_", "runtime"]
+# dashboard and scripts were omitted, but runtime/cli.py imports
+# scripts.bench_llm, scripts.calibrate_capture and dashboard.server -- a plain
+# `pip install .` produced a CLI whose dashboard/bench/calibrate subcommands
+# raised ModuleNotFoundError.
+packages = ["shared", "intelligence", "platform_", "runtime", "dashboard", "scripts"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

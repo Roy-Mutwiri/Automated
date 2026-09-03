@@ -79,48 +79,92 @@ def seed_config(force: bool = False) -> list[str]:
 
 
 def check_llm() -> Check:
-    """Probe every well-known endpoint, not just one.
+    """Probe every well-known endpoint, and require an actual model.
 
-    Someone running this for the first time should not have to know that vLLM
-    listens on 8000 and Ollama on 11434.
+    This used to end with `models = [...] or ["a model"]`, so an empty model
+    list became the string "a model" and the check reported success. A server
+    running with nothing pulled therefore passed doctor while discovery -- which
+    was fixed separately -- refused the same server. The diagnostic and the
+    runtime disagreed, and the diagnostic was the one that was wrong.
+
+    Goes through the same discovery path the runtime uses, so the two cannot
+    drift apart again.
     """
-    import os
-    import urllib.error
-    import urllib.request
+    import asyncio
 
-    from platform_.llm.discovery import KNOWN_ENDPOINTS
+    from platform_.llm.discovery import KNOWN_ENDPOINTS, discover
 
-    configured = os.environ.get("LLM_BASE_URL")
-    candidates = (
-        [("configured", configured)] if configured else list(KNOWN_ENDPOINTS)
-    )
-
-    for label, url in candidates:
+    async def _find():
+        llm = await discover()
+        if llm is None:
+            return None
         try:
-            with urllib.request.urlopen(f"{url}/models", timeout=2) as resp:
-                body = json.loads(resp.read())
-        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
-            continue
-        models = [m.get("id") for m in body.get("data", [])] or ["a model"]
-        return Check("language model", True, f"{label} at {url}: {models[0]}")
+            return llm.model
+        finally:
+            await llm.close()
 
-    tried = ", ".join(url.split("//")[-1].split("/")[0] for _l, url in candidates)
+    try:
+        model = asyncio.run(_find())
+    except Exception as exc:
+        return Check("language model", False, f"discovery failed: {exc}", fatal=True)
+
+    if model:
+        return Check("language model", True, f"serving {model}")
+
+    tried = ", ".join(url.split("//")[-1].split("/")[0] for _l, url in KNOWN_ENDPOINTS)
     return Check(
         "language model", False,
-        f"no server on {tried}. Start Ollama (`ollama serve`) or vLLM. "
+        f"no server with a usable model on {tried}. Start Ollama "
+        "(`ollama serve`) and pull one (`ollama pull llama3.2:3b`). "
         "Without one the host falls back to canned text.",
         fatal=True,
     )
 
 
+def check_imports() -> Check:
+    """Every package the packaged build claims to contain.
+
+    This is the check that would have caught the two hard blockers: websockets
+    and piper are imported lazily inside functions, so PyInstaller's static
+    analysis never saw them, they were never bundled, and the shipped exe could
+    neither fetch a price nor speak -- silently, because both subsystems
+    degrade rather than crash.
+    """
+    from runtime.selftest import BUNDLED_IMPORTS, missing_imports
+
+    missing = missing_imports()
+    if not missing:
+        return Check("bundled packages", True, f"all {len(BUNDLED_IMPORTS)} present")
+    return Check(
+        "bundled packages", False,
+        f"MISSING: {', '.join(missing)}. This build is incomplete -- "
+        "download Gold Live again.",
+        fatal=True,
+    )
+
+
 def check_tts(voices_dir: Path) -> Check:
-    if shutil.which("piper") is None:
+    """Check the Python API, not the CLI.
+
+    This used to test `shutil.which("piper")`. The runtime does not shell out
+    to a binary -- PiperTTS imports the library and holds each voice in
+    process, which is what took synthesis from 4.5s to 225ms. Testing the CLI
+    meant testing something the product does not use: it can be absent while
+    the library works, and present (pip puts a script in Scripts/) while the
+    frozen build has no library at all.
+    """
+    try:
+        import piper  # noqa: F401
+    except ImportError as exc:
         return Check("text to speech", False,
-                     "piper not on PATH - audio will be a placeholder tone")
+                     f"piper library unavailable ({exc}) - audio would be a "
+                     "placeholder tone", fatal=True)
+
     voices = list(voices_dir.glob("*.onnx")) if voices_dir.is_dir() else []
     if not voices:
         return Check("text to speech", False,
-                     f"piper found but no voices in {voices_dir}")
+                     f"piper works but no voices in {voices_dir}. "
+                     "Run: GoldLive.exe provision")
     return Check("text to speech", True, f"piper with {len(voices)} voice(s)")
 
 
@@ -193,6 +237,7 @@ def check_disk() -> Check:
 
 def doctor(voices_dir: Path | None = None) -> int:
     checks = [
+        check_imports(),
         check_config(),
         check_llm(),
         check_tts(voices_dir or data_root() / "voices"),
