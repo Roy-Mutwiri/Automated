@@ -63,6 +63,7 @@ shared = {
     "cameras": [],
     "note": "",
     "rebuilding": False,
+    "face": {},
 }
 lock = threading.Condition()
 want = {"camera": "cam1", "state": None, "rebuild": False}
@@ -79,9 +80,10 @@ def fingerprint():
     return out
 
 
-def engine_loop(width, height, samples, fps_cap):
+def engine_loop(width, height, samples, fps_cap, master=None):
     """Behaviour -> pose -> re-pose the world -> render -> publish a JPEG."""
     import bpy
+    import numpy as np
 
     from presenter.behavior import BehaviorEngine
     from presenter.render.camera_manager import CameraManager
@@ -90,6 +92,15 @@ def engine_loop(width, height, samples, fps_cap):
 
     engine = BehaviorEngine(seed=7)
     pose = engine.update(1.0 / 30.0)
+
+    overlay = None
+    if master:
+        from presenter.render.face_overlay import FaceOverlay
+
+        print(f"[web] loading the photoreal face from {master} ...")
+        t0 = time.perf_counter()
+        overlay = FaceOverlay(master)
+        print(f"[web] face ready in {time.perf_counter() - t0:.1f}s")
 
     def build():
         w = build_world(pose)
@@ -188,6 +199,31 @@ def engine_loop(width, height, samples, fps_cap):
         except OSError:
             continue
 
+        # The photoreal face, registered to where the 3D head actually projects
+        # in this camera. The overlay gates itself on the angle between his
+        # face and the lens, so cam1 gets the real man and the cameras behind
+        # him get nothing - which is the honest answer, not a bug to tune out.
+        face_info = {}
+        if overlay is not None:
+            try:
+                import cv2 as _cv2
+
+                frame = _cv2.imdecode(np.frombuffer(data, np.uint8),
+                                      _cv2.IMREAD_COLOR)
+                eyes = [bpy.data.objects.get("eye_l"), bpy.data.objects.get("eye_r")]
+                skull_ob = bpy.data.objects.get("skull")
+                if frame is not None and all(eyes) and skull_ob is not None:
+                    frame, face_info = overlay.composite(
+                        frame, scn, scn.camera,
+                        tuple(eyes[0].location), tuple(eyes[1].location),
+                        tuple(skull_ob.location), pose)
+                    ok, buf = _cv2.imencode(".jpg", frame,
+                                            [_cv2.IMWRITE_JPEG_QUALITY, 80])
+                    if ok:
+                        data = buf.tobytes()
+            except Exception as exc:  # noqa: BLE001 - never kill the stream
+                face_info = {"error": f"{type(exc).__name__}: {exc}"}
+
         frame_times.append(time.perf_counter())
         frame_times[:] = [t for t in frame_times if t > time.perf_counter() - 3.0]
 
@@ -199,6 +235,7 @@ def engine_loop(width, height, samples, fps_cap):
             shared["fps"] = len(frame_times) / 3.0
             shared["render_ms"] = render_ms
             shared["elapsed"] = engine.stats.elapsed
+            shared["face"] = face_info
             shared["pose"] = {
                 "yaw": round(pose.yaw, 2), "pitch": round(pose.pitch, 2),
                 "roll": round(pose.roll, 2),
@@ -262,6 +299,19 @@ addEventListener('keydown',e=>{const n=parseInt(e.key,10);
   else if(e.key==='[')pick(cams[(cams.findIndex(c=>c.key===active)-1+cams.length)%cams.length].key);
   else if(e.key===']')pick(cams[(cams.findIndex(c=>c.key===active)+1)%cams.length].key);});
 
+function faceLabel(f){
+  // Never let the readout imply the real man is on screen when he is not.
+  if(!f||f.error) return '<span class="warn">FACE ERROR '+((f&&f.error)||'')+'</span>';
+  if(f.gate===undefined) return 'PROXY HUMAN (no face overlay)';
+  if(f.gate<0.02) return '<span class="warn">PROXY HEAD</span> - '+f.off_axis_deg+
+     ' deg off-axis, outside the cone the photograph covers';
+  const g=Math.round(f.gate*100);
+  return (g>=99?'<span class="live">REAL FACE</span>':
+          '<span class="warn">FACE '+g+'%</span>')+
+         ' &nbsp; '+f.off_axis_deg+' deg off-axis &nbsp; cache '+
+         Math.round(f.cache_hit_rate*100)+'%'+
+         (f.warning?' &nbsp; <span class="warn">'+f.warning+'</span>':'');
+}
 const es=new EventSource('/api/events');
 es.onmessage=ev=>{
   const s=JSON.parse(ev.data);
@@ -277,7 +327,7 @@ es.onmessage=ev=>{
     ' &nbsp;|&nbsp; yaw '+p.yaw+' pitch '+p.pitch+' roll '+p.roll+
     ' &nbsp; lids '+p.eye_l+'/'+p.eye_r+' &nbsp; breath '+p.breath+
     ' &nbsp; blinks '+p.blinks+' &nbsp; t '+s.elapsed.toFixed(1)+'s'+
-    ' &nbsp;|&nbsp; PROXY HUMAN, gaze not driven in 3D'+
+    ' &nbsp;|&nbsp; '+faceLabel(s.face)+
     (s.note?' &nbsp;|&nbsp; '+s.note:'');
 };
 drawStates();
@@ -369,6 +419,9 @@ def main() -> int:
     ap.add_argument("--width", type=int, default=640)
     ap.add_argument("--height", type=int, default=360)
     ap.add_argument("--samples", type=int, default=8)
+    ap.add_argument("--face", default="assets/master/master_v04_final.png",
+                    help="master frame for the photoreal face overlay; "
+                         "'' renders the bare proxy")
     ap.add_argument("--fps", type=float, default=0.0,
                     help="cap the loop; 0 renders as fast as EEVEE allows")
     args = ap.parse_args()
@@ -389,7 +442,8 @@ def main() -> int:
     # instead of at the threading. The render loop owns the main thread.
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
-        engine_loop(args.width, args.height, args.samples, args.fps)
+        engine_loop(args.width, args.height, args.samples, args.fps,
+                    master=args.face or None)
     except KeyboardInterrupt:
         print("stopped")
     return 0
