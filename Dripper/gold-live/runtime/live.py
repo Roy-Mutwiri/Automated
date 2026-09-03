@@ -178,12 +178,89 @@ class LiveSession:
         #: directly -- it has to hand work across the boundary.
         self.loop: asyncio.AbstractEventLoop | None = None
         self._tasks: list[asyncio.Task] = []
+        #: Background tasks that died. A task that raises takes its whole
+        #: responsibility with it -- speaking, market ingestion, comments --
+        #: and asyncio never surfaces the exception unless someone asks. Until
+        #: this existed, a dead speak loop looked exactly like a healthy
+        #: session with nothing to say.
+        self._task_failures: dict[str, str] = {}
+        #: Consecutive speak-loop failures. The loop now survives a dead model
+        #: server by retrying, which is right -- but a session that cannot
+        #: generate must not keep reporting itself healthy while it silently
+        #: says nothing.
+        self._speak_errors = 0
         self.started_at = datetime.now(timezone.utc)
         self.paused = False
         self.muted = False
         self.state_status = SessionStatus.LIVE
 
     # -- health -----------------------------------------------------------
+
+    def _on_task_done(self, task: asyncio.Task) -> None:
+        """Notice a background task dying, instead of never finding out.
+
+        asyncio holds a task's exception until someone retrieves it. Nothing
+        did, so when the speak loop raised -- for instance when the model
+        server vanished mid-generation -- the task ended, the session stopped
+        producing anything, and /health went on reporting OK because every
+        component it knew about was still fine. The session sat there alive and
+        mute, which is the worst of the three possible outcomes: a crash would
+        at least have been restarted.
+        """
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is None:
+            return
+        name = task.get_name()
+        self._task_failures[name] = f"{type(exc).__name__}: {exc}" or type(exc).__name__
+        log.error("background task %r died: %s", name, exc, exc_info=exc)
+
+    def _generation_health(self) -> ServiceHealth:
+        """Whether the host can actually produce speech right now.
+
+        There was no component for this at all, so killing the model server
+        left every existing check green -- market fine, audio fine, adapter
+        fine -- while the one thing the session exists to do was impossible.
+        DEGRADED first, because a brief blip should not trigger a restart;
+        FAILING once it is clearly not coming back on its own, which turns
+        /ready to 503 and lets the supervisor act.
+        """
+        errors = self._speak_errors
+        if errors == 0:
+            state, reason = HealthState.OK, None
+        elif errors < 5:
+            state = HealthState.DEGRADED
+            reason = f"generation failing ({errors} consecutive)"
+        else:
+            state = HealthState.FAILING
+            reason = (f"generation has failed {errors} times consecutively; "
+                      "the model server is probably gone")
+        return ServiceHealth(
+            component="generation", session_id=self.session_id, state=state,
+            checks=[HealthCheck(name="speak_loop", ok=errors == 0,
+                                detail=f"{errors} consecutive failures")],
+            degraded_reason=reason,
+        )
+
+    def _tasks_health(self) -> ServiceHealth:
+        """FAILING when a task has died, so /ready turns 503 and the supervisor
+        restarts a session that can no longer do its job."""
+        dead = dict(self._task_failures)
+        return ServiceHealth(
+            component="tasks", session_id=self.session_id,
+            state=HealthState.FAILING if dead else HealthState.OK,
+            checks=[
+                HealthCheck(name=name, ok=name not in dead,
+                            detail=dead.get(name, "running"))
+                for name in ("market", "bars", "speak", "heartbeat",
+                             "checkpoint", "comments")
+            ],
+            degraded_reason=(
+                "background task(s) dead: " + ", ".join(sorted(dead))
+                if dead else None
+            ),
+        )
 
     def _adapter_health(self) -> ServiceHealth:
         """Ask the adapter for its health from the health server's thread.
@@ -223,7 +300,7 @@ class LiveSession:
             )
 
     def health(self) -> list[ServiceHealth]:
-        out: list[ServiceHealth] = []
+        out: list[ServiceHealth] = [self._tasks_health(), self._generation_health()]
         now = datetime.now(timezone.utc)
 
         conf = self.engine.confidence(now)
@@ -422,71 +499,97 @@ class LiveSession:
     async def _speak_loop(self) -> None:
         assert self.runtime is not None
         while not self.stopping.is_set():
-            await asyncio.sleep(self.args.tick_s)
-            if self.paused:
-                continue
-            now = datetime.now(timezone.utc)
-            state = self.engine.snapshot(now)
+            try:
+                await self._speak_once()
+                self._speak_errors = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # The model server going away mid-generation used to raise
+                # here, kill this task, and leave the session alive and
+                # permanently mute. A transient failure must cost one beat, not
+                # the whole broadcast; a persistent one is surfaced through
+                # _task_failures rather than hidden.
+                self._speak_errors += 1
+                log.exception(
+                    "[%s] speak loop error (%d consecutive)",
+                    self.session_id, self._speak_errors,
+                )
+                if self._speak_errors >= 20:
+                    log.error(
+                        "[%s] speak loop failing persistently; giving up so the "
+                        "supervisor restarts this session", self.session_id,
+                    )
+                    raise
+                await asyncio.sleep(min(30.0, 2.0 * self._speak_errors))
 
-            METRICS.gauge(
-                "goldlive_market_staleness_ms", state.staleness_ms,
-                {"session": self.session_id},
+    async def _speak_once(self) -> None:
+        assert self.runtime is not None
+        await asyncio.sleep(self.args.tick_s)
+        if self.paused:
+            return
+        now = datetime.now(timezone.utc)
+        state = self.engine.snapshot(now)
+
+        METRICS.gauge(
+            "goldlive_market_staleness_ms", state.staleness_ms,
+            {"session": self.session_id},
+        )
+
+        for event in self.engine.drain_events():
+            self.runtime.on_market_event(event, now)
+
+        view = state.timeframes.get("5m")
+        phase = classify_phase(now, atr=view.atr if view else None)
+        await self.runtime.keep_fed(phase, state, now)
+        await self.runtime.offer_next_topic(phase, state, now)
+
+        before_unsafe = len(self.runtime.dropped_unsafe)
+        before_rep = len(self.runtime.dropped_repetitive)
+
+        response = await self.runtime.tick(state, now)
+
+        for _ in range(len(self.runtime.dropped_unsafe) - before_unsafe):
+            METRICS.inc("goldlive_blocked_total",
+                        {"session": self.session_id, "reason": "safety"})
+            text, violations = self.runtime.dropped_unsafe[-1]
+            self.store.record_blocked(
+                self.session_id, "safety", text, "; ".join(violations)
+            )
+        for _ in range(len(self.runtime.dropped_repetitive) - before_rep):
+            METRICS.inc("goldlive_blocked_total",
+                        {"session": self.session_id, "reason": "repetition"})
+            text, sim = self.runtime.dropped_repetitive[-1]
+            self.store.record_blocked(
+                self.session_id, "repetition", text, f"similarity={sim:.2f}"
             )
 
-            for event in self.engine.drain_events():
-                self.runtime.on_market_event(event, now)
+        if response is None:
+            return
 
-            view = state.timeframes.get("5m")
-            phase = classify_phase(now, atr=view.atr if view else None)
-            await self.runtime.keep_fed(phase, state, now)
-            await self.runtime.offer_next_topic(phase, state, now)
+        METRICS.inc("goldlive_utterances_total", {"session": self.session_id})
+        if response.provenance.first_token_ms:
+            METRICS.observe(
+                "goldlive_first_token_ms", response.provenance.first_token_ms,
+                {"session": self.session_id},
+            )
+        self.store.record_utterance(response)
 
-            before_unsafe = len(self.runtime.dropped_unsafe)
-            before_rep = len(self.runtime.dropped_repetitive)
+        # Muted still generates and records -- only audio is withheld,
+        # so the transcript stays complete and unmuting resumes a host
+        # that is current rather than an hour behind.
+        # Muting is enforced here rather than in the runtime, so a muted
+        # session still generates, records and traces normally -- unmuting
+        # then resumes a host that is current rather than an hour behind.
+        if self.router is not None and self.muted:
+            self.router.sink.stop()
 
-            response = await self.runtime.tick(state, now)
+            METRICS.gauge(
+                "goldlive_queue_depth", self.router.queue_depth,
+                {"session": self.session_id, "queue": "audio"},
+            )
 
-            for _ in range(len(self.runtime.dropped_unsafe) - before_unsafe):
-                METRICS.inc("goldlive_blocked_total",
-                            {"session": self.session_id, "reason": "safety"})
-                text, violations = self.runtime.dropped_unsafe[-1]
-                self.store.record_blocked(
-                    self.session_id, "safety", text, "; ".join(violations)
-                )
-            for _ in range(len(self.runtime.dropped_repetitive) - before_rep):
-                METRICS.inc("goldlive_blocked_total",
-                            {"session": self.session_id, "reason": "repetition"})
-                text, sim = self.runtime.dropped_repetitive[-1]
-                self.store.record_blocked(
-                    self.session_id, "repetition", text, f"similarity={sim:.2f}"
-                )
-
-            if response is None:
-                continue
-
-            METRICS.inc("goldlive_utterances_total", {"session": self.session_id})
-            if response.provenance.first_token_ms:
-                METRICS.observe(
-                    "goldlive_first_token_ms", response.provenance.first_token_ms,
-                    {"session": self.session_id},
-                )
-            self.store.record_utterance(response)
-
-            # Muted still generates and records -- only audio is withheld,
-            # so the transcript stays complete and unmuting resumes a host
-            # that is current rather than an hour behind.
-            # Muting is enforced here rather than in the runtime, so a muted
-            # session still generates, records and traces normally -- unmuting
-            # then resumes a host that is current rather than an hour behind.
-            if self.router is not None and self.muted:
-                self.router.sink.stop()
-
-                METRICS.gauge(
-                    "goldlive_queue_depth", self.router.queue_depth,
-                    {"session": self.session_id, "queue": "audio"},
-                )
-
-            log.info("[%s] %s", self.session_id, response.text)
+        log.info("[%s] %s", self.session_id, response.text)
 
     # -- startup readiness ------------------------------------------------
 
@@ -665,6 +768,9 @@ class LiveSession:
         ]
         if self.adapter is not None:
             self._tasks.append(asyncio.create_task(self._comment_loop(), name="comments"))
+
+        for task in self._tasks:
+            task.add_done_callback(self._on_task_done)
 
         log.info(
             "%s live: persona=%s market=%s adapter=%s generator=%s",

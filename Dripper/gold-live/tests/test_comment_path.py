@@ -168,3 +168,108 @@ def test_comment_is_a_distinct_trigger_from_education_and_market():
     assert TriggerType.COMMENT != TriggerType.EDUCATION
     assert TriggerType.COMMENT != TriggerType.MARKET_EVENT
     assert TriggerType.COMMENT.value == "comment"
+
+
+# -- background tasks must never die silently ------------------------------
+
+
+def test_a_dead_background_task_turns_health_FAILING():
+    """Regression from a real recovery test.
+
+    Ollama was killed mid-session. The speak loop raised, the task ended, and
+    because nothing ever retrieves a task's exception it did so in silence: the
+    session stayed alive, produced nothing for eleven minutes, and /health went
+    on reporting OK with /ready 200 -- so the supervisor had no reason to
+    restart it. A crash would have been a better outcome than that.
+    """
+
+    from runtime.live import LiveSession
+    from shared.contracts import HealthState
+
+    app = LiveSession.__new__(LiveSession)
+    app.session_id = "SESSION_001"
+    app._task_failures = {}
+
+    assert app._tasks_health().state is HealthState.OK
+
+    app._task_failures["speak"] = "ConnectError: All connection attempts failed"
+    health = app._tasks_health()
+    assert health.state is HealthState.FAILING, (
+        "a dead speak loop must make /ready return 503 so the supervisor acts"
+    )
+    assert "speak" in (health.degraded_reason or "")
+    assert any(c.name == "speak" and not c.ok for c in health.checks)
+
+
+def test_task_failures_are_recorded_with_the_exception():
+    import asyncio
+
+    from runtime.live import LiveSession
+
+    app = LiveSession.__new__(LiveSession)
+    app.session_id = "SESSION_001"
+    app._task_failures = {}
+
+    async def boom():
+        raise ConnectionError("model server vanished")
+
+    async def run():
+        task = asyncio.create_task(boom(), name="speak")
+        task.add_done_callback(app._on_task_done)
+        with pytest.raises(ConnectionError):
+            await task
+        await asyncio.sleep(0)
+
+    asyncio.run(run())
+    assert "speak" in app._task_failures
+    assert "model server vanished" in app._task_failures["speak"]
+
+
+def test_a_cancelled_task_is_not_reported_as_a_failure():
+    """Shutdown cancels every task; that must not look like a crash."""
+    import asyncio
+
+    from runtime.live import LiveSession
+
+    app = LiveSession.__new__(LiveSession)
+    app.session_id = "SESSION_001"
+    app._task_failures = {}
+
+    async def forever():
+        await asyncio.sleep(3600)
+
+    async def run():
+        task = asyncio.create_task(forever(), name="speak")
+        task.add_done_callback(app._on_task_done)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(run())
+    assert app._task_failures == {}
+
+
+def test_generation_health_reflects_a_dead_model_server():
+    """Regression: killing Ollama left every health component green -- market,
+    audio, adapter, session -- while the one thing the session exists to do was
+    impossible. /ready stayed 200, so the supervisor never acted and the
+    session sat mute for eleven minutes."""
+    from runtime.live import LiveSession
+    from shared.contracts import HealthState
+
+    app = LiveSession.__new__(LiveSession)
+    app.session_id = "SESSION_001"
+    app._speak_errors = 0
+    assert app._generation_health().state is HealthState.OK
+
+    app._speak_errors = 2
+    assert app._generation_health().state is HealthState.DEGRADED, (
+        "a brief blip should degrade, not trigger a restart"
+    )
+
+    app._speak_errors = 11
+    health = app._generation_health()
+    assert health.state is HealthState.FAILING, (
+        "sustained generation failure must make /ready 503 so the supervisor acts"
+    )
+    assert "model server" in (health.degraded_reason or "")
