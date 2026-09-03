@@ -121,3 +121,12 @@ Anon/humanity_frames/
 Anon/salience_frames/
 Anon/avatar_vis_frames/
 Anon/*.log
+
+# Added on main after the expr_frames dump was caught at 51 MB - the same
+# failure as eyehead_frames, spotted before it was committed this time. None of
+# these paths exist in the camera worktree today; the rule is here so they
+# cannot appear later and be swept in by `git add -A`.
+Anon/expr_frames/
+Anon/expr_row*.png
+Anon/native_*.png
+Anon/landmark_map*.png

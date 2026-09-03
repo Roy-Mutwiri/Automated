@@ -138,6 +138,26 @@ def _distance(a, b):
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
+def _pose_head(parts_with_rest, pivot, yaw, pitch, roll):
+    """Rotate the head about the neck pivot, always from the rest pose.
+
+    Factored out so `build_human` and `World.repose` cannot drift apart: a live
+    view that posed the head by slightly different arithmetic than the stills
+    would produce two different men, which is the one thing the multicam design
+    forbids.
+    """
+    cy_, sy_ = math.cos(yaw), math.sin(yaw)
+    cp, sp = math.cos(pitch), math.sin(pitch)
+    for ob, rest in parts_with_rest:
+        ob.rotation_euler = (pitch, roll, yaw)
+        rel = (rest[0] - pivot[0], rest[1] - pivot[1], rest[2] - pivot[2])
+        rx = rel[0] * cy_ - rel[1] * sy_
+        ry = rel[0] * sy_ + rel[1] * cy_
+        rz = rel[2] * cp - ry * sp
+        ry = ry * cp + rel[2] * sp
+        ob.location = (pivot[0] + rx, pivot[1] + ry, pivot[2] + rz)
+
+
 class World:
     """The canonical scene. Built once; cameras only project it."""
 
@@ -146,6 +166,51 @@ class World:
         self.c = cameras
         self.objects: dict[str, object] = {}
         self.landmarks: dict[str, tuple[float, float, float]] = {}
+        # Set by build_human, used by repose() for the live view.
+        self.head_parts: list = []
+        self.head_pivot = (0.0, 0.0, 0.0)
+        self.torso = None
+        self.torso_base_scale = (1.0, 1.0, 1.0)
+        self.eye_centres: dict = {}
+
+    def repose(self, pose) -> bool:
+        """Re-pose the existing proxy for a new frame, without rebuilding it.
+
+        Rebuilding the human costs about as much as rendering the frame, which
+        halves the live frame rate for no benefit: the room, desk, chair, lights
+        and cameras have not moved. Only the head rotates and the chest breathes.
+
+        Returns False when there is nothing to re-pose - a fitted mesh or an
+        empty scene - so callers can fall back rather than silently animate
+        nothing.
+        """
+        if not self.head_parts:
+            return False
+        # Blinks first. The lid's rest position depends on the blink signal, so
+        # it has to be recomputed before the head rotation is applied - the same
+        # order build_human uses. Without this the live view would show a man
+        # who never blinks, which is the single loudest "not alive" tell.
+        for entry in self.head_parts:
+            ob = entry[0]
+            if not ob.name.startswith("lid_"):
+                continue
+            side = ob.name[-1]
+            ec = self.eye_centres.get(side)
+            if ec is None:
+                continue
+            drop = (1.0 - getattr(pose, f"eye_open_{side}", 1.0)) * 0.020
+            entry[1] = (ec[0], ec[1] - 0.002, ec[2] + 0.016 - drop)
+        _pose_head(self.head_parts, self.head_pivot,
+                   math.radians(getattr(pose, "yaw", 0.0)),
+                   math.radians(getattr(pose, "pitch", 0.0)),
+                   math.radians(getattr(pose, "roll", 0.0)))
+        if self.torso is not None:
+            breath = (getattr(pose, "scale", 1.0) - 1.0)
+            # Applied to the recorded radii, matching build_human exactly. The
+            # chest breathes; the chair must not.
+            bx, by, bz = self.torso_base_scale
+            self.torso.scale = (bx * (1 + breath * 0.6), by * (1 + breath), bz)
+        return True
 
     # -- room ---------------------------------------------------------------
     def build_room(self) -> None:
@@ -348,8 +413,10 @@ class World:
         target = self.g["human"]["gaze_targets"]["main_camera"]
         eye_white = _material("sclera", (0.72, 0.70, 0.68), roughness=0.25)
         iris = _material("iris", (0.055, 0.035, 0.020), roughness=0.2)
+        eye_centres = {}
         for side, sx in (("l", -1), ("r", 1)):
             ec = (head_c[0] + sx * 0.032, head_c[1] + 0.078, head_c[2] + 0.012)
+            eye_centres[side] = ec
             parts.append(_ellipsoid(f"eye_{side}", ec, (0.0125,) * 3, eye_white,
                                     segments=16))
             d = math.sqrt(sum((t - e) ** 2 for t, e in zip(target, ec)))
@@ -369,18 +436,27 @@ class World:
                 (0.016, 0.013, 0.010), skin, segments=14))
 
         # Rotate the whole head about the neck pivot.
+        #
+        # The rest positions are kept alongside each object so the head can be
+        # re-posed later without rebuilding it. Rotation is applied to the rest
+        # position every time rather than to the current one, because applying
+        # it to an already-rotated object compounds the transform and the head
+        # walks away from the neck over a few hundred frames.
         pivot = (hx, hy - 0.01, neck_base_z + 0.02)
-        for ob in parts:
-            ob.rotation_euler = (pitch, roll, yaw)
-            rel = (ob.location[0] - pivot[0], ob.location[1] - pivot[1],
-                   ob.location[2] - pivot[2])
-            cy_, sy_ = math.cos(yaw), math.sin(yaw)
-            rx = rel[0] * cy_ - rel[1] * sy_
-            ry = rel[0] * sy_ + rel[1] * cy_
-            cp, sp = math.cos(pitch), math.sin(pitch)
-            rz = rel[2] * cp - ry * sp
-            ry = ry * cp + rel[2] * sp
-            ob.location = (pivot[0] + rx, pivot[1] + ry, pivot[2] + rz)
+        self.head_pivot = pivot
+        # Lists, not tuples: repose() rewrites the eyelids' rest positions each
+        # frame, because a blink moves the lid before the head rotation is
+        # applied rather than after it.
+        self.head_parts = [[ob, tuple(ob.location)] for ob in parts]
+        self.eye_centres = eye_centres
+        self.torso = bpy.data.objects.get("torso")
+        # The ellipsoid's radii live in object.scale, so scale is NOT a neutral
+        # multiplier here - the un-breathed radii are recorded and breathing is
+        # applied to those. Writing (1 + breath, ...) straight into scale
+        # inflates a 0.20 m chest to 1.0 m, and the camera ends up inside it
+        # looking at a flat grey wall that is the inside of his own torso.
+        self.torso_base_scale = (0.20, 0.145, (shoulder_z - hz) / 2 + 0.06)
+        _pose_head(self.head_parts, pivot, yaw, pitch, roll)
 
         self.landmarks["head_centre"] = head_c
         self.landmarks["eye_l"] = (head_c[0] - 0.032, head_c[1] + 0.078,
