@@ -80,15 +80,26 @@ EXPRESSIONS: dict[str, dict] = {
         onset=0.28, hold=(0.9, 2.2), decay=1.0, residual=0.16,
         valence=+0.3, asymmetry=0.75,
     ),
+    # Concentration is genuinely a quiet expression, but it was quiet enough
+    # to be absent: at the 0.55 the THINKING state triggers it with, it moved
+    # the face 1.8 px at 1080p. Strengthened until its two trigger levels land
+    # above the ~3 px the plate needs before a change is legible, which is
+    # still far short of a scowl.
     "FOCUSED": dict(
-        peak=0.0, cheek=0.0, squint=0.30, brow=-0.22, furrow=0.30,
+        peak=0.0, cheek=0.0, squint=0.38, brow=-0.34, furrow=0.46,
         onset=0.6, hold=(2.0, 6.0), decay=1.8, residual=0.20,
         valence=0.0,
     ),
+    # `brow` was 0.0 here while `brow_split` was 0.55. The split is a
+    # *proportion of the brow raise*, so a zero brow made it meaningless and
+    # the one raised eyebrow that defines scepticism never rendered at all.
+    # Measured on the plate, the whole expression moved 0.9 px at full
+    # intensity - below anything a viewer can see. The mouth alone cannot
+    # carry it; the brow has to do the work.
     "SKEPTICAL": dict(
-        peak=-0.10, cheek=0.10, squint=0.35, brow=0.0, furrow=0.18,
+        peak=-0.16, cheek=0.10, squint=0.30, brow=0.34, furrow=0.22,
         onset=0.45, hold=(1.0, 2.6), decay=1.3, residual=0.14,
-        valence=-0.15, asymmetry=0.85, brow_split=0.55, head_tilt=1.9,
+        valence=-0.15, asymmetry=0.85, brow_split=0.90, head_tilt=2.4,
     ),
     "SURPRISED": dict(
         peak=0.10, cheek=0.05, squint=-0.55, brow=0.85,
@@ -224,7 +235,14 @@ class FacialExpressionSystem:
         f.eye_squint_r += squint * r_gain
 
         brow = spec.get("brow", 0.0) * level
+        # Which brow leads follows the same coin as the head tilt, rather than
+        # always the left. Two reasons: a person does not raise the same
+        # eyebrow every time, and the renderer's two brow channels are not
+        # equally strong, so a permanently left-leading split would ship the
+        # weaker of the two every time.
         split = spec.get("brow_split", 0.0)
+        if not inst.lead_left:
+            split = -split
         f.brow_outer_l += brow * (1.0 + split)
         f.brow_outer_r += brow * (1.0 - split)
         f.brow_inner += brow * 0.35

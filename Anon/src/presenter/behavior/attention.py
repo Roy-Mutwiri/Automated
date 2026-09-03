@@ -115,23 +115,59 @@ class AttentionTarget:
     # Radius of the region, in degrees. Re-fixations land somewhere inside the
     # target, never on the identical point twice.
     spread: float = 1.2
+    # Semantic group. Moving between siblings is a *sub-fixation*, not a change
+    # of attention: a person reading a monitor moves their eyes around it
+    # constantly while remaining, in every sense that matters, still reading.
+    family: str = ""
+    # Safety rail. Not a metronome - the sampled dwell almost never reaches it -
+    # but a stuck state is a pathology and needs a way out.
+    hard_max: float = 26.0
 
 
 # The camera sits above the main display, which is why LENS and MAIN_DISPLAY are
 # only a few degrees apart. SECOND_DISPLAY and CHAT are the off-axis glances
 # that make a streamer look like they are working rather than performing.
 DEFAULT_TARGETS: tuple[AttentionTarget, ...] = (
-    AttentionTarget("CAMERA_LENS", 0.0, 1.0, dwell_median=4.6, weight=2.4, spread=1.0),
-    AttentionTarget("MAIN_MONITOR_CENTER", -4.0, -12.0, dwell_median=6.5, weight=2.3, spread=3.0),
-    AttentionTarget("MAIN_MONITOR_LOWER", -5.0, -20.0, dwell_median=4.0, weight=1.2, spread=3.2),
-    AttentionTarget("SECONDARY_MONITOR", -32.0, -7.0, dwell_median=4.2, weight=1.0, spread=4.0),
-    AttentionTarget("CHAT_REGION", 26.0, -11.0, dwell_median=3.4, weight=1.0, spread=3.6),
-    AttentionTarget("DESK_MOUSE", -15.0, -30.0, dwell_median=1.9, weight=0.6, spread=3.0),
-    AttentionTarget("KEYBOARD_REGION", -3.0, -34.0, dwell_median=1.7, weight=0.4, spread=3.4),
-    AttentionTarget("DESK_GENERAL", 9.0, -28.0, dwell_median=2.0, weight=0.4, spread=4.0),
-    AttentionTarget("THINKING_POINT_LEFT", -25.0, 14.0, dwell_median=2.2, weight=0.35, spread=4.5),
-    AttentionTarget("THINKING_POINT_RIGHT", 23.0, 16.0, dwell_median=2.2, weight=0.3, spread=4.5),
+    AttentionTarget("CAMERA_LENS", 0.0, 1.0, dwell_median=5.2, weight=2.0,
+                    spread=1.0, family="CAMERA", hard_max=22.0),
+
+    # The work area. Five sub-regions of one monitor, so reading moves the eyes
+    # around a screen instead of pinning them to a coordinate.
+    AttentionTarget("MAIN_MONITOR_CENTER", -4.0, -12.0, dwell_median=5.0,
+                    weight=2.6, spread=2.6, family="MAIN_MONITOR", hard_max=30.0),
+    AttentionTarget("MAIN_MONITOR_UPPER", -3.0, -6.0, dwell_median=3.4,
+                    weight=1.0, spread=2.4, family="MAIN_MONITOR", hard_max=24.0),
+    AttentionTarget("MAIN_MONITOR_LOWER", -5.0, -19.0, dwell_median=3.6,
+                    weight=1.1, spread=2.6, family="MAIN_MONITOR", hard_max=24.0),
+    AttentionTarget("MAIN_MONITOR_LEFT", -14.0, -12.0, dwell_median=3.0,
+                    weight=0.8, spread=2.6, family="MAIN_MONITOR", hard_max=20.0),
+    AttentionTarget("MAIN_MONITOR_RIGHT", 7.0, -11.0, dwell_median=3.0,
+                    weight=0.8, spread=2.6, family="MAIN_MONITOR", hard_max=20.0),
+
+    AttentionTarget("SECONDARY_MONITOR", -32.0, -7.0, dwell_median=3.6,
+                    weight=0.75, spread=4.0, family="SECONDARY", hard_max=18.0),
+    AttentionTarget("CHAT_REGION", 26.0, -11.0, dwell_median=3.0, weight=0.6,
+                    spread=3.6, family="CHAT", hard_max=15.0),
+
+    AttentionTarget("DESK_MOUSE", -15.0, -30.0, dwell_median=1.5, weight=0.5,
+                    spread=3.0, family="DESK", hard_max=6.0),
+    AttentionTarget("KEYBOARD_REGION", -3.0, -34.0, dwell_median=1.3,
+                    weight=0.3, spread=3.4, family="DESK", hard_max=5.0),
+    AttentionTarget("DESK_GENERAL", 9.0, -28.0, dwell_median=1.5, weight=0.25,
+                    spread=4.0, family="DESK", hard_max=6.0),
+
+    # Rare on purpose. A look away into nothing is visually powerful precisely
+    # because it is uncommon; at the previous weights it read as a man who kept
+    # gazing into the middle distance.
+    AttentionTarget("THINKING_POINT_LEFT", -25.0, 14.0, dwell_median=1.9,
+                    weight=0.10, spread=4.5, family="THINKING", hard_max=6.0),
+    AttentionTarget("THINKING_POINT_RIGHT", 23.0, 16.0, dwell_median=1.8,
+                    weight=0.08, spread=4.5, family="THINKING", hard_max=6.0),
 )
+
+# Within a dwell, the gaze re-fixates around the same object at this median
+# interval. These are not attention changes and are not counted as such.
+SUBFIXATION_MEDIAN = 2.1
 
 # The target layout is the single thing that decides whether this reads as a
 # person or a photograph, and the previous one was the reason it read as a
@@ -187,23 +223,27 @@ HEAD_SHARE_CURVE = 0.65       # <1 front-loads the near range
 PITCH_SHARE = 1.05
 
 
-STATE_BIAS: dict[str, dict[str, float]] = {
-    "READING":        {"MAIN_MONITOR_CENTER": 7.0, "MAIN_MONITOR_LOWER": 5.0,
-                       "CAMERA_LENS": 0.30, "THINKING_POINT_LEFT": 0.2,
-                       "THINKING_POINT_RIGHT": 0.2},
-    "CHECKING_CHAT":  {"CHAT_REGION": 9.0, "CAMERA_LENS": 0.7,
-                       "MAIN_MONITOR_CENTER": 0.5},
-    "FOCUSED":        {"MAIN_MONITOR_CENTER": 4.0, "MAIN_MONITOR_LOWER": 2.5,
-                       "DESK_MOUSE": 1.8, "CAMERA_LENS": 0.5},
-    "THINKING":       {"THINKING_POINT_LEFT": 5.0, "THINKING_POINT_RIGHT": 4.0,
-                       "CAMERA_LENS": 0.3, "MAIN_MONITOR_CENTER": 0.4},
-    "WAITING":        {"CAMERA_LENS": 1.8, "DESK_GENERAL": 1.6,
-                       "SECONDARY_MONITOR": 1.4, "MAIN_MONITOR_CENTER": 0.7},
-    "IDLE_RELAXED":   {"CAMERA_LENS": 1.1, "DESK_GENERAL": 1.5,
-                       "SECONDARY_MONITOR": 1.4},
-    "IDLE_ATTENTIVE": {"CAMERA_LENS": 1.5, "MAIN_MONITOR_CENTER": 1.2},
-    "LISTENING":      {"CAMERA_LENS": 2.4, "MAIN_MONITOR_CENTER": 0.6},
-    "SPEAKING":       {"CAMERA_LENS": 2.2, "MAIN_MONITOR_CENTER": 0.7},
+# Which *families* an intention makes plausible. Working per family rather than
+# per target is what stops a state from having to enumerate five monitor
+# sub-regions, and it is why READING keeps him on the monitor while his eyes
+# still move around it.
+STATE_FAMILY_BIAS: dict[str, dict[str, float]] = {
+    "READING":        {"MAIN_MONITOR": 9.0, "CAMERA": 0.25, "THINKING": 0.15,
+                       "DESK": 0.4, "SECONDARY": 0.5, "CHAT": 0.3},
+    "CHECKING_CHAT":  {"CHAT": 9.0, "SECONDARY": 2.0, "CAMERA": 0.7,
+                       "MAIN_MONITOR": 0.5, "THINKING": 0.1},
+    "FOCUSED":        {"MAIN_MONITOR": 6.0, "DESK": 1.6, "CAMERA": 0.35,
+                       "THINKING": 0.15, "CHAT": 0.2},
+    "THINKING":       {"THINKING": 6.0, "CAMERA": 0.5, "MAIN_MONITOR": 0.6,
+                       "DESK": 0.2},
+    "WAITING":        {"CAMERA": 2.0, "MAIN_MONITOR": 1.4, "SECONDARY": 1.2,
+                       "DESK": 0.7, "THINKING": 0.5},
+    "IDLE_RELAXED":   {"CAMERA": 1.3, "MAIN_MONITOR": 1.6, "SECONDARY": 1.2,
+                       "DESK": 0.7, "THINKING": 0.4},
+    "IDLE_ATTENTIVE": {"CAMERA": 1.6, "MAIN_MONITOR": 2.0, "SECONDARY": 0.8,
+                       "CHAT": 0.7, "THINKING": 0.2},
+    "LISTENING":      {"CAMERA": 2.6, "MAIN_MONITOR": 0.6},
+    "SPEAKING":       {"CAMERA": 2.4, "MAIN_MONITOR": 0.7},
 }
 
 
@@ -269,6 +309,9 @@ class AttentionSystem:
         self._shift: _Shift | None = None
         self._recent: list[str] = []
         self._planned_dwell = 3.0
+        self._subfix_at = 0.0
+        self._family_since = 0.0
+        self.subfix_count = 0
         self._requested: tuple[str, float | None] | None = None
         self._state_at_shift = "IDLE_ATTENTIVE"
         self.shift_count = 0
@@ -276,11 +319,11 @@ class AttentionSystem:
 
     # -- selection ----------------------------------------------------------
     def _weights(self, drives) -> dict[str, float]:
-        bias = STATE_BIAS.get(drives.state.value, {})
+        bias = STATE_FAMILY_BIAS.get(drives.state.value, {})
         affinity = drives.mod.camera_affinity
         out: dict[str, float] = {}
         for name, t in self.targets.items():
-            w = t.weight * bias.get(name, 1.0)
+            w = t.weight * bias.get(t.family, 1.0)
             if name == "CAMERA_LENS":
                 # camera_affinity is the state's pull toward the audience.
                 w *= 1.0 + 1.6 * affinity
@@ -391,7 +434,11 @@ class AttentionSystem:
             return 0.0
         return min((mag - 28.0) / 40.0, 1.0) * 0.35
 
-    def _begin_shift(self, drives, name: str) -> None:
+    def _schedule_subfix(self, drives) -> None:
+        self._subfix_at = drives.now + drives.rng.lognormal_interval(
+            median=SUBFIXATION_MEDIAN, shape=0.55, low=0.55, high=9.0)
+
+    def _begin_shift(self, drives, name: str, sub: bool = False) -> None:
         t = self.targets[name]
         rng = drives.rng
 
@@ -441,8 +488,13 @@ class AttentionSystem:
         self.current = name
         self.point_az, self.point_el = to_az, to_el
         self.last_change = drives.now
-        self.shift_count += 1
+        if sub:
+            self.subfix_count += 1
+        else:
+            self.shift_count += 1
 
+        if not sub:
+            self._family_since = drives.now
         self._recent.append(name)
         if len(self._recent) > 4:
             self._recent.pop(0)
@@ -460,7 +512,7 @@ class AttentionSystem:
         from ..types import BehaviorEvent
         drives.emit(BehaviorEvent(
             time=drives.now,
-            kind="attention",
+            kind="subfixation" if sub else "attention",
             detail=f"{name} az={to_az:+.1f} el={to_el:+.1f} share={share:.2f}",
             magnitude=magnitude,
             metadata={"target": name, "azimuth": to_az, "elevation": to_el,
@@ -536,6 +588,27 @@ class AttentionSystem:
 
         self.eye_az, self.eye_el, _, _ = _hold_eye(
             self.point_az - self.head_yaw, self.point_el - self.head_pitch)
+
+        # Sub-fixation: re-aim within the same object. Not an attention change -
+        # the semantic state does not move, the shift is not counted, and the
+        # intention layer never sees it. It is what makes reading look like
+        # reading instead of like staring at one pixel.
+        if (self._requested is None and drives.now >= self._subfix_at
+                and drives.now < self.dwell_until - 0.6):
+            sibs = [n for n, t in self.targets.items()
+                    if t.family == self.targets[self.current].family
+                    and n != self.current]
+            if sibs and self.targets[self.current].family:
+                pick = sibs[int(drives.rng.uniform(0, len(sibs))) % len(sibs)]
+                keep = self.dwell_until
+                self._begin_shift(drives, pick, sub=True)
+                self.dwell_until = keep
+            self._schedule_subfix(drives)
+
+        # Hard maximum dwell. A safety rail against a stuck state, not a
+        # metronome: the sampled dwell reaches it only pathologically.
+        if drives.now - self._family_since > self.targets[self.current].hard_max:
+            self.dwell_until = min(self.dwell_until, drives.now)
 
         if self._requested is not None:
             name, dwell = self._requested

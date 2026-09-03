@@ -1,0 +1,191 @@
+{
+  "minutes": 5.0,
+  "events": {
+    "attention": {
+      "count": 67,
+      "per_minute": 13.4,
+      "mean_interval": 4.476767676767971,
+      "median_interval": 3.683333333333124,
+      "sd_interval": 2.7084788287069954,
+      "cv": 0.6050076806001239,
+      "min_interval": 0.8999999999999488,
+      "max_interval": 15.199999999999136
+    },
+    "blink": {
+      "count": 45,
+      "per_minute": 9.0,
+      "mean_interval": 6.701515151515637,
+      "median_interval": 5.700000000002078,
+      "sd_interval": 5.339073400415443,
+      "cv": 0.7966964603829837,
+      "min_interval": 0.23333333333332007,
+      "max_interval": 23.799999999998647
+    },
+    "blink_all": {
+      "count": 52,
+      "per_minute": 10.4,
+      "mean_interval": 5.781699346405648,
+      "median_interval": 5.56666666666688,
+      "sd_interval": 4.142890667362957,
+      "cv": 0.7165524215537944,
+      "min_interval": 0.23333333333332007,
+      "max_interval": 20.700000000005787
+    },
+    "blink_partial": {
+      "count": 7,
+      "per_minute": 1.4,
+      "mean_interval": 35.872222222220536,
+      "median_interval": 14.350000000000067,
+      "sd_interval": 47.818768269008736,
+      "cv": 1.3330305541926555,
+      "min_interval": 1.7999999999998977,
+      "max_interval": 139.43333333332544
+    },
+    "expression": {
+      "count": 8,
+      "per_minute": 1.6,
+      "mean_interval": 33.45714285714426,
+      "median_interval": 31.53333333333154,
+      "sd_interval": 13.364852201816738,
+      "cv": 0.3994618506093648,
+      "min_interval": 13.966666666665887,
+      "max_interval": 59.39999999999662
+    },
+    "expression_emotion": {
+      "count": 3,
+      "per_minute": 0.6
+    },
+    "head_all": {
+      "count": 12,
+      "per_minute": 2.4,
+      "mean_interval": 24.969696969697853,
+      "median_interval": 16.366666666665736,
+      "sd_interval": 15.012079005578347,
+      "cv": 0.6012119019224125,
+      "min_interval": 7.533333333332905,
+      "max_interval": 51.69999999999885
+    },
+    "head_pitch": {
+      "count": 2,
+      "per_minute": 0.4
+    },
+    "head_roll": {
+      "count": 4,
+      "per_minute": 0.8,
+      "mean_interval": 38.56666666666518,
+      "median_interval": 48.36666666666392,
+      "sd_interval": 22.43481091386137,
+      "cv": 0.5817150625893406,
+      "min_interval": 7.533333333332905,
+      "max_interval": 59.799999999998704
+    },
+    "head_yaw": {
+      "count": 6,
+      "per_minute": 1.2,
+      "mean_interval": 43.9533333333312,
+      "median_interval": 39.2333333333311,
+      "sd_interval": 30.974782574789007,
+      "cv": 0.7047197612950973,
+      "min_interval": 13.499999999999233,
+      "max_interval": 98.96666666666107
+    },
+    "posture_shift": {
+      "count": 5,
+      "per_minute": 1.0,
+      "mean_interval": 53.63333333333037,
+      "median_interval": 33.66666666666475,
+      "sd_interval": 40.04493309604219,
+      "cv": 0.7466426307528479,
+      "min_interval": 25.133333333331905,
+      "max_interval": 122.06666666666005
+    },
+    "state_change": {
+      "count": 18,
+      "per_minute": 3.6,
+      "mean_interval": 16.50588235294202,
+      "median_interval": 16.50000000001313,
+      "sd_interval": 8.067770425977397,
+      "cv": 0.4887815297277574,
+      "min_interval": 4.266666666666424,
+      "max_interval": 30.13333333333162
+    },
+    "subfixation": {
+      "count": 67,
+      "per_minute": 13.4,
+      "mean_interval": 4.498989898990217,
+      "median_interval": 2.5166666666667292,
+      "sd_interval": 4.734965466568432,
+      "cv": 1.0524507884828056,
+      "min_interval": 0.5666666666671176,
+      "max_interval": 23.799999999998647
+    },
+    "voluntary_all": {
+      "count": 92,
+      "per_minute": 18.4,
+      "mean_interval": 3.24688644688666,
+      "median_interval": 2.6333333333334643,
+      "sd_interval": 2.3784901892823345,
+      "cv": 0.7325449251737756,
+      "min_interval": 0.0,
+      "max_interval": 13.299999999999244
+    }
+  },
+  "attention_share": {
+    "MAIN_MONITOR_CENTER": 0.208955223880597,
+    "CAMERA_LENS": 0.16417910447761194,
+    "MAIN_MONITOR_LOWER": 0.16417910447761194,
+    "CHAT_REGION": 0.13432835820895522,
+    "MAIN_MONITOR_UPPER": 0.08955223880597014,
+    "MAIN_MONITOR_LEFT": 0.07462686567164178,
+    "MAIN_MONITOR_RIGHT": 0.05970149253731343,
+    "SECONDARY_MONITOR": 0.05970149253731343,
+    "DESK_MOUSE": 0.029850746268656716,
+    "KEYBOARD_REGION": 0.014925373134328358
+  },
+  "state_sequence": [
+    "CHECKING_CHAT",
+    "IDLE_ATTENTIVE",
+    "READING",
+    "FOCUSED",
+    "IDLE_RELAXED",
+    "IDLE_ATTENTIVE",
+    "CHECKING_CHAT",
+    "IDLE_ATTENTIVE",
+    "WAITING",
+    "IDLE_RELAXED",
+    "THINKING",
+    "IDLE_ATTENTIVE",
+    "FOCUSED",
+    "IDLE_ATTENTIVE",
+    "WAITING",
+    "IDLE_ATTENTIVE",
+    "CHECKING_CHAT",
+    "IDLE_ATTENTIVE"
+  ],
+  "state_visits": {
+    "IDLE_ATTENTIVE": 7,
+    "CHECKING_CHAT": 3,
+    "FOCUSED": 2,
+    "IDLE_RELAXED": 2,
+    "WAITING": 2,
+    "READING": 1,
+    "THINKING": 1
+  },
+  "stillness": {
+    "longest_quiet_s": 13.299999999999244,
+    "median_quiet_s": 2.6333333333334643,
+    "fraction_over_3s": 0.37362637362637363,
+    "fraction_over_8s": 0.054945054945054944
+  },
+  "pose": {
+    "yaw_max": 24.626435947213633,
+    "yaw_sd": 8.034203932936682,
+    "gaze_x_max": 0.5046348578821671,
+    "gaze_x_sd": 0.07600276373840532,
+    "yaw_max_step": 3.192352953870799,
+    "gaze_max_step": 0.2445474996362162
+  },
+  "seed": 33,
+  "profile": "PRESENTER_CALM",
+  "repeated_ngrams": []
+}

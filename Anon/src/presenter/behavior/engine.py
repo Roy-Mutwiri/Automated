@@ -312,6 +312,11 @@ class BehaviorEngine:
         motion.neck.rx = self.attention.head_pitch * NECK_FRACTION
         motion.head.rx = self.attention.head_pitch * (1.0 - NECK_FRACTION)
 
+        motion.contribute("head_pitch", "attention", self.attention.head_pitch)
+        motion.contribute("head_yaw", "attention", self.attention.head_yaw)
+        motion.contribute("head_pitch", "micro", pose.pitch)
+        motion.contribute("head_yaw", "micro", pose.yaw)
+
         # Idle head motion from the frozen head system, which still speaks
         # AvatarPose. Its sway belongs to the skull, not the spine.
         motion.head.ry += pose.yaw

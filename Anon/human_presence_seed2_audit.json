@@ -1,0 +1,16 @@
+{
+  "video": "human_presence_seed2.mp4",
+  "frames": 8999,
+  "seconds": 299.96666666666664,
+  "fps": 30.0,
+  "mean_change": 0.7095790626907562,
+  "median_change": 0.3653571307659149,
+  "p95_change": 3.0169446945190432,
+  "max_change": 7.148072242736816,
+  "dead_fraction": 0.4778308700966774,
+  "overt_fraction": 0.1160128903211468,
+  "longest_dead_run_s": 0.36666666666666664,
+  "longest_dead_run_at_s": 7.2,
+  "busiest_second_at_s": 280.3666666666667,
+  "quietest_second_at_s": 90.56666666666666
+}

@@ -241,6 +241,14 @@ class HumanMotionState:
     # Diagnostics. Never rendered.
     behavior_state: str = "IDLE_ATTENTIVE"
 
+    # Who contributed what, per channel. Written by each system as it applies
+    # itself, so a drifting pose can be attributed instead of guessed at - the
+    # pitch drift took three attempts to locate without this.
+    contributions: dict = field(default_factory=dict)
+
+    def contribute(self, channel: str, owner: str, value: float) -> None:
+        self.contributions.setdefault(channel, {})[owner] = value
+
     # -- convenience ---------------------------------------------------------
     def head_world_yaw(self) -> float:
         """Total yaw of the head in the room: the whole chain, summed.

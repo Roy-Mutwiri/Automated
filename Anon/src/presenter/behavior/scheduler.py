@@ -282,8 +282,15 @@ class BehaviorMemory:
         looking at the lens and looking at chat are genuinely different acts;
         everything else keeps only its kind.
         """
-        if kind == "attention":
-            return f"attention:{detail.split(' ')[0]}"
+        if kind in ("attention", "subfixation"):
+            # Sub-fixations carry their target for the same reason major shifts
+            # do. Without it every sub-fixation was the single token
+            # "subfixation", so any two in a row looked like a repeat and the
+            # detector reported "monitor, subfixation, subfixation" as a loop -
+            # which is not a loop, it is a man reading a screen. Keyed by
+            # target, two glances at the same sub-region still register and two
+            # at different ones correctly do not.
+            return f"{kind}:{detail.split(' ')[0]}"
         if kind == "state_change":
             return f"state:{detail.split(' -> ')[-1]}"
         return kind

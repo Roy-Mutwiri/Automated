@@ -151,10 +151,33 @@ COMFORT_SHIFTS = {
 }
 
 
-# How far accumulated comfort adjustments may carry a joint from neutral, and
-# how quickly they unwind.
+# Comfort offsets are a **mean-reverting** store, not a random walk.
+#
+# The distinction is what caused the pitch drift: with plain accumulation, a run
+# of same-signed shifts stacked into a permanent lean and the presenter sat at
+# -17 degrees of pitch for the last two minutes of a five-minute clip. Bounding
+# the magnitude helped and was not enough, because a bounded random walk still
+# spends most of its time away from centre.
+#
+# Three things now hold it near neutral: a decay toward zero, a hard cap, and -
+# the important one - an impulse that is *attenuated when it would push further
+# from neutral*. A person who is already leaning forward is more likely to
+# settle back than to lean further, and that asymmetry is what makes the
+# process mean-reverting rather than merely bounded.
 HELD_LIMIT_DEG = 2.2
-HELD_DECAY_TIME = 110.0
+HELD_DECAY_TIME = 90.0
+HELD_RETURN_BIAS = 0.75   # how strongly an away-from-neutral impulse is damped
+
+# Behavioural comfort band, distinct from the anatomical limits in
+# constraints.py and much tighter.
+#
+# Anatomy answers "can the neck physically do this?"; this answers "would a
+# relaxed streamer sit like this for a minute?". Intentional looks are exempt -
+# glancing at a mouse 30 degrees down is a real thing a person does - so the
+# band applies only to the *postural* contribution, which has no reason to sit
+# anywhere for minutes.
+POSTURE_PITCH_BAND = 4.5
+COMFORT_PITCH_BAND = 2.6
 
 # Engagement mean-reverts toward this. A posture that wanders freely is a
 # posture that eventually parks somewhere and stays.
@@ -177,7 +200,12 @@ class BodySystem:
         # Engagement drifts slowly on its own, and is nudged by state.
         self._engagement = 0.0
         self._engagement_target = 0.0
-        self._drift = OrnsteinUhlenbeck.from_amplitude(0.22, 70.0)
+        # Shorter and smaller than before. At amplitude 0.22 on a 70 s
+        # timescale the posture parked at a +0.45 excursion for over a minute,
+        # which is -6.3 degrees of head pitch held steady - the drift the
+        # contribution ledger attributed to "posture". A posture that wanders
+        # freely eventually parks somewhere and stays.
+        self._drift = OrnsteinUhlenbeck.from_amplitude(0.13, 42.0)
 
         self._active: list[_Shift] = []
         self._held: dict[str, list[float]] = {}
@@ -254,15 +282,14 @@ class BodySystem:
             # A purposeful nudge: the hand stays on the mouse and moves it a
             # centimetre or two, then holds. Not jitter - it happens, it stops,
             # and it stays where it ended up.
+            # Mean-reverting, like the comfort offsets: a mouse that random
+            # walks ends up permanently off to one side of the mat.
             rng = drives.rng
-            self._mouse_goal = (
-                self._mouse_goal[0] + rng.uniform(-0.55, 0.55),
-                0.0,
-                self._mouse_goal[2] + rng.uniform(-0.40, 0.40),
-            )
-            self._mouse_goal = (
-                max(min(self._mouse_goal[0], 1.1), -1.1), 0.0,
-                max(min(self._mouse_goal[2], 0.9), -0.9))
+            gx, _, gz = self._mouse_goal
+            gx = gx * 0.55 + rng.uniform(-0.55, 0.55)
+            gz = gz * 0.55 + rng.uniform(-0.40, 0.40)
+            self._mouse_goal = (max(min(gx, 1.1), -1.1), 0.0,
+                                max(min(gz, 0.9), -0.9))
         if kind == "HAND_REPOSITION":
             # The left hand moves between the desk and the lap. Rare, and it
             # persists - a hand that springs back was not repositioned.
@@ -314,7 +341,18 @@ class BodySystem:
                 j.ry += ry
                 j.rz += rz
 
-        # 2. Posture continuum.
+        # 2. Posture continuum, bounded to the behavioural band.
+        chain = ("pelvis", "spine_lower", "spine_mid", "chest", "neck", "head")
+        raw = sum(ENGAGEMENT_COUPLING[k][0] for k in chain
+                  if k in ENGAGEMENT_COUPLING) * self._engagement
+        if abs(raw) > POSTURE_PITCH_BAND:
+            # Scale the whole postural pose back rather than clipping the head
+            # alone, so the body stays self-consistent.
+            self._engagement *= POSTURE_PITCH_BAND / abs(raw)
+        motion.contribute("head_pitch", "posture", sum(
+            v[0] for k, v in ENGAGEMENT_COUPLING.items()
+            if k in ("pelvis", "spine_lower", "spine_mid", "chest", "neck",
+                     "head")) * self._engagement)
         for name, (rx, ry, rz) in ENGAGEMENT_COUPLING.items():
             j = joints.get(name)
             if j is not None:
@@ -323,7 +361,9 @@ class BodySystem:
                 j.rz += rz * self._engagement
 
         # 3. Comfort shifts in flight. Each eases in over its duration and
-        #    then *stays* - a settle that springs back was not a settle.
+        #    then *stays* - a settle that springs back was not a settle - but
+        #    the amount that persists is damped if it carries a joint further
+        #    from neutral.
         still_active = []
         for sh in self._active:
             t = (drives.now - sh.start) / max(sh.duration, 1e-4)
@@ -333,22 +373,34 @@ class BodySystem:
                 now_v = (rx * k, ry * k, rz * k)
                 held = self._held.setdefault(joint, [0.0, 0.0, 0.0])
                 for i in range(3):
-                    held[i] += now_v[i] - prev[i]
+                    delta = now_v[i] - prev[i]
+                    # Away from neutral costs more than toward it.
+                    if delta * held[i] > 0.0:
+                        delta *= 1.0 - HELD_RETURN_BIAS * min(
+                            abs(held[i]) / HELD_LIMIT_DEG, 1.0)
+                    held[i] += delta
                 sh.applied[joint] = now_v
             if t < 1.0:
                 still_active.append(sh)
         self._active = still_active
 
-        # 4. Held offsets decay back toward the neutral pose, and are bounded.
-        #
-        # Both parts matter. Without the bound, successive comfort shifts in the
-        # same direction accumulate into a permanent lean: measured pose pitch
-        # drifted from -3 degrees in the first minute to -17 in the fifth and
-        # stayed there, which read as the presenter getting stuck looking down.
-        # Without the decay they would never come back at all.
-        #
-        # 240 s was too slow to unwind a run of same-signed shifts inside a
-        # five-minute clip.
+        motion.contribute("head_pitch", "comfort", sum(
+            self._held.get(k, [0, 0, 0])[0]
+            for k in ("pelvis", "spine_lower", "spine_mid", "chest", "neck",
+                      "head")))
+
+        # 4. Decay toward neutral, a hard per-joint cap, and a band on the
+        #    total the chain may contribute to head pitch.
+        chain_pitch = sum(self._held.get(k, [0.0, 0.0, 0.0])[0] for k in
+                          ("pelvis", "spine_lower", "spine_mid", "chest",
+                           "neck", "head"))
+        if abs(chain_pitch) > COMFORT_PITCH_BAND:
+            scale = COMFORT_PITCH_BAND / abs(chain_pitch)
+            for k in ("pelvis", "spine_lower", "spine_mid", "chest", "neck",
+                      "head"):
+                if k in self._held:
+                    self._held[k][0] *= scale
+
         decay = math.exp(-drives.dt / HELD_DECAY_TIME)
         for joint, held in self._held.items():
             j = joints.get(joint)
@@ -364,6 +416,12 @@ class BodySystem:
         # the mouse, the other resting on the desk. Hands that float in space
         # are the clearest sign a body is not really in a room, so the default
         # is contact, not free.
+        #
+        # This block was lost in the mean-reverting-comfort rewrite and nothing
+        # else in the codebase assigns hand contact, so both wrists silently
+        # went to None on frame 1 - the exact "floating wrist" the contact test
+        # exists to catch. It caught it.
+        #
         # The mouse eases toward wherever the last nudge left it.
         k = 1.0 - math.exp(-drives.dt / 0.30)
         self._mouse_now = tuple(

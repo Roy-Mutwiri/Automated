@@ -548,3 +548,92 @@ anti-repetition terms off entirely, which is what gave it away. After the fix:
 one pinned a state and then measured for fifteen minutes while the new scheduler
 transitioned away from it, and one asserted the *total* head yaw against the
 profile's *stylistic* fidget budget rather than against cervical range.
+
+---
+
+## Perceptual pass: making the motion visible (Sept 2026)
+
+The verdict that started this pass was made by watching, not measuring: *"an
+image that sometimes moves."* Every engine metric was green at the time. What
+follows is what was wrong and how it is now checked.
+
+### The attention geometry was the whole problem
+
+75% of dwell sat between two targets 5.5° apart, and mean head yaw was 0.91°.
+The behaviour was correct and invisible. Worse, the immediate cause was
+self-inflicted: the lens dwell had been *raised* to 9.3 s specifically to make a
+stillness audit pass. A metric was optimised and the product was broken.
+
+Targets were respread across a real desk (13 of them, in five families) and the
+head-recruitment curve front-loaded, so the neck starts contributing early
+rather than only past a threshold.
+
+| | before | after |
+|---|---|---|
+| mean head yaw | 0.91° | 6.75° |
+| p95 head yaw | 6.2° | 24.2° |
+| max head yaw | 14.6° | 30.4° |
+
+Family dwell now reads as an unequal work ecology rather than a rota:
+monitor 63-73%, camera 17-23%, chat 1-7%, secondary 4-6%, desk 2-3%,
+thinking 0-1%. Meaningful look-changes land every 3.6-6.2 s, with single-family
+holds running as long as 100 s.
+
+### Expressions: an order-of-magnitude measurement error
+
+The standing belief was that expressions were below the perceptual threshold at
+0.3-0.6 px. That number was a median over all 203 landmarks - and a smile moves
+the mouth, not the skull. Measured per region, the same smile moves 5.1 px.
+
+Correcting the measurement then exposed two real defects that had shipped in
+every frame the system ever produced: **SKEPTICAL never rendered** (its
+`brow_split` multiplied a zero `brow`, so the one raised eyebrow that defines it
+was absent), and **the brow split always favoured the left** - the weaker of the
+renderer's two brow channels. Full detail and the visibility thresholds are in
+[expression_calibration.md](expression_calibration.md).
+
+### Frame rate is not a personality setting
+
+30 fps vs 60 fps, 12 seeds x 20 minutes, paired. All ten measures within 2
+standard errors; largest effect 1.54 sigma.
+
+The first version of this test compared three seeds against their own spread and
+flagged four measures as rate-dependent. All four were noise: the posture drift
+has a 42-second correlation time, so a six-minute window holds about nine
+independent samples and its standard deviation is uncertain to a quarter of its
+own value. Verified separately - the drift process alone over 240 runs per rate
+gives 0.1176 at 30 fps and 0.1168 at 60. `tools/fps_equivalence.py`.
+
+### A watchdog, because none of these threw
+
+Every defect above ran clean: no exception, no failing test, a rendered video.
+`behavior/watchdog.py` makes long-window statements that a frame-level check
+cannot - stuck fixation, pitch parked outside the comfort band, a head that
+barely turns, camera contact absent, posture that stops reverting. It is wired
+into the suite (`tests/test_watchdog.py`) with negative controls, so each check
+is known to fire on the defect it was written for.
+
+`tools/motion_audit.py` does the same job on the *rendered pixels* rather than
+the engine state, which is where the original verdict was formed. Its headline
+number is the longest run of frames with no visible change, because a clip can
+have a healthy mean and still contain a nine-second photograph.
+
+### Two regressions this pass caught in my own work
+
+**Both hands stopped touching anything.** The mean-reverting-comfort rewrite
+deleted the block that assigns hand contact, and nothing else in the codebase
+assigns it, so both wrists went to `None` on frame 1. The contact test caught it.
+
+**Sub-fixations poisoned the repetition detector.** Every sub-fixation recorded
+as the single token `"subfixation"`, so any two in a row looked like a repeating
+n-gram and "monitor, subfixation, subfixation" was reported as a loop. It is a
+man reading a screen. Sub-fixations now carry their target, as major shifts
+always did.
+
+### Tests
+
+86 passing, plus 7 watchdog tests. One test was corrected rather than loosened:
+the head-move rate asserted a *subsystem* counter whose seed-to-seed spread
+straddles its own lower bound, so it passed or failed on the seed. It now
+averages over seeds, and a second test measures what a viewer actually sees -
+head-movement onsets in world space, whatever subsystem caused them.
