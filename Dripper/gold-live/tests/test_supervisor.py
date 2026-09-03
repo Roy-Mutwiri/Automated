@@ -46,6 +46,11 @@ def session(session_id: str = "SESSION_001", port: int = 9101) -> ManagedSession
 
 
 def supervisor(sessions=None, **kw) -> Supervisor:
+    # These tests exercise supervision mechanics -- restart, backoff, crash
+    # loops -- not user consent, which has its own suite in test_lifecycle.py.
+    # Without this they would depend on whatever the developer's real
+    # lifecycle.json happens to say, which is both flaky and beside the point.
+    kw.setdefault("ignore_consent", True)
     return Supervisor(sessions or [session()], **kw)
 
 

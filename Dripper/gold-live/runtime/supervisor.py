@@ -37,10 +37,17 @@ from pathlib import Path
 
 import yaml
 
+from runtime import lifecycle
 from shared.paths import config_path, data_root, is_frozen
 
 ROOT = Path(__file__).resolve().parent.parent
 log = logging.getLogger("supervisor")
+
+
+def _errored(reason: str) -> "lifecycle.Lifecycle":
+    lc = lifecycle.load(reconcile=False)
+    lc.mark_error(reason)
+    return lc
 
 
 def session_command(session_id: str, health_port: int, args: list[str]) -> list[str]:
@@ -101,9 +108,12 @@ class Supervisor:
         allow_degraded: bool = False,
         market: str = "gold",
         adapter: str = "file",
+        ignore_consent: bool = False,
     ) -> None:
         self.sessions = {s.session_id: s for s in sessions}
         self.allow_degraded = allow_degraded
+        #: Tests and `--no-consent-gate` bypass the recorded intent.
+        self.ignore_consent = ignore_consent
         self.market = market
         self.adapter = adapter
         self.crash_loop_threshold = crash_loop_threshold
@@ -111,6 +121,23 @@ class Supervisor:
         self.unready_grace_s = unready_grace_s
         self.term_grace_s = term_grace_s
         self.stopping = asyncio.Event()
+
+    def consent_to_run(self) -> bool:
+        """Has the user asked for GoldLive to be running?
+
+        Checked before every spawn and every restart, not once at startup, so
+        pressing STOP takes effect on the next supervision tick rather than
+        whenever the current session happens to end.
+        """
+        if self.ignore_consent:
+            return True
+        try:
+            return lifecycle.load(reconcile=False).may_run
+        except Exception:
+            # If the intent cannot be read, do not run. The safe default when
+            # consent is unknown is no.
+            log.exception("could not read lifecycle state; refusing to start")
+            return False
 
     # -- startup readiness ------------------------------------------------
 
@@ -162,6 +189,14 @@ class Supervisor:
     # -- process control --------------------------------------------------
 
     def spawn(self, session: ManagedSession) -> None:
+        # The consent gate. Without it, "the child is missing" and "the user
+        # pressed STOP" are indistinguishable from in here, and the restart
+        # logic would resurrect a session the user just shut down.
+        if not self.consent_to_run():
+            log.info("not starting %s: the user has not asked GoldLive to run",
+                     session.session_id)
+            return
+
         cmd = session_command(session.session_id, session.health_port, session.args)
         log.info("starting %s: %s", session.session_id, " ".join(cmd[1:]))
 
@@ -220,6 +255,14 @@ class Supervisor:
                 await asyncio.sleep(30)
                 continue
 
+            if not self.consent_to_run():
+                if session.state != "stopped":
+                    log.info("user stopped GoldLive; not restarting %s",
+                             session.session_id)
+                    session.state = "stopped"
+                self.stopping.set()
+                return
+
             if not session.alive:
                 code = session.process.returncode if session.process else "n/a"
                 if session.state == "running":
@@ -267,7 +310,17 @@ class Supervisor:
 
     async def run(self) -> int:
         if not await self.preflight():
+            if not self.ignore_consent:
+                lifecycle.save(_errored("readiness gates failed"))
             return 2
+
+        # Record that a supervisor now owns the run, with its pid, so a hard
+        # kill leaves evidence of a crash rather than a stale RUNNING that the
+        # control panel would show as a healthy green light.
+        if not self.ignore_consent:
+            lc = lifecycle.load(reconcile=False)
+            lc.mark_running(os.getpid())
+            lifecycle.save(lc)
 
         for session in self.sessions.values():
             self.spawn(session)
@@ -286,6 +339,8 @@ class Supervisor:
             *(self.terminate(s) for s in self.sessions.values()), return_exceptions=True
         )
         log.info("all sessions stopped")
+        if not self.ignore_consent:
+            lifecycle.mark_stopped()
         return 0
 
     async def _report(self) -> None:
@@ -348,6 +403,10 @@ def main() -> None:
         "--allow-degraded", action="store_true",
         help="start even when readiness gates fail (development only)",
     )
+    ap.add_argument(
+        "--no-consent-gate", action="store_true",
+        help="ignore the recorded start/stop intent (tests and debugging only)",
+    )
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -359,8 +418,16 @@ def main() -> None:
         "--mode", args.mode, "--market", args.market,
         "--adapter", args.adapter, "--tts", args.tts,
     ]
+    if not args.no_consent_gate:
+        # Typing `GoldLive.exe supervise` is itself an explicit start request.
+        # The control panel sets the same state before launching this process;
+        # doing it here too means the command works standalone without ever
+        # letting the supervisor run without a recorded intent.
+        lifecycle.request_start()
+
     supervisor = Supervisor(
         build_sessions(args.sessions, passthrough),
+        ignore_consent=args.no_consent_gate,
         allow_degraded=args.allow_degraded,
         market=args.market,
         adapter=args.adapter,

@@ -109,14 +109,15 @@ print(f"[spec] bundling {len(BUNDLED)} runtime packages: {', '.join(BUNDLED)}")
 excludes = [
     # Never ship a test framework or notebook stack to a customer.
     "pytest", "_pytest", "IPython", "jupyter", "notebook",
-    "matplotlib", "tkinter", "PIL.ImageTk",
+    # tkinter is NOT excluded: the control panel is built on it.
+    "matplotlib", "PIL.ImageTk",
     # Torch arrives via paddleocr on some systems and is enormous. The model
     # runs in a separate server, so it is not needed here.
     "torch", "torchvision",
 ]
 
 a = Analysis(
-    [str(ROOT / "runtime" / "cli.py")],
+    [str(ROOT / "build_tools" / "panel_entry.py")],
     pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
@@ -128,6 +129,22 @@ a = Analysis(
 )
 
 pyz = PYZ(a.pure)
+
+# A separate Setup executable so the extracted folder has one obvious starting
+# point. It shares this build's analysis of the codebase and differs only in
+# entry point: it provisions and stops, and can never start a session.
+setup_a = Analysis(
+    [str(ROOT / "build_tools" / "setup_entry.py")],
+    pathex=[str(ROOT)],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=excludes,
+    noarchive=False,
+)
+setup_pyz = PYZ(setup_a.pure)
 
 exe = EXE(
     pyz,
@@ -152,8 +169,29 @@ exe = EXE(
     else None,
 )
 
+setup_exe = EXE(
+    setup_pyz,
+    setup_a.scripts,
+    [],
+    exclude_binaries=True,
+    name="GoldLive Setup",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,       # setup is a readable report, so it keeps its console
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=str(ROOT / "build_tools" / "icon.ico")
+    if (ROOT / "build_tools" / "icon.ico").exists()
+    else None,
+)
+
 coll = COLLECT(
     exe,
+    setup_exe,
     a.binaries,
     a.datas,
     strip=False,

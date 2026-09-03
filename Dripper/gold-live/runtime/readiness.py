@@ -338,7 +338,7 @@ async def gate_market_live(market: str, timeout_s: float = 30.0) -> GateResult:
 # -- model_real ------------------------------------------------------------
 
 
-async def gate_model_real(min_words: int = 20, budget_s: float = 30.0) -> GateResult:
+async def gate_model_real(min_words: int = 20, budget_s: float = 60.0) -> GateResult:
     """A named, installed model that actually writes a sentence.
 
     None of these is sufficient on its own, and each has been seen to pass
@@ -359,6 +359,15 @@ async def gate_model_real(min_words: int = 20, budget_s: float = 30.0) -> GateRe
         )
 
     try:
+        # LocalLLM defaults to a 15s read timeout, which is right for a live
+        # session -- a stalled generation should be abandoned quickly. It is
+        # wrong here: this probe deliberately asks for a couple of sentences,
+        # and on a CPU-only machine that legitimately takes 20-30s, so the
+        # client would abort before the model had done anything wrong. Set it
+        # before the first request, which is what builds the HTTP client.
+        llm.read_timeout_s = budget_s
+        llm.total_timeout_s = max(llm.total_timeout_s, budget_s + 15)
+
         if not llm.model or llm.model == "local-model":
             return GateResult(
                 name, False,
@@ -367,22 +376,53 @@ async def gate_model_real(min_words: int = 20, budget_s: float = 30.0) -> GateRe
             )
 
         started = time.perf_counter()
+        # The first request after a model server starts loads gigabytes of
+        # weights, which routinely exceeds LocalLLM's 15s read timeout. That is
+        # a cold start, not a failure, so it gets one patient retry before the
+        # gate calls it a problem.
+        try:
+            await asyncio.wait_for(
+                llm.complete(
+                    [ChatMessage(role="user", content="Say OK.")],
+                    max_tokens=8, temperature=0.0,
+                ),
+                timeout=budget_s,
+            )
+        except Exception:
+            log.info("model warm-up did not complete; continuing to the real check")
+
         try:
             reply = await asyncio.wait_for(
                 llm.complete([
                     ChatMessage(role="system", content="You are a market commentator."),
                     ChatMessage(
                         role="user",
-                        content="In two sentences, describe what a support level is.",
+                        content="In two short sentences, what is a support level?",
                     ),
-                ], max_tokens=120, temperature=0.6),
+                ], max_tokens=80, temperature=0.6),
                 timeout=budget_s,
             )
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, TimeoutError) as exc:
             return GateResult(
                 name, False,
-                reason=f"{llm.model} did not answer within {budget_s:.0f}s",
-                action="this machine may be too slow for that model; try a smaller one",
+                reason=f"{llm.model} did not answer within {budget_s:.0f}s "
+                       f"({type(exc).__name__})",
+                action="the model may still be loading -- wait a moment and try "
+                       "again; if it persists this machine may be too slow for "
+                       "that model",
+            )
+        except Exception as exc:
+            # httpx raises its own timeout types, which are not
+            # asyncio.TimeoutError. Reporting those as "this is a bug" sent
+            # users to file an issue about their own slow machine.
+            detail = str(exc) or type(exc).__name__
+            timed_out = "timeout" in type(exc).__name__.lower()
+            return GateResult(
+                name, False,
+                reason=f"{llm.model} failed to generate: {detail}",
+                action=("the model may still be loading -- wait a moment and try again"
+                        if timed_out else
+                        "check the model server is running: ollama serve"),
             )
 
         text = (getattr(reply, "text", None) or "").strip()

@@ -29,6 +29,9 @@ VERSION = app_version()
 
 USAGE = f"""Gold Live {VERSION}
 
+  panel       Open the control panel (START / STOP)
+  setup-wizard  Guided first-time setup, then stop
+  stop        Stop a running GoldLive
   provision   Set this PC up: check it, download the model and voices
   ready       Check whether SESSION_001 can actually start right now
   selftest    Exercise the real components (--imports for a quick check)
@@ -84,6 +87,23 @@ def main(argv: list[str] | None = None) -> int:
     if command == "paths":
         print(describe())
         return 0
+
+    if command in ("panel", "gui", "control"):
+        from runtime.panel import main as panel
+
+        return _code(panel())
+
+    if command in ("setup-wizard", "firstrun"):
+        from runtime.setup_wizard import main as wizard
+
+        return _code(wizard())
+
+    if command == "stop":
+        from runtime.panel import stop_goldlive
+
+        ok, why = stop_goldlive()
+        print(f"\n  {'stopped' if ok else 'STOP INCOMPLETE: ' + why}\n")
+        return 0 if ok else 1
 
     if command == "provision":
         from runtime.provision import main as provision

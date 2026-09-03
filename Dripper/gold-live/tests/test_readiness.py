@@ -130,6 +130,9 @@ async def test_model_real_rejects_the_placeholder_model_name(monkeypatch):
     configured. A server answering under that name has not proved anything."""
     class FakeLLM:
         model = "local-model"
+        # LocalLLM exposes these; the gate raises them before probing.
+        read_timeout_s = 15.0
+        total_timeout_s = 60.0
 
         async def close(self):
             return None
@@ -149,6 +152,9 @@ async def test_model_real_rejects_a_too_short_answer(monkeypatch):
 
     class FakeLLM:
         model = "llama3.2:3b"
+        # LocalLLM exposes these; the gate raises them before probing.
+        read_timeout_s = 15.0
+        total_timeout_s = 60.0
 
         async def complete(self, *_a, **_kw):
             return Result()
@@ -170,6 +176,9 @@ async def test_model_real_passes_on_a_real_answer(monkeypatch):
 
     class FakeLLM:
         model = "llama3.2:3b"
+        # LocalLLM exposes these; the gate raises them before probing.
+        read_timeout_s = 15.0
+        total_timeout_s = 60.0
 
         async def complete(self, *_a, **_kw):
             return Result()
