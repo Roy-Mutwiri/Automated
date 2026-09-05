@@ -32,6 +32,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,6 +43,28 @@ from shared.paths import config_path, data_root, is_frozen
 
 ROOT = Path(__file__).resolve().parent.parent
 log = logging.getLogger("supervisor")
+
+
+class SessionState(str, Enum):
+    """What the supervisor believes about one child session.
+
+    These were bare string literals assigned in seven places and compared in
+    three, so a typo would have created a new state silently and every
+    comparison against it would have quietly returned False. A str-Enum keeps
+    every existing comparison and serialisation working unchanged.
+
+        STARTING   spawned, not yet confirmed serving
+        RUNNING    alive and answering /ready
+        UNREADY    alive but /ready is failing; killed if it persists
+        STOPPED    deliberately not running -- shutdown, or the user stopped it
+        CRASH_LOOP failed too often in an hour; left down rather than churned
+    """
+
+    STARTING = "starting"
+    RUNNING = "running"
+    UNREADY = "unready"
+    STOPPED = "stopped"
+    CRASH_LOOP = "crash_loop"
 
 
 def _errored(reason: str) -> "lifecycle.Lifecycle":
@@ -78,7 +101,7 @@ class ManagedSession:
     process: subprocess.Popen | None = None
     restarts: list[float] = field(default_factory=list)
     backoff_s: float = 1.0
-    state: str = "starting"
+    state: SessionState = SessionState.STARTING
     started_at: float | None = None
     last_ready_at: float | None = None
     give_up: bool = False
@@ -234,7 +257,7 @@ class Supervisor:
         )
         session.started_at = time.time()
         session.last_ready_at = time.time()
-        session.state = "running"
+        session.state = SessionState.RUNNING
 
     async def terminate(self, session: ManagedSession) -> None:
         """SIGTERM, then SIGKILL. The session flushes traces on SIGTERM, so
@@ -253,7 +276,7 @@ class Supervisor:
             log.warning("%s ignored SIGTERM, killing", session.session_id)
             with contextlib.suppress(Exception):
                 session.process.kill()
-        session.state = "stopped"
+        session.state = SessionState.STOPPED
 
     # -- readiness --------------------------------------------------------
 
@@ -276,22 +299,22 @@ class Supervisor:
                 continue
 
             if not self.consent_to_run():
-                if session.state != "stopped":
+                if session.state is not SessionState.STOPPED:
                     log.info("user stopped GoldLive; not restarting %s",
                              session.session_id)
-                    session.state = "stopped"
+                    session.state = SessionState.STOPPED
                 self.stopping.set()
                 return
 
             if not session.alive:
                 code = session.process.returncode if session.process else "n/a"
-                if session.state == "running":
+                if session.state is SessionState.RUNNING:
                     log.warning("%s exited (code %s)", session.session_id, code)
                     session.restarts.append(time.time())
 
                 if session.restarts_last_hour() >= self.crash_loop_threshold:
                     session.give_up = True
-                    session.state = "crash_loop"
+                    session.state = SessionState.CRASH_LOOP
                     log.error(
                         "%s crash-looped %d times in an hour; leaving it DOWN. "
                         "A loop that restarts silently is worse than one that stops.",
@@ -316,10 +339,10 @@ class Supervisor:
 
             if await self.check_ready(session):
                 session.last_ready_at = time.time()
-                session.state = "running"
+                session.state = SessionState.RUNNING
             else:
                 unready_for = time.time() - (session.last_ready_at or time.time())
-                session.state = "unready"
+                session.state = SessionState.UNREADY
                 if unready_for > self.unready_grace_s:
                     log.error(
                         "%s not ready for %.0fs; killing so it can restart",
@@ -367,7 +390,7 @@ class Supervisor:
         while not self.stopping.is_set():
             await asyncio.sleep(60)
             rows = [
-                f"{s.session_id}={s.state}"
+                f"{s.session_id}={s.state.value}"
                 f"(up {s.uptime_s / 60:.0f}m, {s.restarts_last_hour()} restarts/h)"
                 for s in self.sessions.values()
             ]
@@ -379,7 +402,7 @@ class Supervisor:
             "sessions": [
                 {
                     "session_id": s.session_id,
-                    "state": s.state,
+                    "state": s.state.value,
                     "alive": s.alive,
                     "uptime_s": round(s.uptime_s),
                     "restarts_1h": s.restarts_last_hour(),

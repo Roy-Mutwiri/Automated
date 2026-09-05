@@ -173,7 +173,7 @@ async def test_barge_in_abandons_the_whole_utterance_not_just_one_segment(tmp_pa
 
     # Mark it as the one in flight, then preempt it mid-utterance.
     router._current = long_utterance
-    router._preempted.add(long_utterance.utterance_id)
+    router._preempted = (long_utterance.utterance_id)
 
     await router._speak(long_utterance)
 

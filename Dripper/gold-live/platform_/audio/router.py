@@ -141,12 +141,16 @@ class AudioRouter:
 
         self._queue: asyncio.Queue[AudioRequest] = asyncio.Queue(maxsize=max_queue)
         self._current: AudioRequest | None = None
-        #: Set when the utterance now playing has been preempted. Checked
-        #: between segments, because stopping the sink only aborts the segment
-        #: that is sounding -- without this the loop simply moved on to the
-        #: next one and the preempted utterance carried on talking over the
-        #: thing that interrupted it.
-        self._preempted: set[UUID] = set()
+        #: The utterance that has been preempted, if any. Checked between
+        #: segments, because stopping the sink only aborts the segment that is
+        #: sounding -- without this the loop moved on to the next one and the
+        #: preempted utterance carried on talking over whatever interrupted it.
+        #:
+        #: One id, not a set. Only the utterance currently in flight can be
+        #: preempted, and a set grew without bound: a mark added for an
+        #: utterance that had already finished was never discarded, so under
+        #: sustained barge-in it accumulated one entry per interruption.
+        self._preempted: UUID | None = None
         self._task: asyncio.Task | None = None
         self._running = False
         self._seq = 0
@@ -180,7 +184,7 @@ class AudioRouter:
                 self.session_id, request.utterance_id, self._current.utterance_id,
             )
             self.stats.preempted += 1
-            self._preempted.add(self._current.utterance_id)
+            self._preempted = self._current.utterance_id
             self.sink.stop()
 
         try:
@@ -210,7 +214,8 @@ class AudioRouter:
                 continue
 
             self._current = request
-            self._preempted.discard(request.utterance_id)
+            if self._preempted == request.utterance_id:
+                self._preempted = None
             try:
                 await self._speak(request)
                 self.stats.played += 1
@@ -220,7 +225,8 @@ class AudioRouter:
                 self.stats.tts_failures += 1
                 log.exception("[%s] playback failed", self.session_id)
             finally:
-                self._preempted.discard(request.utterance_id)
+                if self._preempted == request.utterance_id:
+                    self._preempted = None
                 self._current = None
                 self.state = PlaybackState.IDLE
 
@@ -229,7 +235,7 @@ class AudioRouter:
         for i, segment in enumerate(request.segments):
             if not self._running:
                 return
-            if request.utterance_id in self._preempted:
+            if self._preempted == request.utterance_id:
                 # Barge-in. Abandon the rest of this utterance rather than
                 # finishing it underneath whatever preempted it.
                 log.info(
@@ -249,7 +255,7 @@ class AudioRouter:
 
             if result.path is None:
                 continue
-            if request.utterance_id in self._preempted:
+            if self._preempted == request.utterance_id:
                 return
             self.state = PlaybackState.PLAYING
             await self.sink.play(result.path)

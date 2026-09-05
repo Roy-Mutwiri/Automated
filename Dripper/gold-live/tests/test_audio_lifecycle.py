@@ -72,7 +72,7 @@ async def test_barge_in_stops_A_and_A_never_resumes(tmp_path):
     played = list(sink.played)
     assert len(played) < 4, f"A must not finish all four segments, played {played}"
     assert sink.stop_calls >= 1, "the sounding segment must be stopped"
-    assert a.utterance_id in r._preempted or r._current is not a
+    assert r._preempted == a.utterance_id or r._current is not a
 
 
 async def test_a_preempted_utterance_produces_no_further_audio(tmp_path):
@@ -83,7 +83,7 @@ async def test_a_preempted_utterance_produces_no_further_audio(tmp_path):
 
     a = audio_request(segments=["1", "2", "3", "4", "5"])
     r._current = a
-    r._preempted.add(a.utterance_id)
+    r._preempted = (a.utterance_id)
 
     await r._speak(a)
     assert sink.played == []
@@ -98,7 +98,7 @@ async def test_preemption_is_scoped_to_one_utterance(tmp_path):
 
     a = audio_request(segments=["a1", "a2"])
     b = audio_request(segments=["b1", "b2"])
-    r._preempted.add(a.utterance_id)
+    r._preempted = (a.utterance_id)
 
     await r._speak(a)
     assert sink.played == []
@@ -116,12 +116,12 @@ async def test_the_preemption_mark_is_cleared_after_the_utterance(tmp_path):
     await r.start()
 
     a = audio_request(segments=["one"])
-    r._preempted.add(a.utterance_id)
+    r._preempted = (a.utterance_id)
     await r.submit(a)
     await drain(r)
     await r.stop()
 
-    assert a.utterance_id not in r._preempted
+    assert r._preempted != a.utterance_id
 
 
 async def test_barge_in_is_counted(tmp_path):
@@ -162,7 +162,7 @@ async def test_repeated_barge_in_never_leaks_audio(tmp_path, run):
     r._current = a
     task = asyncio.create_task(r._speak(a))
     await asyncio.sleep(0.005)
-    r._preempted.add(a.utterance_id)
+    r._preempted = (a.utterance_id)
     sink.stop()
     await task
 

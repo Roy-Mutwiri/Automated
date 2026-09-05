@@ -15,8 +15,10 @@ and would fail for reasons that have nothing to do with a leak.
 
 from __future__ import annotations
 
+import asyncio
 import gc
 import sys
+from uuid import UUID
 from collections import deque
 
 import pytest
@@ -209,22 +211,35 @@ async def test_the_audio_queue_cannot_grow_without_bound(tmp_path):
     assert r.queue_depth <= 8
 
 
-async def test_preemption_marks_do_not_accumulate(tmp_path):
-    """The set added for barge-in is keyed by utterance id, which is exactly
-    the kind of thing that leaks if entries are never removed."""
+async def test_preemption_state_cannot_accumulate(tmp_path):
+    """Barge-in was first implemented as a set of utterance ids, and it grew:
+    a mark added for an utterance that had already finished was never
+    discarded, so sustained interruption accumulated one entry per barge-in.
+
+    A single id cannot accumulate by construction, and it is cleared once the
+    utterance it refers to is done.
+    """
     from fakes import FakeSink, FakeTTS, audio_request
 
     from platform_.audio.router import AudioRouter
+    from shared.contracts import Priority
 
     r = AudioRouter("SESSION_001", FakeTTS(), tmp_path, sink=FakeSink())
-    r._running = True
+    await r.start()
 
-    for _ in range(1_000):
-        request = audio_request(segments=["x"])
-        r._preempted.add(request.utterance_id)
-        r._preempted.discard(request.utterance_id)
+    for i in range(500):
+        r._current = audio_request(segments=["in flight"])
+        await r.submit(audio_request(segments=[f"u{i}"], priority=Priority.CRITICAL))
+        for _ in range(4):
+            await asyncio.sleep(0)
 
-    assert len(r._preempted) == 0
+    for _ in range(200):
+        await asyncio.sleep(0)
+    await r.stop()
+
+    # Not a collection, so there is nothing to grow.
+    assert r._preempted is None or isinstance(r._preempted, UUID)
+    assert not isinstance(r._preempted, set | list | dict)
 
 
 @pytest.mark.parametrize("cycles", [200])
