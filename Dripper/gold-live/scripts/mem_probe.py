@@ -33,7 +33,8 @@ _gpmi.restype = wintypes.BOOL
 
 
 def rss_mb():
-    c = PMC(); c.cb = ctypes.sizeof(PMC)
+    c = PMC()
+    c.cb = ctypes.sizeof(PMC)
     if not _gpmi(_k32.GetCurrentProcess(), ctypes.byref(c), c.cb):
         raise OSError(f"GetProcessMemoryInfo failed: {ctypes.GetLastError()}")
     return c.WorkingSetSize / 1e6
@@ -45,12 +46,14 @@ def mark(label):
 
 mark("interpreter start")
 
-from runtime.session import RETAINED_DROPS, RETAINED_UTTERANCES
+# Imported here on purpose: the point is to measure what each import costs.
+from runtime.session import RETAINED_DROPS, RETAINED_UTTERANCES  # noqa: E402
 mark("goldlive imports")
 
 # 1. The collections I bounded -- how much do they actually hold?
-from collections import deque
-tr = deque(maxlen=RETAINED_UTTERANCES); dr = deque(maxlen=RETAINED_DROPS)
+from collections import deque  # noqa: E402
+tr = deque(maxlen=RETAINED_UTTERANCES)
+dr = deque(maxlen=RETAINED_DROPS)
 for i in range(20_000):
     text = f"utterance {i} " + "x" * 400
     (dr.append((text, 0.5)) if i % 4 else tr.append(text))
@@ -61,7 +64,8 @@ unbounded = []
 for i in range(20_000):
     unbounded.append(f"utterance {i} " + "x" * 400)
 mark("the same 20k retained unbounded (the old behaviour)")
-del unbounded; gc.collect()
+del unbounded
+gc.collect()
 mark("after releasing the unbounded copy")
 
 # 3. Piper + onnxruntime: loaded once, then repeated synthesis
