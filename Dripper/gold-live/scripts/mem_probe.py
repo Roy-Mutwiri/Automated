@@ -68,21 +68,33 @@ del unbounded
 gc.collect()
 mark("after releasing the unbounded copy")
 
-# 3. Piper + onnxruntime: loaded once, then repeated synthesis
+# 3. Piper + onnxruntime, driven from ONE event loop.
+#
+# An earlier version of this probe called asyncio.run() per synthesis, which
+# builds and tears down a loop every time and made the audio path look like it
+# leaked about 6 MB a call. Production synthesises inside a single long-lived
+# loop, so the probe has to as well or it measures its own instrument.
 try:
+    import asyncio
+
     from platform_.tts.piper import PiperTTS
     from shared.paths import data_root
-    import asyncio
-    tts = PiperTTS(voices_dir=data_root() / "voices")
-    voice = "en_US-john-medium"
-    tmp = Path(tempfile.mkdtemp())
-    asyncio.run(tts.synthesize("Warming the voice up.", voice, tmp / "w.wav"))
-    mark("piper voice loaded (one-off cost)")
-    for n in (1, 10, 25):
-        for i in range(n):
-            asyncio.run(tts.synthesize(
-                f"Gold is holding just under the level we marked earlier, number {i}.",
-                voice, tmp / f"s{i}.wav"))
-        mark(f"after {n} more synthesis calls")
+
+    async def probe_synthesis() -> None:
+        tts = PiperTTS(voices_dir=data_root() / "voices")
+        voice = "en_US-john-medium"
+        tmp = Path(tempfile.mkdtemp())
+        await tts.synthesize("Warming the voice up.", voice, tmp / "w.wav")
+        mark("piper voice loaded (one-off cost)")
+        done = 0
+        for target in (1, 10, 25, 50):
+            while done < target:
+                await tts.synthesize(
+                    f"Gold is holding just under the level we marked earlier, "
+                    f"number {done}.", voice, tmp / f"s{done % 8}.wav")
+                done += 1
+            mark(f"after {done} synthesis calls (one loop)")
+
+    asyncio.run(probe_synthesis())
 except Exception as e:
     print("  piper probe unavailable:", e)
