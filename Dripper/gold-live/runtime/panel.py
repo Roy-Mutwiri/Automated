@@ -187,17 +187,20 @@ def start_goldlive() -> subprocess.Popen:
     lifecycle.request_start()
 
     log_path = data_path("logs", "supervisor.log")
-    handle = open(log_path, "a", encoding="utf-8", buffering=1)
     creation = 0
     if os.name == "nt":
         # No console window for the child, and its own process group so a
         # Ctrl-C in the panel's console cannot take the supervisor with it.
         creation = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
 
-    proc = subprocess.Popen(
-        _supervisor_command(), cwd=str(data_root()),
-        stdout=handle, stderr=handle, creationflags=creation,
-    )
+    # The handle is closed in this process as soon as the child has inherited
+    # it. Holding it open leaked a descriptor on every START, and the panel is
+    # meant to run for as long as the user leaves it open.
+    with open(log_path, "a", encoding="utf-8", buffering=1) as handle:
+        proc = subprocess.Popen(
+            _supervisor_command(), cwd=str(data_root()),
+            stdout=handle, stderr=handle, creationflags=creation,
+        )
     log.info("supervisor started (pid %d); log: %s", proc.pid, log_path)
     return proc
 

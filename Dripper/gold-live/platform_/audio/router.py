@@ -63,11 +63,17 @@ class RouterStats:
         return s[len(s) // 2]
 
 
+class AudioPlaybackError(RuntimeError):
+    """Playback could not start. Raised so the router can mark itself
+    unhealthy instead of reporting a silent utterance as spoken."""
+
+
 class AudioSink:
     """Plays a wav to a specific output device. Replaceable for tests."""
 
     def __init__(self, device_index: int | None = None) -> None:
         self.device_index = device_index
+        self.last_error: str | None = None
         self._stop = asyncio.Event()
 
     async def play(self, path: Path) -> None:
@@ -82,16 +88,34 @@ class AudioSink:
             await asyncio.sleep(0)
             return
 
-        data, rate = sf.read(str(path), dtype="float32")
-        sd.play(data, rate, device=self.device_index)
+        try:
+            data, rate = sf.read(str(path), dtype="float32")
+            sd.play(data, rate, device=self.device_index)
+        except Exception as exc:
+            # A device that has gone away, an exclusive-mode lock, a wav the
+            # decoder rejects. This used to be swallowed together with the
+            # polling loop below, so audio could fail on every utterance and
+            # nothing above ever heard about it.
+            self.last_error = f"playback failed: {exc}"
+            log.error("audio playback failed for %s: %s", path.name, exc)
+            raise AudioPlaybackError(str(exc)) from exc
+
         try:
             while sd.get_stream().active:
                 if self._stop.is_set():
                     sd.stop()
                     return
                 await asyncio.sleep(0.02)
-        except Exception:
-            pass
+        except asyncio.CancelledError:
+            with contextlib.suppress(Exception):
+                sd.stop()
+            raise
+        except Exception as exc:
+            # get_stream() raises once playback has finished, which is the
+            # normal way this loop ends -- so it is not an error on its own.
+            # It is recorded rather than discarded so a device failing midway
+            # is still visible.
+            log.debug("playback poll ended for %s: %s", path.name, exc)
 
     def stop(self) -> None:
         self._stop.set()
@@ -117,6 +141,12 @@ class AudioRouter:
 
         self._queue: asyncio.Queue[AudioRequest] = asyncio.Queue(maxsize=max_queue)
         self._current: AudioRequest | None = None
+        #: Set when the utterance now playing has been preempted. Checked
+        #: between segments, because stopping the sink only aborts the segment
+        #: that is sounding -- without this the loop simply moved on to the
+        #: next one and the preempted utterance carried on talking over the
+        #: thing that interrupted it.
+        self._preempted: set[UUID] = set()
         self._task: asyncio.Task | None = None
         self._running = False
         self._seq = 0
@@ -150,6 +180,7 @@ class AudioRouter:
                 self.session_id, request.utterance_id, self._current.utterance_id,
             )
             self.stats.preempted += 1
+            self._preempted.add(self._current.utterance_id)
             self.sink.stop()
 
         try:
@@ -179,6 +210,7 @@ class AudioRouter:
                 continue
 
             self._current = request
+            self._preempted.discard(request.utterance_id)
             try:
                 await self._speak(request)
                 self.stats.played += 1
@@ -188,6 +220,7 @@ class AudioRouter:
                 self.stats.tts_failures += 1
                 log.exception("[%s] playback failed", self.session_id)
             finally:
+                self._preempted.discard(request.utterance_id)
                 self._current = None
                 self.state = PlaybackState.IDLE
 
@@ -195,6 +228,15 @@ class AudioRouter:
         self._seq += 1
         for i, segment in enumerate(request.segments):
             if not self._running:
+                return
+            if request.utterance_id in self._preempted:
+                # Barge-in. Abandon the rest of this utterance rather than
+                # finishing it underneath whatever preempted it.
+                log.info(
+                    "[%s] abandoning preempted utterance %s at segment %d/%d",
+                    self.session_id, request.utterance_id, i, len(request.segments),
+                )
+                self.stats.dropped_expired += 0  # counted as preempted already
                 return
             self.state = PlaybackState.SYNTHESISING
             path = (
@@ -207,6 +249,8 @@ class AudioRouter:
 
             if result.path is None:
                 continue
+            if request.utterance_id in self._preempted:
+                return
             self.state = PlaybackState.PLAYING
             await self.sink.play(result.path)
 

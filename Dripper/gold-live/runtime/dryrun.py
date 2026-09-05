@@ -125,7 +125,7 @@ async def run(beats: int, n_sessions: int, mode: str, out_dir: Path) -> int:
     total_unsafe = 0
     for rt in runtimes:
         print(f"\n  {rt.state.session_id} ({rt.persona.display_name})")
-        print(f"    utterances spoken : {len(rt.transcript)}")
+        print(f"    utterances spoken : {rt.spoken_count}")
         print(f"    blocked by safety : {len(rt.dropped_unsafe)}")
         print(f"    dropped as repeat : {len(rt.dropped_repetitive)}")
         print(f"    director queue    : {rt.director.queue_depth} still pending")

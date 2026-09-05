@@ -430,7 +430,7 @@ class LiveSession:
                 "session_id": self.session_id,
                 "paused": self.paused,
                 "muted": self.muted,
-                "utterances": len(self.runtime.transcript) if self.runtime else 0,
+                "utterances": self.runtime.spoken_count if self.runtime else 0,
                 "director_queue": self.runtime.director.queue_depth if self.runtime else 0,
             }
 
@@ -544,22 +544,27 @@ class LiveSession:
         await self.runtime.keep_fed(phase, state, now)
         await self.runtime.offer_next_topic(phase, state, now)
 
-        before_unsafe = len(self.runtime.dropped_unsafe)
-        before_rep = len(self.runtime.dropped_repetitive)
+        # Monotonic counters, not list lengths. The lists are bounded deques
+        # now, so their length stops growing at the cap and the old delta would
+        # silently stop reporting. The counters also fix a latent bug: when two
+        # items were added in one tick, the previous loop read [-1] twice and
+        # recorded the same text for both.
+        before_unsafe = self.runtime.unsafe_count
+        before_rep = self.runtime.repetitive_count
 
         response = await self.runtime.tick(state, now)
 
-        for _ in range(len(self.runtime.dropped_unsafe) - before_unsafe):
+        new_unsafe = self.runtime.unsafe_count - before_unsafe
+        for text, violations in list(self.runtime.dropped_unsafe)[-new_unsafe:]                 if new_unsafe else []:
             METRICS.inc("goldlive_blocked_total",
                         {"session": self.session_id, "reason": "safety"})
-            text, violations = self.runtime.dropped_unsafe[-1]
             self.store.record_blocked(
                 self.session_id, "safety", text, "; ".join(violations)
             )
-        for _ in range(len(self.runtime.dropped_repetitive) - before_rep):
+        new_rep = self.runtime.repetitive_count - before_rep
+        for text, sim in list(self.runtime.dropped_repetitive)[-new_rep:]                 if new_rep else []:
             METRICS.inc("goldlive_blocked_total",
                         {"session": self.session_id, "reason": "repetition"})
-            text, sim = self.runtime.dropped_repetitive[-1]
             self.store.record_blocked(
                 self.session_id, "repetition", text, f"similarity={sim:.2f}"
             )

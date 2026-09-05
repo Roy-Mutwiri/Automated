@@ -36,6 +36,12 @@ from shared.contracts import (
 
 log = logging.getLogger(__name__)
 
+#: How much recent history to keep in memory for diagnostics. Enough to inspect
+#: what just happened, small enough that a session running for weeks does not
+#: grow without bound. The monotonic counters beside these carry the totals.
+RETAINED_UTTERANCES = 500
+RETAINED_DROPS = 200
+
 SEVERITY_TO_PRIORITY = {
     5: Priority.CRITICAL,
     4: Priority.HIGH,
@@ -90,9 +96,24 @@ class SessionRuntime:
             )
         self.pipeline = CommentPipeline(state.session_id)
 
-        self.transcript: list[AIResponse] = []
-        self.dropped_unsafe: list[tuple[str, list[str]]] = []
-        self.dropped_repetitive: list[tuple[str, float]] = []
+        # Bounded, with monotonic counters alongside.
+        #
+        # These were plain lists that only ever grew. self.transcript retained
+        # every AIResponse for the life of the session purely so len() could
+        # number a wav file, and dropped_repetitive grew about four times
+        # faster still, because roughly three quarters of everything generated
+        # is rejected. On a 24/7 host aimed at an 8 GB machine that is a leak
+        # with no upper bound. export_state() never used any of it -- it reads
+        # memory.short_term, which was already bounded.
+        #
+        # The counters are what callers actually wanted: a total that keeps
+        # rising. The deques keep a recent window for diagnostics.
+        self.transcript: deque[AIResponse] = deque(maxlen=RETAINED_UTTERANCES)
+        self.dropped_unsafe: deque[tuple[str, list[str]]] = deque(maxlen=RETAINED_DROPS)
+        self.dropped_repetitive: deque[tuple[str, float]] = deque(maxlen=RETAINED_DROPS)
+        self.spoken_count = 0
+        self.unsafe_count = 0
+        self.repetitive_count = 0
 
     # -- ingest -----------------------------------------------------------
 
@@ -376,6 +397,7 @@ class SessionRuntime:
                 "; ".join(verdict.report.violations),
             )
             self.dropped_unsafe.append((result.text, verdict.report.violations))
+            self.unsafe_count += 1
             return None
 
         response = AIResponse(
@@ -399,6 +421,7 @@ class SessionRuntime:
         self.state.last_spoke_at = now
         self.state.utterances_1h += 1
         self.transcript.append(response)
+        self.spoken_count += 1
         return response
 
     async def _generate_non_repetitive(
@@ -500,7 +523,9 @@ class SessionRuntime:
 
         total = 0
         for i, segment in enumerate(req.segments):
-            path = self.out_dir / f"{len(self.transcript):03d}_{req.utterance_id.hex[:8]}_{i}.wav"
+            # spoken_count, not len(transcript): the deque stops growing at
+            # its cap, which would make filenames collide after that point.
+            path = self.out_dir / f"{self.spoken_count:03d}_{req.utterance_id.hex[:8]}_{i}.wav"
             res = await self.tts.synthesize(segment, req.voice_id, path)
             total += res.duration_ms
         return total
