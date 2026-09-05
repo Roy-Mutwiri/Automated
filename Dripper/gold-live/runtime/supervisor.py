@@ -169,6 +169,7 @@ class Supervisor:
         print()
         print(result.render())
         print()
+        self._publish_readiness(result)
 
         if result.level is Level.NOT_READY:
             log.error(
@@ -185,6 +186,25 @@ class Supervisor:
             log.warning("session ready, but NOT broadcast ready -- "
                         "audio will not reach LIVE Studio.")
         return True
+
+    @staticmethod
+    def _publish_readiness(result) -> None:
+        """Write the readiness verdict where the control panel can read it.
+
+        The panel had a Readiness row reading readiness.json, and nothing ever
+        wrote that file, so it showed "-" forever. The verdict is only known
+        here, at preflight, so this is where it has to be recorded.
+        """
+        import json as _json
+
+        from shared.paths import data_path
+
+        try:
+            data_path("readiness.json").write_text(
+                _json.dumps(result.to_json(), indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            log.debug("could not publish readiness: %s", exc)
 
     # -- process control --------------------------------------------------
 

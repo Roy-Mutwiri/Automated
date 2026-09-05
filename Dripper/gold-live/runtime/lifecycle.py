@@ -258,7 +258,22 @@ def load(path: Path | None = None, reconcile: bool = True) -> Lifecycle:
         return Lifecycle()
 
     lc = Lifecycle.from_json(raw)
-    return lc.reconcile() if reconcile else lc
+    if not reconcile:
+        return lc
+
+    before = lc.state
+    lc.reconcile()
+    if lc.state is not before:
+        # Persist the correction. Without this the reconciliation is purely
+        # in-memory, so the stale RUNNING stays on disk and every reader
+        # rediscovers the same crash -- the control panel polls every 1.5s and
+        # logged the identical warning forever, while still showing a crash
+        # the user had already seen and moved past.
+        try:
+            save(lc, target)
+        except OSError as exc:
+            log.warning("could not persist reconciled lifecycle state: %s", exc)
+    return lc
 
 
 # -- convenience used by the CLI and the control panel --------------------

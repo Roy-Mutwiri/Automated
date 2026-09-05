@@ -281,3 +281,58 @@ def test_an_impossible_pid_reads_as_dead():
     from runtime.lifecycle import _pid_alive
 
     assert not _pid_alive(2_000_000_000)
+
+
+def test_reconciling_a_crash_is_written_back(isolated_state):
+    """Regression: reconcile() corrected the state in memory and never saved
+    it, so the stale RUNNING stayed on disk. The control panel polls every
+    1.5 seconds and rediscovered the same crash forever, logging an identical
+    warning each time."""
+    save(Lifecycle(state=RunState.RUNNING, supervisor_pid=2_000_000_000))
+
+    assert load().state is RunState.CRASHED
+    raw = json.loads(isolated_state.read_text(encoding="utf-8"))
+    assert raw["state"] == "crashed", "the correction must reach the file"
+    assert raw["supervisor_pid"] is None
+
+
+def test_a_state_needing_no_correction_is_not_rewritten(isolated_state):
+    """Reading must not churn the file on every poll."""
+    lifecycle.mark_stopped()
+    before = isolated_state.read_text(encoding="utf-8")
+    load()
+    load()
+    assert isolated_state.read_text(encoding="utf-8") == before
+
+
+# -- what the control panel shows -------------------------------------------
+
+
+def test_the_comment_adapter_row_finds_any_adapter():
+    """Regression: the panel looked for the exact name "comment_adapter", but
+    each adapter publishes its own -- file_comment_adapter,
+    screen_comment_adapter, youtube_comment_adapter -- so the Comments row was
+    permanently blank whichever one was running."""
+    from runtime.panel import _component
+
+    for name in ("file_comment_adapter", "screen_comment_adapter",
+                 "youtube_comment_adapter"):
+        health = {"components": [{"component": name, "state": "ok"}]}
+        assert _component(health, "comment_adapter") == "OK", name
+
+
+def test_an_exact_component_name_still_wins():
+    from runtime.panel import _component
+
+    health = {"components": [
+        {"component": "market_engine", "state": "degraded"},
+        {"component": "generation", "state": "ok"},
+    ]}
+    assert _component(health, "market_engine") == "DEGRADED"
+    assert _component(health, "generation") == "OK"
+
+
+def test_a_missing_component_reads_as_unknown():
+    from runtime.panel import _component
+
+    assert _component({"components": []}, "market_engine") == "-"

@@ -81,8 +81,19 @@ def _health(port: int = HEALTH_PORT, timeout: float = 2.0) -> dict | None:
 
 
 def _component(health: dict, name: str) -> str:
-    for c in health.get("components", []):
+    """Find a component by exact name, then by suffix.
+
+    The suffix match matters: the comment adapter publishes its own name, so
+    it is file_comment_adapter, screen_comment_adapter or youtube_comment_adapter
+    depending on which one is running. Matching only the exact string left the
+    Comments row permanently blank whichever adapter was in use.
+    """
+    components = health.get("components", [])
+    for c in components:
         if c.get("component") == name:
+            return str(c.get("state", "-")).upper()
+    for c in components:
+        if str(c.get("component", "")).endswith(name):
             return str(c.get("state", "-")).upper()
     return "-"
 
