@@ -196,13 +196,43 @@ def start_goldlive() -> subprocess.Popen:
     # The handle is closed in this process as soon as the child has inherited
     # it. Holding it open leaked a descriptor on every START, and the panel is
     # meant to run for as long as the user leaves it open.
+    from runtime.supervisor import child_env
+
     with open(log_path, "a", encoding="utf-8", buffering=1) as handle:
         proc = subprocess.Popen(
-            _supervisor_command(), cwd=str(data_root()),
+            _supervisor_command(), cwd=str(data_root()), env=child_env(),
             stdout=handle, stderr=handle, creationflags=creation,
         )
     log.info("supervisor started (pid %d); log: %s", proc.pid, log_path)
     return proc
+
+
+def _signal_supervisor(pid: int) -> None:
+    """Ask the supervisor to shut down, without harming whoever asked.
+
+    The obvious approach -- os.kill(pid, CTRL_BREAK_EVENT) -- is wrong here.
+    Windows routes console control events by console, not purely by process
+    group, so a caller sharing a console with the target receives it too.
+    Measured: the caller died inside this function while the supervisor shut
+    down correctly, which for `GoldLive.exe stop` typed into a terminal means
+    killing that terminal. Creating a new process group for the child did not
+    prevent it, and neither did ignoring SIGBREAK in the caller.
+
+    taskkill addresses one process id and its children directly, with no
+    console involvement. Without /F it asks politely first, which is what lets
+    the supervisor run its own shutdown; the caller escalates afterwards if
+    anything is still alive.
+    """
+    if os.name != "nt":
+        with contextlib.suppress(OSError, ValueError):
+            os.kill(pid, signal.SIGTERM)
+        return
+
+    with contextlib.suppress(Exception):
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T"],
+            capture_output=True, timeout=15,
+        )
 
 
 def stop_goldlive(timeout_s: float = STOP_TIMEOUT_S) -> tuple[bool, str]:
@@ -216,11 +246,7 @@ def stop_goldlive(timeout_s: float = STOP_TIMEOUT_S) -> tuple[bool, str]:
     pid = lc.supervisor_pid
 
     if pid:
-        try:
-            os.kill(pid, signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGTERM)
-        except (OSError, ValueError, AttributeError):
-            with contextlib.suppress(OSError, ValueError):
-                os.kill(pid, signal.SIGTERM)
+        _signal_supervisor(pid)
 
     deadline = time.time() + timeout_s
     while time.time() < deadline:

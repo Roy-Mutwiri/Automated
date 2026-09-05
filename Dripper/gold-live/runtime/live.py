@@ -770,6 +770,7 @@ class LiveSession:
             asyncio.create_task(self._speak_loop(), name="speak"),
             asyncio.create_task(heartbeat(self.health, self.store), name="heartbeat"),
             asyncio.create_task(self._checkpoint_loop(), name="checkpoint"),
+            asyncio.create_task(self._orphan_watchdog(), name="orphan_watchdog"),
         ]
         if self.adapter is not None:
             self._tasks.append(asyncio.create_task(self._comment_loop(), name="comments"))
@@ -786,6 +787,38 @@ class LiveSession:
         await self.stopping.wait()
         await self.shutdown(feed, llm)
         return 0
+
+    async def _orphan_watchdog(self) -> None:
+        """Stop if the supervisor that started this session has died.
+
+        Windows cannot deliver a graceful signal to a hard-killed process, so
+        a supervisor that is TerminateProcess'd, taskkill /F'd, or lost to a
+        crash never runs its shutdown path -- and every session it started
+        keeps running, holding the audio device and the health port. Repeated
+        start/stop cycles then accumulate orphans four at a time.
+
+        Only active when supervised. A session started by hand has no parent
+        to outlive.
+        """
+        parent = os.environ.get("GOLDLIVE_SUPERVISOR_PID")
+        if os.environ.get("GOLDLIVE_SUPERVISED") != "1" or not parent:
+            return
+        try:
+            parent_pid = int(parent)
+        except ValueError:
+            return
+
+        from runtime.lifecycle import _pid_alive
+
+        while not self.stopping.is_set():
+            await asyncio.sleep(self.args.orphan_check_s)
+            if not _pid_alive(parent_pid):
+                log.error(
+                    "[%s] supervisor %d is gone; stopping rather than "
+                    "becoming an orphan", self.session_id, parent_pid,
+                )
+                self.stopping.set()
+                return
 
     async def _checkpoint_loop(self) -> None:
         """Save state periodically, not only on clean shutdown.
@@ -877,6 +910,10 @@ def main() -> None:
         help="file = tail a text file you type into (development)",
     )
     ap.add_argument("--tts", default="file", choices=["file", "piper"])
+    ap.add_argument(
+        "--orphan-check-s", type=float, default=5.0,
+        help="how often a supervised session checks its parent is alive",
+    )
     ap.add_argument(
         "--allow-degraded", action="store_true",
         help="start even when readiness gates fail. Development only: the "

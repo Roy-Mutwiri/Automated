@@ -73,6 +73,31 @@ def _errored(reason: str) -> "lifecycle.Lifecycle":
     return lc
 
 
+def child_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Environment for a spawned child.
+
+    Children run with cwd set to the writable data directory, never the source
+    tree, because _MEIPASS is read-only and temporary when frozen. In source
+    mode that means `python -m runtime.supervisor` cannot find its own package
+    unless the project root is on the path explicitly -- relying on cwd worked
+    only because data_root() happens to be the checkout when GOLDLIVE_DATA_DIR
+    is unset, and broke the moment it was set.
+    """
+    env = dict(base if base is not None else os.environ)
+    env["GOLDLIVE_SUPERVISED"] = "1"
+    # So the child can notice if this process dies without cleaning up. On
+    # Windows a hard kill -- TerminateProcess, taskkill /F, a crash, power loss
+    # -- gives the supervisor no chance to stop anything, and the session would
+    # otherwise keep running, holding the audio device and the health port.
+    env["GOLDLIVE_SUPERVISOR_PID"] = str(os.getpid())
+    if not is_frozen():
+        existing = env.get("PYTHONPATH", "")
+        root = str(ROOT)
+        if root not in existing.split(os.pathsep):
+            env["PYTHONPATH"] = os.pathsep.join(p for p in (root, existing) if p)
+    return env
+
+
 def session_command(session_id: str, health_port: int, args: list[str]) -> list[str]:
     """Build the argv that starts one session, correctly in both modes.
 
@@ -247,7 +272,7 @@ class Supervisor:
         # supervisor has already done it once, and N sessions each probing the
         # market feed and generating a test utterance would be both slow and
         # pointless.
-        env = {**os.environ, "GOLDLIVE_SUPERVISED": "1"}
+        env = child_env()
 
         # cwd must be writable and must outlive the process. ROOT resolves
         # inside PyInstaller's temporary _MEIPASS directory when frozen, which
