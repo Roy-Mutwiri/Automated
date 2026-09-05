@@ -1,0 +1,59 @@
+2026-09-05 16:36:29,973 WARNING supervisor: --allow-degraded: starting without readiness checks. Market data, model output or audio may be simulated.
+2026-09-05 16:36:29,986 INFO    supervisor: starting SESSION_001: run --session SESSION_001 --health-port 9101 --mode auto --market synthetic --adapter mock --tts file
+2026-09-05 16:36:30,595 INFO    live: session log: C:\Users\dripp\AppData\Local\GoldLive\logs\SESSION_001.log
+2026-09-05 16:36:33,006 WARNING platform_.llm.local: local LLM health check failed: All connection attempts failed
+2026-09-05 16:36:33,279 INFO    httpx: HTTP Request: GET http://127.0.0.1:11434/v1/models "HTTP/1.1 200 OK"
+2026-09-05 16:36:33,283 INFO    httpx: HTTP Request: GET http://127.0.0.1:11434/v1/models "HTTP/1.1 200 OK"
+2026-09-05 16:36:33,283 INFO    platform_.llm.discovery: found Ollama at http://127.0.0.1:11434/v1 serving llama3.2:3b
+2026-09-05 16:36:33,283 INFO    intelligence.generation: using local model at http://127.0.0.1:11434/v1 (llama3.2:3b)
+2026-09-05 16:36:33,321 INFO    live: SESSION_001 resumed: 382 topics, 1440 utterances previously covered
+2026-09-05 16:36:33,328 INFO    runtime.health: health server on http://127.0.0.1:9101/health
+2026-09-05 16:36:33,328 INFO    live: staleness thresholds for synthetic: delayed 6s, stale 20s, unavailable 120s
+2026-09-05 16:36:33,328 INFO    live: SESSION_001 live: persona=scalper market=synthetic adapter=mock generator=LocalGenerator
+2026-09-05 16:36:33,351 INFO    httpx: HTTP Request: GET http://127.0.0.1:9101/ready "HTTP/1.1 200 OK"
+2026-09-05 16:36:43,362 INFO    supervisor: user stopped GoldLive; not restarting SESSION_001
+2026-09-05 16:36:43,362 INFO    supervisor: stopping SESSION_001 (pid 15980)
+2026-09-05 16:36:43,565 INFO    supervisor: all sessions stopped
+2026-09-05 16:36:48,181 WARNING supervisor: --allow-degraded: starting without readiness checks. Market data, model output or audio may be simulated.
+2026-09-05 16:36:48,193 INFO    supervisor: starting SESSION_001: run --session SESSION_001 --health-port 9101 --mode auto --market synthetic --adapter mock --tts file
+2026-09-05 16:36:48,564 INFO    live: session log: C:\Users\dripp\AppData\Local\GoldLive\logs\SESSION_001.log
+2026-09-05 16:36:50,931 WARNING platform_.llm.local: local LLM health check failed: All connection attempts failed
+2026-09-05 16:36:51,202 INFO    httpx: HTTP Request: GET http://127.0.0.1:11434/v1/models "HTTP/1.1 200 OK"
+2026-09-05 16:36:51,204 INFO    httpx: HTTP Request: GET http://127.0.0.1:11434/v1/models "HTTP/1.1 200 OK"
+2026-09-05 16:36:51,205 INFO    platform_.llm.discovery: found Ollama at http://127.0.0.1:11434/v1 serving llama3.2:3b
+2026-09-05 16:36:51,205 INFO    intelligence.generation: using local model at http://127.0.0.1:11434/v1 (llama3.2:3b)
+2026-09-05 16:36:51,240 INFO    live: SESSION_001 resumed: 382 topics, 1440 utterances previously covered
+2026-09-05 16:36:51,246 INFO    runtime.health: health server on http://127.0.0.1:9101/health
+2026-09-05 16:36:51,246 INFO    live: staleness thresholds for synthetic: delayed 6s, stale 20s, unavailable 120s
+2026-09-05 16:36:51,246 INFO    live: SESSION_001 live: persona=scalper market=synthetic adapter=mock generator=LocalGenerator
+2026-09-05 16:36:51,572 INFO    httpx: HTTP Request: GET http://127.0.0.1:9101/ready "HTTP/1.1 200 OK"
+2026-09-05 16:36:56,256 ERROR   live: [SESSION_001] supervisor 7364 is gone; stopping rather than becoming an orphan
+2026-09-05 16:36:56,256 INFO    live: SESSION_001 shutting down
+2026-09-05 16:36:56,316 INFO    live: SESSION_001 stopped cleanly
+2026-09-05 16:37:00,363 WARNING supervisor: --allow-degraded: starting without readiness checks. Market data, model output or audio may be simulated.
+2026-09-05 16:37:00,376 INFO    supervisor: starting SESSION_001: run --session SESSION_001 --health-port 9101 --mode auto --market synthetic --adapter mock --tts file
+2026-09-05 16:37:00,847 INFO    live: session log: C:\Users\dripp\AppData\Local\GoldLive\logs\SESSION_001.log
+2026-09-05 16:37:03,274 WARNING platform_.llm.local: local LLM health check failed: All connection attempts failed
+2026-09-05 16:37:03,552 INFO    httpx: HTTP Request: GET http://127.0.0.1:11434/v1/models "HTTP/1.1 200 OK"
+2026-09-05 16:37:03,555 INFO    httpx: HTTP Request: GET http://127.0.0.1:11434/v1/models "HTTP/1.1 200 OK"
+2026-09-05 16:37:03,555 INFO    platform_.llm.discovery: found Ollama at http://127.0.0.1:11434/v1 serving llama3.2:3b
+2026-09-05 16:37:03,556 INFO    intelligence.generation: using local model at http://127.0.0.1:11434/v1 (llama3.2:3b)
+2026-09-05 16:37:03,590 INFO    live: SESSION_001 resumed: 382 topics, 1440 utterances previously covered
+2026-09-05 16:37:03,596 INFO    runtime.health: health server on http://127.0.0.1:9101/health
+2026-09-05 16:37:03,596 INFO    live: staleness thresholds for synthetic: delayed 6s, stale 20s, unavailable 120s
+2026-09-05 16:37:03,596 INFO    live: SESSION_001 live: persona=scalper market=synthetic adapter=mock generator=LocalGenerator
+2026-09-05 16:37:03,756 INFO    httpx: HTTP Request: GET http://127.0.0.1:9101/ready "HTTP/1.1 200 OK"
+2026-09-05 16:37:06,181 WARNING supervisor: --allow-degraded: starting without readiness checks. Market data, model output or audio may be simulated.
+2026-09-05 16:37:06,194 INFO    supervisor: starting SESSION_001: run --session SESSION_001 --health-port 9101 --mode auto --market synthetic --adapter mock --tts file
+2026-09-05 16:37:06,568 INFO    live: session log: C:\Users\dripp\AppData\Local\Temp\goldlive-isolated-n1nxvvik\logs\SESSION_001.log
+2026-09-05 16:37:08,968 WARNING platform_.llm.local: local LLM health check failed: All connection attempts failed
+2026-09-05 16:37:09,241 INFO    httpx: HTTP Request: GET http://127.0.0.1:11434/v1/models "HTTP/1.1 200 OK"
+2026-09-05 16:37:09,243 INFO    httpx: HTTP Request: GET http://127.0.0.1:11434/v1/models "HTTP/1.1 200 OK"
+2026-09-05 16:37:09,243 INFO    platform_.llm.discovery: found Ollama at http://127.0.0.1:11434/v1 serving llama3.2:3b
+2026-09-05 16:37:09,243 INFO    intelligence.generation: using local model at http://127.0.0.1:11434/v1 (llama3.2:3b)
+2026-09-05 16:37:09,274 INFO    live: SESSION_001 starting with no prior state
+2026-09-05 16:37:09,274 WARNING shared.provisioning: no per-install author salt found; viewer handles will hash identically to every other install. Run: GoldLive.exe provision
+2026-09-05 16:37:09,279 INFO    runtime.health: health server on http://127.0.0.1:9101/health
+2026-09-05 16:37:09,279 INFO    live: staleness thresholds for synthetic: delayed 6s, stale 20s, unavailable 120s
+2026-09-05 16:37:09,279 INFO    live: SESSION_001 live: persona=scalper market=synthetic adapter=mock generator=LocalGenerator
+2026-09-05 16:37:09,560 INFO    httpx: HTTP Request: GET http://127.0.0.1:9101/ready "HTTP/1.1 200 OK"
