@@ -75,7 +75,13 @@ def build_turn_context(intent: SpeechIntent, market: MarketState, transcript: li
     """The volatile half. Goes AFTER the cache breakpoint, never in the prefix."""
     tf = market.timeframes.get("5m")
     lines = [
-        "CURRENT MARKET STATE",
+        # Reference data, explicitly framed as reference. Production showed the
+        # model narrating whatever concrete number sat at the top of this block
+        # -- 50% of utterances opened by reciting bid/ask or the spread, and it
+        # would discuss the spread no matter which topic it had been asked for.
+        # A small model treats the most specific thing it can see as the
+        # subject, so this block has to say plainly that it is not the subject.
+        "MARKET REFERENCE (background for you -- NOT the topic, do not narrate it)",
         f"  data confidence : {market.confidence.value} ({market.staleness_ms}ms old)",
         f"  trading session : {market.session.value}",
     ]
@@ -104,7 +110,18 @@ def build_turn_context(intent: SpeechIntent, market: MarketState, transcript: li
         lines += [f"  - {t}" for t in transcript]
         lines.append("")
 
-    lines.append("WHY YOU ARE SPEAKING NOW")
+        # Listing whole previous utterances tells the model what content to
+        # avoid but nothing about shape, so it varied the content and reused
+        # the same construction -- "the bid is now", "the price is now", "the
+        # spread has widened" over and over. Naming the openings directly is
+        # what stops that.
+        openings = [" ".join(t.split()[:5]) for t in transcript[-5:] if t.split()]
+        if openings:
+            lines.append("SENTENCE OPENINGS YOU HAVE ALREADY USED -- start differently")
+            lines += [f"  - {o}..." for o in openings]
+            lines.append("")
+
+    lines.append("WHAT TO TALK ABOUT NOW  <-- this is your subject")
     if intent.trigger is TriggerType.COMMENT:
         payload = intent.payload
         lines.append(f"  A viewer asked: \"{payload.get('text', '')}\"")
@@ -138,6 +155,18 @@ def build_turn_context(intent: SpeechIntent, market: MarketState, transcript: li
                      "mentioned in passing.")
     else:
         lines.append(f"  {intent.topic}")
+
+
+    # Last, so it is the freshest instruction in the context. A viewer question
+    # is exempt: answering "where is gold right now" by refusing to say a
+    # number would be absurd.
+    if intent.trigger is not TriggerType.COMMENT:
+        lines.append("")
+        lines.append(
+            "HOW TO OPEN: not with the bid, the ask, the spread or the current "
+            "price. Open on the subject above. Bring in a number only where it "
+            "makes that point sharper -- as evidence, never as the headline."
+        )
 
     return "\n".join(lines)
 
