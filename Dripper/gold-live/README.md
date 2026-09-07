@@ -66,10 +66,14 @@ real prices, but nothing has been shown to reach an audience.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q
+PYTHONPATH=. pytest -q
 python -m PyInstaller build_tools/GoldLive.spec --noconfirm
 python -m build_tools.make_zip
 ```
+
+That is the command CI runs, so it is the one documented here. A bare
+`pytest -q` also works now (see `pythonpath` in `pyproject.toml`), but the
+explicit form is what gets exercised on every push.
 
 Architecture and design decisions: [docs/PORTABILITY_SPEC.md](docs/PORTABILITY_SPEC.md)
 

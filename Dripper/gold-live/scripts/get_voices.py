@@ -59,7 +59,14 @@ CATALOGUE: dict[str, dict] = {
     "en_US-ljspeech-high": {
         "path": "en/en_US/ljspeech/high", "who": "American female, audiobook style",
     },
-    "en_US-bryce-medium": {"path": "en/en_US/bryce/medium", "who": "American male"},
+    # Not audiobook-derived: the speaker recorded ~750 samples of their own
+    # voice, where john, norman and ljspeech are all LibriVox. That is why it
+    # is the comparison voice in scripts/voice_bakeoff.py. Install it with:
+    #     python -m scripts.get_voices --voice en_US-bryce-medium
+    "en_US-bryce-medium": {
+        "path": "en/en_US/bryce/medium",
+        "who": "American male, conversational (bake-off comparison voice)",
+    },
     "en_US-john-medium": {"path": "en/en_US/john/medium", "who": "American male"},
     "en_US-norman-medium": {"path": "en/en_US/norman/medium", "who": "American male"},
     "en_US-kathleen-low": {"path": "en/en_US/kathleen/low", "who": "American female"},

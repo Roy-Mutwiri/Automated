@@ -21,7 +21,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.6", "pyinstaller>=6.0"]
+# fakeredis is a TEST dependency, not an optional extra: tests/test_event_bus.py
+# importorskips it, so without it that file skips silently and the event bus
+# looks tested when it is not. CI installed it separately, which meant
+# `pip install -e ".[dev]"` did not give a developer the same suite CI runs.
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "pyinstaller>=6.0",
+    "fakeredis>=2.21",
+]
 # Comparison against a hosted model. Never used in production.
 hosted = ["anthropic>=0.40"]
 # Screen-capture comment ingestion. Large ML stack; opt in deliberately.
@@ -44,6 +54,16 @@ packages = ["shared", "intelligence", "platform_", "runtime", "dashboard", "scri
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# The repository root, so `intelligence`, `platform_`, `runtime` and `shared`
+# import without the caller having to arrange it.
+#
+# `python -m pytest` happens to work without this because Python puts the
+# working directory on sys.path; the `pytest` console script does not, so the
+# command the README documented failed from a fresh clone with
+# ModuleNotFoundError. This makes both spellings behave the same. It is one
+# ini setting rather than a src/ layout migration -- the packages are already
+# declared under [tool.setuptools] and restructuring them is not worth it.
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

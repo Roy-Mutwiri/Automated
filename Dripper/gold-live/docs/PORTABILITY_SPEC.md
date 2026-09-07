@@ -1,6 +1,17 @@
 # Portable / Self-Installing GoldLive — Implementation Specification
 
-Status: **for review, not implemented.** Derived from the cold-start audit (2 Sep 2026).
+Status: **implemented.** Derived from the cold-start audit (2 Sep 2026); the
+stages, provisioning state file, capability profile, model selection and
+readiness levels described below now exist in `runtime/bootstrap.py`,
+`shared/capability.py`, `shared/provisioning.py`, `runtime/provision.py`,
+`runtime/readiness.py`, `runtime/session.py` and `runtime/supervisor.py`.
+
+Two things specified here remain **unproven rather than unbuilt**, and the
+rest of the document should be read with that in mind: the clean-PC first
+launch of section 6 has never been performed on a machine other than the
+development one, and BROADCAST_READY (section 9) has never been reached end
+to end. Everything else in this document is a record of what was built, not
+a proposal.
 
 Product requirement: a user takes GoldLive to a supported clean Windows PC, launches
 it, and the application guides and provisions that machine until it is *genuinely*

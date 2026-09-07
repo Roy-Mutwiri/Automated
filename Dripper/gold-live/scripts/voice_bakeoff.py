@@ -7,8 +7,14 @@ held identical across arms. Only the voice model changes -- except in the one
 arm that deliberately disables expression, which exists to tell voice quality
 apart from behaviour.
 
+    python -m scripts.get_voices --voice en_US-bryce-medium   # once
     python -m scripts.voice_bakeoff --out out/bakeoff
     # open out/bakeoff/index.html, listen, then read answer_key.txt
+
+Voice models are not in the repository (they are large, and gitignored), so
+bryce has to be fetched before this will run all four arms. It is not in the
+DEFAULT_PROFILE in scripts/get_voices.py -- it is a comparison voice, not a
+shipped one -- so an arm whose model is absent is skipped rather than faked.
 
 ## The arms
 
