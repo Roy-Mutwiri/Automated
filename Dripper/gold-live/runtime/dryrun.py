@@ -136,9 +136,9 @@ async def run(beats: int, n_sessions: int, mode: str, out_dir: Path) -> int:
             print(f"      BLOCKED: {violations} :: {text[:70]}...")
 
     # Isolation check: no session may contain another's comment ids.
+    isolation_ok = True
     if n_sessions > 1:
         print("\n  ISOLATION CHECK")
-        ok = True
         for i, rt in enumerate(runtimes):
             for j, other in enumerate(runtimes):
                 if i == j:
@@ -146,13 +146,18 @@ async def run(beats: int, n_sessions: int, mode: str, out_dir: Path) -> int:
                 mine = {r.trace_id for r in rt.transcript}
                 theirs = {r.trace_id for r in other.transcript}
                 if mine & theirs:
-                    ok = False
+                    isolation_ok = False
                     print(f"    FAIL: {rt.state.session_id} shares traces with "
                           f"{other.state.session_id}")
-        print(f"    {'PASS - no cross-session leakage' if ok else 'FAILED'}")
+        print(f"    {'PASS - no cross-session leakage' if isolation_ok else 'FAILED'}")
 
     print(f"\n  audio + transcripts written to: {out_dir}\n")
-    return total_unsafe
+    # The count of things that must not have happened. main() turns this
+    # into the exit code. Both signals were computed and then discarded:
+    # a dry run that detected a cross-session leak printed FAIL and still
+    # exited 0, which is the silent-success failure this project exists to
+    # avoid, and it made the harness worthless as a CI gate.
+    return total_unsafe + (0 if isolation_ok else 1)
 
 
 def main() -> None:
@@ -170,7 +175,8 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)-7s %(name)s: %(message)s",
     )
-    asyncio.run(run(args.beats, args.sessions, args.mode, Path(args.out)))
+    failures = asyncio.run(run(args.beats, args.sessions, args.mode, Path(args.out)))
+    raise SystemExit(1 if failures else 0)
 
 
 if __name__ == "__main__":

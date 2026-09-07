@@ -39,6 +39,49 @@ jobs:
       - name: Test
         run: PYTHONPATH=. pytest -q --durations=10
 
+  integration:
+    # The unit suite covers the engine. This covers the wiring.
+    #
+    # runtime/dryrun.py, runtime/soak.py and runtime/cli.py sat at 0% coverage
+    # and runtime/live.py at 16% -- not because the pipeline is untestable but
+    # because nothing ever executed these harnesses. They were built, they
+    # work, and they were never run twice. Running them here exercises feed ->
+    # engine -> director -> generator -> safety -> TTS end to end on every
+    # push, which is the standard runtime/readiness.py sets for itself: prove
+    # it by doing it, rather than asserting that the imports resolve.
+    #
+    # Both are hermetic. The dry run uses shared.mocks.FileTTS and the offline
+    # generator, so there is no model server, no audio device, no network and
+    # no API key; the soak runs on simulated time, so 24 hours costs ~35s.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          sudo apt-get update -qq && sudo apt-get install -y -qq libsndfile1
+          pip install -e ".[dev]"
+          pip install httpx numpy soundfile
+
+      - name: Dry run -- full pipeline, three sessions
+        # Three sessions, because the cross-session isolation check only runs
+        # when there is more than one. Its exit code became meaningful in the
+        # same commit that added this job: until then the harness printed
+        # "FAIL: SESSION_002 shares traces with SESSION_003" and exited 0.
+        run: PYTHONPATH=. python -m runtime.dryrun --mode offline --beats 24 --sessions 3
+
+      - name: Accelerated soak -- 24h of structure in ~35s
+        # Fails on dead air, content exhaustion or repetition drift. Simulated
+        # time, so this is a structural check, not a throughput measurement --
+        # the offline generator understates volume by design.
+        run: PYTHONPATH=. python -m runtime.soak --hours 24
+
   contracts:
     # The eight contracts are the interface between two people working in
     # parallel. A change to them must be deliberate and reviewed, never a
@@ -117,7 +160,7 @@ jobs:
 
   build:
     runs-on: windows-latest
-    needs: test
+    needs: [test, integration]
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
