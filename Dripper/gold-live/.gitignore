@@ -33,3 +33,9 @@ voices/*.onnx.json
 models/
 comments.txt
 selftest/
+
+# test/runtime residue when scripts run with cwd set to the checkout
+logs/
+lifecycle.json
+out/
+out-soak/

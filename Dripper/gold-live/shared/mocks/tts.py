@@ -7,7 +7,7 @@ import struct
 import wave
 from pathlib import Path
 
-from platform_.tts.base import TTSProvider, TTSResult
+from platform_.tts.base import Prosody, TTSProvider, TTSResult
 
 
 class MockTTS(TTSProvider):
@@ -16,7 +16,14 @@ class MockTTS(TTSProvider):
     def __init__(self) -> None:
         self.spoken: list[str] = []
 
-    async def synthesize(self, text: str, voice_id: str, out_path: Path) -> TTSResult:
+    async def synthesize(
+        self,
+        text: str,
+        voice_id: str,
+        out_path: Path,
+        *,
+        prosody: Prosody | None = None,
+    ) -> TTSResult:
         self.spoken.append(text)
         return TTSResult(path=None, duration_ms=len(text) * 55, first_audio_ms=5)
 
@@ -33,7 +40,14 @@ class FileTTS(TTSProvider):
     WORDS_PER_MINUTE = 165
     SAMPLE_RATE = 24_000
 
-    async def synthesize(self, text: str, voice_id: str, out_path: Path) -> TTSResult:
+    async def synthesize(
+        self,
+        text: str,
+        voice_id: str,
+        out_path: Path,
+        *,
+        prosody: Prosody | None = None,
+    ) -> TTSResult:
         words = max(1, len(text.split()))
         duration_s = (words / self.WORDS_PER_MINUTE) * 60
         out_path.parent.mkdir(parents=True, exist_ok=True)

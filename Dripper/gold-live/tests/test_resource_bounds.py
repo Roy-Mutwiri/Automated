@@ -156,7 +156,7 @@ async def test_barge_in_abandons_the_whole_utterance_not_just_one_segment(tmp_pa
             self._stopped = True
 
     class InstantTTS:
-        async def synthesize(self, text, voice_id, out_path):
+        async def synthesize(self, text, voice_id, out_path, *, prosody=None):
             from platform_.tts.base import TTSResult
 
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -199,7 +199,7 @@ async def test_an_unpreempted_utterance_speaks_every_segment(tmp_path):
             pass
 
     class InstantTTS:
-        async def synthesize(self, text, voice_id, out_path):
+        async def synthesize(self, text, voice_id, out_path, *, prosody=None):
             from platform_.tts.base import TTSResult
 
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -213,4 +213,8 @@ async def test_an_unpreempted_utterance_speaks_every_segment(tmp_path):
     )
     router._running = True
     await router._speak(request)
-    assert len(played) == 3
+    # Two files, not three: the tail is synthesised as one span so the
+    # intonation carries across it (router.group_for_prosody). What must
+    # hold is that an unpreempted utterance loses nothing.
+    assert len(played) == 2
+    assert sorted(played) == played, "segments must play in order"

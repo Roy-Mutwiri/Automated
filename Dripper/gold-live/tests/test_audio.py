@@ -11,7 +11,7 @@ import pytest
 
 from platform_.audio.devices import AudioDevice
 from platform_.audio.router import AudioRouter, AudioSink, PlaybackState
-from platform_.tts.base import TTSProvider, TTSResult
+from platform_.tts.base import Prosody, TTSProvider, TTSResult
 from shared.contracts import AudioRequest, Priority, utcnow
 
 
@@ -21,7 +21,14 @@ class RecordingTTS(TTSProvider):
         self.fail_on = fail_on
         self.delay_s = delay_s
 
-    async def synthesize(self, text: str, voice_id: str, out_path: Path) -> TTSResult:
+    async def synthesize(
+        self,
+        text: str,
+        voice_id: str,
+        out_path: Path,
+        *,
+        prosody: Prosody | None = None,
+    ) -> TTSResult:
         if self.delay_s:
             await asyncio.sleep(self.delay_s)
         if self.fail_on and self.fail_on in text:
@@ -79,12 +86,19 @@ async def drain(r: AudioRouter, timeout: float = 1.0) -> None:
 
 
 async def test_speaks_every_segment_in_order(tmp_path):
+    """Every word reaches the TTS, in order -- but not one call per sentence.
+
+    The lead sentence is synthesised alone so audio starts quickly; the rest
+    go as a single call so the intonation carries across them instead of
+    landing a full stop after each one. See router.group_for_prosody.
+    """
     tts = RecordingTTS()
     r, _sink = await router(tts, tmp_path)
     await r.submit(request(segments=["One.", "Two.", "Three."]))
     await drain(r)
     await r.stop()
-    assert tts.spoken == ["One.", "Two.", "Three."]
+    assert tts.spoken == ["One.", "Two. Three."]
+    assert " ".join(tts.spoken) == "One. Two. Three.", "no words may be lost"
     assert r.stats.played == 1
 
 

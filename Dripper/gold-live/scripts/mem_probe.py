@@ -87,7 +87,7 @@ try:
         await tts.synthesize("Warming the voice up.", voice, tmp / "w.wav")
         mark("piper voice loaded (one-off cost)")
         done = 0
-        for target in (1, 10, 25, 50):
+        for target in (1, 10, 25, 50, 100, 250, 500, 1000):
             while done < target:
                 await tts.synthesize(
                     f"Gold is holding just under the level we marked earlier, "

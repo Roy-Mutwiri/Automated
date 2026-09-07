@@ -24,6 +24,7 @@ was wrong for two of the first three voices picked.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tempfile
 import urllib.error
@@ -76,6 +77,20 @@ DEFAULT_PROFILE = {
     "scalper": "en_US-john-medium",
     "educator": "en_US-ljspeech-high",
     "macro": "en_US-norman-medium",
+}
+
+#: Voices whose own licence is restricted, so anything finetuned FROM them
+#: inherits the problem. Checking only `lessac` was not enough: the catalogue
+#: contains `en_US-kathleen-low`, whose corpus is CC0 -- which this script
+#: happily reported as clean -- but whose MODEL_CARD says it was finetuned
+#: from Ryan, which this same script BLOCKS as CC BY-NC-SA. A voice can
+#: launder a restricted lineage through a permissive corpus, which is the
+#: exact failure this parser exists to prevent.
+RESTRICTED_ANCESTORS = {
+    "lessac": "Blizzard Challenge 2013 lineage",
+    "ryan": "CC BY-NC-SA lineage",
+    "hfc_female": "CC BY-NC-SA lineage",
+    "hfc_male": "CC BY-NC-SA lineage",
 }
 
 FLAGS = {
@@ -137,10 +152,11 @@ def parse_model_card(text: str) -> dict:
         verdict = "unstated"
         notes.append("licence deferred to the dataset URL; read it before shipping")
 
-    if "lessac" in training.lower():
-        notes.append("finetuned from lessac -> Blizzard Challenge 2013 lineage")
-        if verdict in ("permissive", "public domain"):
-            verdict = "check"
+    for ancestor, why in RESTRICTED_ANCESTORS.items():
+        if re.search(rf"\b{ancestor}\b", training, re.I):
+            notes.append(f"finetuned from {ancestor} -> {why}")
+            if verdict in ("permissive", "public domain"):
+                verdict = "check"
 
     return {
         "dataset": dataset,

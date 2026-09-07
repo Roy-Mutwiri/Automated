@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from platform_.tts.base import TTSProvider, TTSResult
+from platform_.tts.base import Prosody, TTSProvider, TTSResult
 from shared.contracts import AudioRequest, Priority
 
 
@@ -102,7 +102,14 @@ class FakeTTS(TTSProvider):
         self.empty = empty
         self.calls: list[str] = []
 
-    async def synthesize(self, text: str, voice_id: str, out_path: Path) -> TTSResult:
+    async def synthesize(
+        self,
+        text: str,
+        voice_id: str,
+        out_path: Path,
+        *,
+        prosody: Prosody | None = None,
+    ) -> TTSResult:
         n = len(self.calls)
         self.calls.append(text)
         if self.delay_s:

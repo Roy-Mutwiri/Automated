@@ -34,6 +34,11 @@ from intelligence.director import SpeechIntent
 from intelligence.generation import build_generator
 from intelligence.personas import load_personas
 from intelligence.proposer import CoverageMemory, TopicProposer
+from platform_.audio.retention import (
+    AUDIO_MAX_AGE_S,
+    AUDIO_MAX_BYTES,
+    RetentionPolicy,
+)
 from platform_.audio.router import AudioRouter
 from platform_.market.engine import MarketEngine
 from platform_.market.feeds import Feed, ReplayFeed, SyntheticFeed
@@ -330,6 +335,16 @@ class LiveSession:
                                     detail=f"depth={snap['queue_depth']}"),
                         HealthCheck(name="tts", ok=snap["tts_failures"] < 3,
                                     detail=f"failures={snap['tts_failures']}"),
+                        # Spoken audio used to grow without bound. Surfaced
+                        # here so a retention policy that stops working is
+                        # visible in health rather than in a full disk.
+                        HealthCheck(
+                            name="audio_disk",
+                            ok=snap["audio_bytes"] <= self.router.retention.policy.max_bytes,
+                            detail=f"{snap['audio_files']} files, "
+                                   f"{snap['audio_bytes'] / 1e6:.1f} MB "
+                                   f"(limit {self.router.retention.policy.describe()})",
+                        ),
                     ],
                 )
             )
@@ -733,7 +748,13 @@ class LiveSession:
         else:
             log.info("%s starting with no prior state", self.session_id)
 
-        self.router = AudioRouter(self.session_id, tts, Path(self.args.out))
+        self.router = AudioRouter(
+            self.session_id, tts, Path(self.args.out),
+            retention=RetentionPolicy(
+                max_age_s=self.args.audio_retention_hours * 3600,
+                max_bytes=int(self.args.audio_max_mb * 1024 * 1024),
+            ),
+        )
         await self.router.start()
         # The runtime submits through the router; live.py must not submit
         # a second time or the utterance is queued (and rendered) twice.
@@ -929,6 +950,14 @@ def main() -> None:
              "clears the bar.",
     )
     ap.add_argument("--out", default=str(data_path("out", create_parent=False)))
+    ap.add_argument(
+        "--audio-retention-hours", type=float, default=AUDIO_MAX_AGE_S / 3600,
+        help="how long spoken audio is kept before it is reclaimed",
+    )
+    ap.add_argument(
+        "--audio-max-mb", type=float, default=AUDIO_MAX_BYTES / (1024 * 1024),
+        help="hard ceiling on the spoken-audio directory, oldest evicted first",
+    )
     ap.add_argument("--db", default=str(data_path("data", "gold-live.db", create_parent=False)))
     ap.add_argument("--health-port", type=int, default=9101)
     ap.add_argument("--tick-s", type=float, default=2.0)
