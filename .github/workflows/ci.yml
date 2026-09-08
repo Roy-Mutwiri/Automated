@@ -3,7 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
+
+# Least privilege by default; only the release job widens it.
+permissions:
+  contents: read
 
 defaults:
   run:
@@ -161,7 +166,9 @@ jobs:
   build:
     runs-on: windows-latest
     needs: [test, integration]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write      # only to create the release; nothing else
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -172,10 +179,33 @@ jobs:
           python -m pip install -U pip
           pip install -e ".[dev]"
           pip install pyinstaller httpx numpy sounddevice soundfile mss
+      # build.py runs PyInstaller; make_zip assembles the distribution the
+      # install docs name -- GoldLive-Windows-x64-v<version>.zip, with the
+      # user README, the docs, and the check that refuses to ship anything
+      # that could start GoldLive without a person asking. `build --zip`
+      # produces a differently named archive with none of that.
       - name: Build
-        run: python -m build_tools.build --skip-tests --zip
+        run: |
+          python -m build_tools.build --skip-tests
+          python -m build_tools.make_zip
       - uses: actions/upload-artifact@v4
         with:
           name: GoldLive-windows
-          path: Dripper/gold-live/dist/*.zip
+          path: Dripper/gold-live/dist/GoldLive-Windows-x64-*.zip
           retention-days: 14
+
+      # Tags only. A push to main still just uploads a CI artifact.
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = Get-ChildItem Dripper/gold-live/dist/GoldLive-Windows-x64-*.zip
+          if ($zip.Count -ne 1) { throw "expected exactly one distribution zip, found $($zip.Count)" }
+          $expected = "GoldLive-Windows-x64-v$($env:GITHUB_REF_NAME.TrimStart('v')).zip"
+          if ($zip.Name -ne $expected) {
+            throw "tag $env:GITHUB_REF_NAME does not match packaged artifact $($zip.Name)"
+          }
+          gh release create $env:GITHUB_REF_NAME $zip.FullName `
+            --title "GoldLive $env:GITHUB_REF_NAME" `
+            --notes "Windows x64 build. Extract, run 'GoldLive Setup.exe', then 'GoldLive.exe'. The AI model and voices are downloaded by Setup, not shipped here. Ollama and VB-CABLE are not installed for you - Setup detects them and says what is missing."
