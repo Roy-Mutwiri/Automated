@@ -224,8 +224,42 @@ def download(name: str, voices_dir: Path) -> bool:
     return ok
 
 
+#: Pulls the voice name out of a table row: `| `en_US-john-medium` | ... |`.
+ROW_NAME = re.compile(r"^\|\s*`([^`]+)`\s*\|")
+
+
+def existing_rows(summary: Path) -> dict[str, str]:
+    """Rows already recorded, keyed by voice name.
+
+    This file is a licence AUDIT, not an inventory of what happens to be on
+    this disk. It is read back before rewriting so that installing one voice
+    cannot erase the record for the others.
+    """
+    if not summary.exists():
+        return {}
+    rows: dict[str, str] = {}
+    for line in summary.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = ROW_NAME.match(line.strip())
+        if match:
+            rows[match.group(1)] = line.rstrip()
+    return rows
+
+
 def write_summary(voices_dir: Path) -> None:
-    rows = []
+    """Record the licence of every voice we know about, destroying nothing.
+
+    Rows used to be generated purely from `*.onnx` present in voices_dir, so
+    provisioning a single voice into a fresh checkout REWROTE the file with
+    only that voice in it -- silently deleting the public-domain records for
+    john, ljspeech and norman, which is the audit trail this file exists to
+    keep. Installing a voice is not evidence that the others are unlicensed.
+
+    So: existing rows are kept, and a voice that is actually installed here
+    refreshes its own row from its MODEL_CARD. Nothing is ever removed.
+    """
+    summary = voices_dir / "VOICE_LICENCES.md"
+    rows = existing_rows(summary)
+
     for path in sorted(voices_dir.glob("*.onnx")):
         name = path.stem
         card = voices_dir / f"{name}.MODEL_CARD"
@@ -234,10 +268,12 @@ def write_summary(voices_dir: Path) -> None:
             if card.exists()
             else {"licence": "?", "verdict": "unknown", "notes": []}
         )
-        rows.append(
+        rows[name] = (
             f"| `{name}` | {parsed['verdict']} | {parsed['licence']} "
             f"| {'; '.join(parsed['notes']) or '-'} |"
         )
+
+    ordered = [rows[name] for name in sorted(rows)]
 
     (voices_dir / "VOICE_LICENCES.md").write_text(
         "\n".join([
@@ -251,7 +287,7 @@ def write_summary(voices_dir: Path) -> None:
             "",
             "| Voice | Verdict | Licence | Notes |",
             "|---|---|---|---|",
-            *rows,
+            *ordered,
             "",
             "`restricted` must not ship in a build handed to other people.",
             "`check` and `unstated` need the dataset URL read before it does.",
