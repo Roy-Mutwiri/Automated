@@ -163,12 +163,14 @@ jobs:
           done
           exit $missing
 
+  # Runs on pull requests too, so packaging is proven BEFORE merge rather
+  # than discovered afterwards on main. Read-only: a build triggered by a pull
+  # request must not be able to publish anything.
   build:
     runs-on: windows-latest
     needs: [test, integration]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     permissions:
-      contents: write      # only to create the release; nothing else
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -194,18 +196,39 @@ jobs:
           path: Dripper/gold-live/dist/GoldLive-Windows-x64-*.zip
           retention-days: 14
 
-      # Tags only. A push to main still just uploads a CI artifact.
+  # Separate job purely to isolate the write permission. `build` produces the
+  # artifact under contents:read on every trigger; only this job can publish,
+  # and only for a tag. Nothing here rebuilds -- it releases exactly the bytes
+  # that were tested.
+  release:
+    runs-on: windows-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    defaults:
+      run:
+        # This job never checks the repository out, so the repository-wide
+        # working-directory does not exist here.
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GoldLive-windows
+
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          $zip = Get-ChildItem Dripper/gold-live/dist/GoldLive-Windows-x64-*.zip
+          $zip = Get-ChildItem GoldLive-Windows-x64-*.zip
           if ($zip.Count -ne 1) { throw "expected exactly one distribution zip, found $($zip.Count)" }
           $expected = "GoldLive-Windows-x64-v$($env:GITHUB_REF_NAME.TrimStart('v')).zip"
           if ($zip.Name -ne $expected) {
             throw "tag $env:GITHUB_REF_NAME does not match packaged artifact $($zip.Name)"
           }
-          gh release create $env:GITHUB_REF_NAME $zip.FullName `
+          # --verify-tag: refuse to invent a tag. The tag must already exist,
+          # so a release can only ever describe a commit someone tagged.
+          gh release create $env:GITHUB_REF_NAME $zip.FullName --verify-tag `
             --title "GoldLive $env:GITHUB_REF_NAME" `
             --notes "Windows x64 build. Extract, run 'GoldLive Setup.exe', then 'GoldLive.exe'. The AI model and voices are downloaded by Setup, not shipped here. Ollama and VB-CABLE are not installed for you - Setup detects them and says what is missing."
