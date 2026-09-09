@@ -173,7 +173,7 @@ class AudioSink:
         try:
             import sounddevice as sd
             import soundfile as sf
-        except ImportError:
+        except (ImportError, OSError):
             # No audio backend: behave as if played, so the rest of the
             # pipeline can be exercised on a machine with no sound card.
             log.debug("no audio backend; simulating playback of %s", path.name)

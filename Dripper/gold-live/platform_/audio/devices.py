@@ -49,8 +49,13 @@ def list_output_devices() -> list[AudioDevice]:
     """Enumerate output devices. Empty list if no audio backend is installed."""
     try:
         import sounddevice as sd
-    except ImportError:
-        log.warning("sounddevice not installed; audio output unavailable")
+    except (ImportError, OSError) as exc:
+        # OSError, not just ImportError: sounddevice is a thin CFFI wrapper and
+        # loads libportaudio at import time. A headless box, a container, or a
+        # Linux image without libportaudio2 raises OSError here, and this
+        # function promises a list rather than an exception -- callers use the
+        # empty list to mean "no audio backend", which is exactly the truth.
+        log.warning("no audio backend available (%s); audio output unavailable", exc)
         return []
 
     devices: list[AudioDevice] = []
