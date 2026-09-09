@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -220,6 +221,43 @@ def state_path() -> Path:
     return data_path(FILENAME, create_parent=True)
 
 
+#: Total wait if every attempt loses the race: ~0.3s. Long enough to outlast a
+#: scanner holding a handle, short enough that the control panel does not stall.
+_REPLACE_ATTEMPTS = 6
+
+
+def _replace_atomically(tmp: str, target: Path) -> None:
+    """os.replace, retried past Windows' transient sharing violations.
+
+    POSIX rename() always succeeds over an open destination. Windows does not:
+    MoveFileEx fails with PermissionError (WinError 5) while anything else
+    holds a handle to the target -- Defender scanning the file we just wrote, a
+    sync client, an indexer, or a reader that closed microseconds ago. It is
+    transient and self-resolving.
+
+    This was not theoretical. Pressing START calls save() and START is exactly
+    when the file is newly written and most likely to be under a scanner, so
+    the user-visible failure was "START threw and the intent was never
+    recorded". A 300-cycle stress of this path reproduced it on roughly one run
+    in ten; that is also what made test_accelerated_soak flaky, but the flake
+    was the symptom, not the bug.
+
+    Retrying is safe because the write is already complete and fsynced: either
+    the rename happens or it does not, so a retry cannot produce a torn file.
+    On POSIX the loop costs one attempt and never sleeps.
+    """
+    delay = 0.01
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(tmp, target)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
+
+
 def save(lc: Lifecycle, path: Path | None = None) -> Path:
     target = path or state_path()
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -232,7 +270,7 @@ def save(lc: Lifecycle, path: Path | None = None) -> Path:
             fh.write(payload)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(tmp, target)
+        _replace_atomically(tmp, target)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)

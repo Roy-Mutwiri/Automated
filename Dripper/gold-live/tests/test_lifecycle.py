@@ -10,6 +10,7 @@ RUN, and that STOP is not something the supervisor may undo.
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
@@ -155,6 +156,52 @@ def test_no_temp_files_are_left_behind(isolated_state):
     leftovers = [p.name for p in isolated_state.parent.iterdir()
                  if p.name.startswith(".lifecycle-")]
     assert leftovers == []
+
+
+def test_a_transient_windows_lock_does_not_lose_the_write(isolated_state, monkeypatch):
+    """Windows fails the rename while anything holds the destination open.
+
+    Defender, a sync client or an indexer touching the file we just wrote is
+    normal and lasts milliseconds, but MoveFileEx does not wait -- it raises
+    PermissionError. Unretried, that surfaced as START throwing and the user's
+    intent never reaching disk. The write is already fsynced by then, so
+    retrying the rename cannot tear the file.
+    """
+    real_replace = os.replace
+    calls = []
+
+    def flaky_replace(src, dst):
+        calls.append(src)
+        if len(calls) <= 2:
+            raise PermissionError(5, "Access is denied")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(lifecycle.os, "replace", flaky_replace)
+
+    save(Lifecycle(state=RunState.START_REQUESTED))
+
+    assert len(calls) == 3, "the rename must be retried, not abandoned"
+    assert load(reconcile=False).state is RunState.START_REQUESTED
+    leftovers = [p.name for p in isolated_state.parent.iterdir()
+                 if p.name.startswith(".lifecycle-")]
+    assert leftovers == [], "a retried save must still leave no temp file"
+
+
+def test_a_permanent_lock_raises_rather_than_hanging(isolated_state, monkeypatch):
+    """Retrying is for transient locks. A lock that never clears is a real
+    failure and must be reported, not swallowed or looped on forever."""
+    def always_denied(src, dst):
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(lifecycle.os, "replace", always_denied)
+    monkeypatch.setattr(lifecycle.time, "sleep", lambda _: None)
+
+    with pytest.raises(PermissionError):
+        save(Lifecycle())
+
+    leftovers = [p.name for p in isolated_state.parent.iterdir()
+                 if p.name.startswith(".lifecycle-")]
+    assert leftovers == [], "a failed save must clean up after itself"
 
 
 # -- the supervisor honours the recorded intent -----------------------------
