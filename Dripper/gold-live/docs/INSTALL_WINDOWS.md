@@ -15,12 +15,32 @@ this version and is not required.
 
 ## Steps
 
-1. Download `GoldLive-Windows-x64-v<version>.zip` from the Releases page.
+1. Download **`GoldLive-Windows-x64-v0.5.0.zip`** (~103 MB) from the
+   [Releases page](https://github.com/Roy-Mutwiri/Automated/releases/latest).
+   Direct link: [`GoldLive-Windows-x64-v0.5.0.zip`](https://github.com/Roy-Mutwiri/Automated/releases/download/v0.5.0/GoldLive-Windows-x64-v0.5.0.zip)
 2. Right-click the ZIP → **Extract All**.
 3. Open the extracted `GoldLive` folder.
 4. Run **`GoldLive Setup.exe`**.
 5. Follow what it tells you. It ends at `READY TO START` or names what is missing.
 6. Open **`GoldLive.exe`** and press **START**.
+
+The extracted folder looks like this. `GoldLive.exe` and `GoldLive Setup.exe`
+sit beside `_internal/` because that is where they load their runtime from —
+moving either executable out of this folder stops it working:
+
+```
+GoldLive/
+    GoldLive Setup.exe      <- run this first
+    GoldLive.exe            <- control panel: START / STOP
+    README.txt
+    docs/
+    _internal/              <- the packaged runtime; ignore it
+    voices/
+```
+
+**If the Releases page is empty**, no version has been tagged yet. Nothing is
+wrong with your download — there is nothing to download. Build it yourself from
+[the source instructions](../README.md#run-it-from-source), on Windows.
 
 ### SmartScreen
 

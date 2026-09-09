@@ -10,6 +10,29 @@ Automated/
   tools/         <- the auto-sync watcher
 ```
 
+## What is actually in here
+
+Two projects, one per contributor folder. The repository name describes how the
+folders are committed, not what they build.
+
+### GoldLive — [`Dripper/gold-live/`](Dripper/gold-live/)
+
+An AI host that talks about the live gold market: real prices, generated
+commentary, synthesised speech. It ships as a Windows application.
+
+- **Install it** (no Python needed):
+  [`Dripper/gold-live/docs/INSTALL_WINDOWS.md`](Dripper/gold-live/docs/INSTALL_WINDOWS.md)
+  — download `GoldLive-Windows-x64-v<version>.zip` from
+  [Releases](https://github.com/Roy-Mutwiri/Automated/releases), extract, run
+  `GoldLive Setup.exe`.
+- **Work on it**: [`Dripper/gold-live/README.md`](Dripper/gold-live/README.md)
+
+GoldLive never starts on its own. It runs only after someone presses START.
+
+### Anon's work — [`Anon/`](Anon/)
+
+Photoreal render and camera-terminal research. See [`Anon/README.md`](Anon/README.md).
+
 ## How attribution works
 
 A background watcher notices any file change, waits ~2 seconds for things to
