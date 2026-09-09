@@ -9,7 +9,20 @@ a folder with one obvious thing to run:
         GoldLive Setup.exe      <- run this first
         GoldLive.exe            <- control panel: START / STOP
         README.txt
-        app/                    <- the packaged runtime
+        docs/
+        _internal/              <- the packaged runtime; ignore it
+        voices/
+
+The executables sit directly beside `_internal/`, which is not cosmetic.
+PyInstaller resolves the Python DLL relative to the executable, so an exe
+moved one directory up from `_internal/` dies at launch with "Failed to load
+Python DLL ... python314.dll".
+
+An earlier layout put a copy of each exe at the top and the real runtime in
+`app/`. Both exes were present, so the packaging check passed -- but the copy
+the README tells people to double-click was the stranded one, and the working
+copy was buried in a folder the README never mentions. Presence is not the
+invariant that matters here; adjacency is.
 
 Deliberately absent: the language model and the Piper voices. They are
 gigabytes and their licences differ per artifact, so they are provisioned at
@@ -90,24 +103,19 @@ def stage() -> Path:
 
     if STAGE.parent.exists():
         shutil.rmtree(STAGE.parent)
-    (STAGE / "app").mkdir(parents=True)
+    STAGE.mkdir(parents=True)
 
+    # Copy the built folder through unchanged, minus anything forbidden, so the
+    # entry points keep _internal/ as their sibling -- the only layout a
+    # PyInstaller onedir build actually runs from.
     for item in BUILT.iterdir():
         if item.name in FORBIDDEN:
             print(f"  refusing to ship {item.name}: it can start GoldLive without consent")
             continue
-        target = STAGE / item.name if item.suffix == ".exe" else STAGE / "app" / item.name
         if item.is_dir():
-            shutil.copytree(item, STAGE / "app" / item.name)
+            shutil.copytree(item, STAGE / item.name)
         else:
-            shutil.copy2(item, target)
-
-    # The executables sit at the top so the folder has an obvious entry point,
-    # but PyInstaller needs _internal beside them, so a copy stays in app/ too.
-    for exe in ("GoldLive.exe", "GoldLive Setup.exe"):
-        source = BUILT / exe
-        if source.exists():
-            shutil.copy2(source, STAGE / "app" / exe)
+            shutil.copy2(item, STAGE / item.name)
 
     (STAGE / "README.txt").write_text(README, encoding="utf-8")
     for doc in ("docs/INSTALL_WINDOWS.md", "docs/USER_GUIDE.md"):
@@ -153,11 +161,26 @@ def main() -> int:
     if missing:
         sys.exit(f"\n  ZIP is incomplete, missing: {missing}")
 
+    # Every entry point must have the runtime beside it. This is the check
+    # that 'both exes are present' could not make: a stranded exe is present
+    # and dead. Structural and cheap -- CI additionally extracts the ZIP and
+    # runs `GoldLive.exe selftest --imports` to prove it end to end.
+    stranded = []
+    for name in names:
+        if not name.lower().endswith(".exe"):
+            continue
+        runtime = name.rsplit("/", 1)[0] + "/_internal/"
+        if not any(n.startswith(runtime) for n in names):
+            stranded.append(name)
+    if stranded:
+        sys.exit(f"\n  these executables have no _internal/ beside them "
+                 f"and will fail to start: {stranded}")
+
     leaked = [n for n in names if any(bad in n for bad in FORBIDDEN)]
     if leaked:
         sys.exit(f"\n  ZIP contains auto-start machinery: {leaked}")
 
-    print("\n  ok: entry points present, no auto-start machinery included\n")
+    print("\n  ok: entry points runnable in place, no auto-start machinery included\n")
     return 0
 
 
