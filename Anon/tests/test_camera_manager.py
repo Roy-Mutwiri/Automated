@@ -16,6 +16,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 
@@ -131,17 +132,29 @@ def test_missing_preview_never_substitutes_another_camera(tmp_path, physical):
     answer the wrong question - the exact failure mode of every silent
     fallback in this project so far.
     """
+    # cam1 gets a real image written here rather than whichever PNGs happen to
+    # be on disk. renders/camera_preview/ is gitignored, so on a fresh worktree
+    # every camera returns a placeholder and the old version of this test
+    # compared one placeholder's variance against another's - it passed here
+    # and failed for anyone who had not rendered yet, which is a test measuring
+    # the machine instead of the code.
+    stand_in = tmp_path / "cam1.png"
+    rng = np.random.default_rng(0)
+    cv2.imwrite(str(stand_in), rng.integers(0, 255, (360, 640, 3), dtype=np.uint8))
+    physical.views["cam1"].preview = stand_in
     physical.views["cam5"].preview = tmp_path / "does_not_exist.png"
-    r = CameraPreviewRenderer(physical, 640, 360)
 
+    r = CameraPreviewRenderer(physical, 640, 360)
     physical.select("cam1")
     cam1 = r.render(None)
     physical.select("cam5")
     cam5 = r.render(None)
 
     assert not np.array_equal(cam1, cam5)
-    # The placeholder is a flat card, nothing like a render of the room.
+    # cam1 is the noise image that was just written; cam5 must be the flat
+    # placeholder card, not a copy of it.
     assert cam5.std() < cam1.std()
+    assert cam1.std() > 20.0, "the stand-in image did not load"
 
 
 def test_render_ignores_pose(physical):

@@ -138,7 +138,17 @@ def _distance(a, b):
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
-def _pose_head(parts_with_rest, pivot, yaw, pitch, roll):
+# Postural lean, from the movement terminal's measurement of the MPFB rig
+# (integration request 001). LEAN_SATURATION is fitted so that 1 sd of
+# engagement (0.21) produces the measured 7.4 cm peak-to-peak.
+LEAN_MAX_M = 0.057
+LEAN_SATURATION = 0.272
+# The head travels fully, the chest less, because the hips are in the chair.
+LEAN_TORSO_SHARE = 0.45
+LEAN_NECK_SHARE = 0.70
+
+
+def _pose_head(parts_with_rest, pivot, yaw, pitch, roll, offset=(0.0, 0.0, 0.0)):
     """Rotate the head about the neck pivot, always from the rest pose.
 
     Factored out so `build_human` and `World.repose` cannot drift apart: a live
@@ -155,7 +165,12 @@ def _pose_head(parts_with_rest, pivot, yaw, pitch, roll):
         ry = rel[0] * sy_ + rel[1] * cy_
         rz = rel[2] * cp - ry * sp
         ry = ry * cp + rel[2] * sp
-        ob.location = (pivot[0] + rx, pivot[1] + ry, pivot[2] + rz)
+        # The lean is added after the rotation, so leaning forward moves him
+        # along the room's forward axis rather than along wherever he happens
+        # to be looking at the time.
+        ob.location = (pivot[0] + rx + offset[0],
+                       pivot[1] + ry + offset[1],
+                       pivot[2] + rz + offset[2])
 
 
 class World:
@@ -172,8 +187,37 @@ class World:
         self.torso = None
         self.torso_base_scale = (1.0, 1.0, 1.0)
         self.eye_centres: dict = {}
+        self.lean_followers: list = []
+        # Derived from `human.facing`, never assumed. Leaning "forward" is a
+        # fact about which way he faces, and this project has already put two
+        # cameras behind a man who was facing the other way.
+        facing = str(geometry.get("human", {}).get("facing", "+y")).lower()
+        sign = -1.0 if facing.startswith("-") else 1.0
+        axis = facing[-1]
+        self.forward_axis = {
+            "x": (sign, 0.0, 0.0), "y": (0.0, sign, 0.0), "z": (0.0, 0.0, sign),
+        }.get(axis, (0.0, 1.0, 0.0))
 
-    def repose(self, pose) -> bool:
+    def lean_offset(self, engagement: float):
+        """Forward/back travel for a postural engagement, in metres.
+
+        Measured on the MPFB rig by the movement terminal, engagement alone:
+        5.7 cm from neutral at either extreme, 11.5 cm full swing, 7.4 cm
+        peak-to-peak at the usual 1 sd working range.
+
+        Deliberately NOT linear. `POSTURE_PITCH_BAND` caps summed postural
+        pitch, so the coupling saturates around +-0.5 and most of the travel
+        happens inside +-0.3; a constant gain would exaggerate the extremes and
+        flatten the range he actually spends his time in. `tanh` reproduces that
+        shape, with the constant fitted so 1 sd gives the measured 7.4 cm.
+
+        This is postural, on a 3.2 s onset and a 42 s correlation time. Breathing
+        is 0.25 Hz. Two orders of magnitude apart is what keeps them separable
+        even though both end up moving the same body.
+        """
+        return LEAN_MAX_M * math.tanh(engagement / LEAN_SATURATION)
+
+    def repose(self, pose, engagement: float = 0.0) -> bool:
         """Re-pose the existing proxy for a new frame, without rebuilding it.
 
         Rebuilding the human costs about as much as rendering the frame, which
@@ -200,10 +244,23 @@ class World:
                 continue
             drop = (1.0 - getattr(pose, f"eye_open_{side}", 1.0)) * 0.020
             entry[1] = (ec[0], ec[1] - 0.002, ec[2] + 0.016 - drop)
+
+        travel = self.lean_offset(engagement)
+        fwd = self.forward_axis
+        offset = (fwd[0] * travel, fwd[1] * travel, fwd[2] * travel)
+
         _pose_head(self.head_parts, self.head_pivot,
                    math.radians(getattr(pose, "yaw", 0.0)),
                    math.radians(getattr(pose, "pitch", 0.0)),
-                   math.radians(getattr(pose, "roll", 0.0)))
+                   math.radians(getattr(pose, "roll", 0.0)),
+                   offset)
+
+        # The neck and chest follow at reduced share: he pivots from the hips,
+        # which stay in the chair. Moving the head alone would detach it.
+        for ob, rest, share in self.lean_followers:
+            ob.location = (rest[0] + fwd[0] * travel * share,
+                           rest[1] + fwd[1] * travel * share,
+                           rest[2] + fwd[2] * travel * share)
         if self.torso is not None:
             breath = (getattr(pose, "scale", 1.0) - 1.0)
             # Applied to the recorded radii, matching build_human exactly. The
@@ -456,6 +513,15 @@ class World:
         # inflates a 0.20 m chest to 1.0 m, and the camera ends up inside it
         # looking at a flat grey wall that is the inside of his own torso.
         self.torso_base_scale = (0.20, 0.145, (shoulder_z - hz) / 2 + 0.06)
+        # Neck and chest follow the lean at reduced share - the hips stay in
+        # the chair, so he pivots rather than slides.
+        self.lean_followers = [
+            (ob, tuple(ob.location), share)
+            for ob, share in ((bpy.data.objects.get("neck"), LEAN_NECK_SHARE),
+                              (self.torso, LEAN_TORSO_SHARE),
+                              (bpy.data.objects.get("shoulders"), LEAN_TORSO_SHARE))
+            if ob is not None
+        ]
         _pose_head(self.head_parts, pivot, yaw, pitch, roll)
 
         self.landmarks["head_centre"] = head_c
