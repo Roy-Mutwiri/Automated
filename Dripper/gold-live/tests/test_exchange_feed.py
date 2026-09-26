@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
+from itertools import pairwise
 
 import pytest
 
@@ -298,7 +299,7 @@ async def test_price_series_has_no_artificial_sawtooth():
         got = await take(feed, 5, timeout=5.0)
         await feed.close()
 
-    jumps = [abs(b.mid - a.mid) for a, b in zip(got, got[1:], strict=False)]
+    jumps = [abs(b.mid - a.mid) for a, b in pairwise(got)]
     assert jumps and max(jumps) < 1.0, f"sawtooth detected: {jumps}"
 
 

@@ -32,12 +32,18 @@ import time
 import wave
 from pathlib import Path
 
-from platform_.tts.base import TTSProvider, TTSResult
+from platform_.tts.base import Prosody, TTSProvider, TTSResult
+from shared.delivery import PIPER_CAPABILITIES
 
 log = logging.getLogger(__name__)
 
 
 class PiperTTS(TTSProvider):
+    #: Rate and silence. Pauses and reaction units are implemented by the
+    #: router, which controls the space between renders; per-word emphasis,
+    #: pitch targets and laughter would need a different engine entirely.
+    capabilities = PIPER_CAPABILITIES
+
     def __init__(
         self,
         voices_dir: str | Path = "voices",
@@ -118,16 +124,33 @@ class PiperTTS(TTSProvider):
 
     # -- synthesis --------------------------------------------------------
 
-    def _render(self, text: str, voice_id: str, out_path: Path) -> int:
+    def _config(self, prosody: Prosody | None, SynthesisConfig):
+        """Combine the operator's fixed rate with this utterance's variation.
+
+        `self.length_scale` is a deliberate global setting -- "this host talks
+        a little faster than default" -- so the per-utterance jitter multiplies
+        it rather than replacing it. Without a prosody the behaviour is exactly
+        what it was: the configured rate, or the voice's own default.
+        """
+        if prosody is None:
+            return (
+                SynthesisConfig(length_scale=self.length_scale)
+                if self.length_scale is not None
+                else None
+            )
+        length = (self.length_scale or 1.0) * (prosody.length_scale or 1.0)
+        return SynthesisConfig(
+            length_scale=length, noise_w_scale=prosody.noise_w_scale
+        )
+
+    def _render(
+        self, text: str, voice_id: str, out_path: Path, prosody: Prosody | None = None
+    ) -> int:
         """Blocking; called in a thread. Returns audio duration in ms."""
         from piper import SynthesisConfig
 
         voice = self._load(voice_id)
-        config = (
-            SynthesisConfig(length_scale=self.length_scale)
-            if self.length_scale is not None
-            else None
-        )
+        config = self._config(prosody, SynthesisConfig)
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with wave.open(str(out_path), "wb") as wav:
@@ -136,7 +159,14 @@ class PiperTTS(TTSProvider):
         with wave.open(str(out_path), "rb") as wav:
             return int(wav.getnframes() / wav.getframerate() * 1000)
 
-    async def synthesize(self, text: str, voice_id: str, out_path: Path) -> TTSResult:
+    async def synthesize(
+        self,
+        text: str,
+        voice_id: str,
+        out_path: Path,
+        *,
+        prosody: Prosody | None = None,
+    ) -> TTSResult:
         if not text.strip():
             return TTSResult(path=None, duration_ms=0, first_audio_ms=0)
 
@@ -144,9 +174,11 @@ class PiperTTS(TTSProvider):
         try:
             # to_thread keeps the event loop free: a blocked loop means comments
             # stop being read while the host is mid-sentence.
-            duration_ms = await asyncio.to_thread(self._render, text, voice_id, out_path)
+            duration_ms = await asyncio.to_thread(
+                self._render, text, voice_id, out_path, prosody
+            )
         except ImportError:
-            duration_ms = await self._render_subprocess(text, voice_id, out_path)
+            duration_ms = await self._render_subprocess(text, voice_id, out_path, prosody)
 
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         if duration_ms and elapsed_ms > duration_ms:
@@ -157,7 +189,9 @@ class PiperTTS(TTSProvider):
             )
         return TTSResult(path=out_path, duration_ms=duration_ms, first_audio_ms=elapsed_ms)
 
-    async def _render_subprocess(self, text: str, voice_id: str, out_path: Path) -> int:
+    async def _render_subprocess(
+        self, text: str, voice_id: str, out_path: Path, prosody: Prosody | None = None
+    ) -> int:
         """Fallback for installs with the binary but not the library.
 
         Reloads the model per call, so it is markedly slower. Kept only so a
@@ -166,8 +200,11 @@ class PiperTTS(TTSProvider):
         model = self._model_path(voice_id)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         args = [self.binary, "--model", str(model), "--output_file", str(out_path)]
-        if self.length_scale is not None:
-            args += ["--length_scale", str(self.length_scale)]
+        length = self.length_scale
+        if prosody is not None:
+            length = (self.length_scale or 1.0) * (prosody.length_scale or 1.0)
+        if length is not None:
+            args += ["--length_scale", str(length)]
 
         proc = await asyncio.create_subprocess_exec(
             *args,

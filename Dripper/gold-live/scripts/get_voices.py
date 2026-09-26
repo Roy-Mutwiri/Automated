@@ -24,6 +24,7 @@ was wrong for two of the first three voices picked.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tempfile
 import urllib.error
@@ -58,7 +59,14 @@ CATALOGUE: dict[str, dict] = {
     "en_US-ljspeech-high": {
         "path": "en/en_US/ljspeech/high", "who": "American female, audiobook style",
     },
-    "en_US-bryce-medium": {"path": "en/en_US/bryce/medium", "who": "American male"},
+    # Not audiobook-derived: the speaker recorded ~750 samples of their own
+    # voice, where john, norman and ljspeech are all LibriVox. That is why it
+    # is the comparison voice in scripts/voice_bakeoff.py. Install it with:
+    #     python -m scripts.get_voices --voice en_US-bryce-medium
+    "en_US-bryce-medium": {
+        "path": "en/en_US/bryce/medium",
+        "who": "American male, conversational (bake-off comparison voice)",
+    },
     "en_US-john-medium": {"path": "en/en_US/john/medium", "who": "American male"},
     "en_US-norman-medium": {"path": "en/en_US/norman/medium", "who": "American male"},
     "en_US-kathleen-low": {"path": "en/en_US/kathleen/low", "who": "American female"},
@@ -76,6 +84,20 @@ DEFAULT_PROFILE = {
     "scalper": "en_US-john-medium",
     "educator": "en_US-ljspeech-high",
     "macro": "en_US-norman-medium",
+}
+
+#: Voices whose own licence is restricted, so anything finetuned FROM them
+#: inherits the problem. Checking only `lessac` was not enough: the catalogue
+#: contains `en_US-kathleen-low`, whose corpus is CC0 -- which this script
+#: happily reported as clean -- but whose MODEL_CARD says it was finetuned
+#: from Ryan, which this same script BLOCKS as CC BY-NC-SA. A voice can
+#: launder a restricted lineage through a permissive corpus, which is the
+#: exact failure this parser exists to prevent.
+RESTRICTED_ANCESTORS = {
+    "lessac": "Blizzard Challenge 2013 lineage",
+    "ryan": "CC BY-NC-SA lineage",
+    "hfc_female": "CC BY-NC-SA lineage",
+    "hfc_male": "CC BY-NC-SA lineage",
 }
 
 FLAGS = {
@@ -137,10 +159,11 @@ def parse_model_card(text: str) -> dict:
         verdict = "unstated"
         notes.append("licence deferred to the dataset URL; read it before shipping")
 
-    if "lessac" in training.lower():
-        notes.append("finetuned from lessac -> Blizzard Challenge 2013 lineage")
-        if verdict in ("permissive", "public domain"):
-            verdict = "check"
+    for ancestor, why in RESTRICTED_ANCESTORS.items():
+        if re.search(rf"\b{ancestor}\b", training, re.I):
+            notes.append(f"finetuned from {ancestor} -> {why}")
+            if verdict in ("permissive", "public domain"):
+                verdict = "check"
 
     return {
         "dataset": dataset,
@@ -201,8 +224,42 @@ def download(name: str, voices_dir: Path) -> bool:
     return ok
 
 
+#: Pulls the voice name out of a table row: `| `en_US-john-medium` | ... |`.
+ROW_NAME = re.compile(r"^\|\s*`([^`]+)`\s*\|")
+
+
+def existing_rows(summary: Path) -> dict[str, str]:
+    """Rows already recorded, keyed by voice name.
+
+    This file is a licence AUDIT, not an inventory of what happens to be on
+    this disk. It is read back before rewriting so that installing one voice
+    cannot erase the record for the others.
+    """
+    if not summary.exists():
+        return {}
+    rows: dict[str, str] = {}
+    for line in summary.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = ROW_NAME.match(line.strip())
+        if match:
+            rows[match.group(1)] = line.rstrip()
+    return rows
+
+
 def write_summary(voices_dir: Path) -> None:
-    rows = []
+    """Record the licence of every voice we know about, destroying nothing.
+
+    Rows used to be generated purely from `*.onnx` present in voices_dir, so
+    provisioning a single voice into a fresh checkout REWROTE the file with
+    only that voice in it -- silently deleting the public-domain records for
+    john, ljspeech and norman, which is the audit trail this file exists to
+    keep. Installing a voice is not evidence that the others are unlicensed.
+
+    So: existing rows are kept, and a voice that is actually installed here
+    refreshes its own row from its MODEL_CARD. Nothing is ever removed.
+    """
+    summary = voices_dir / "VOICE_LICENCES.md"
+    rows = existing_rows(summary)
+
     for path in sorted(voices_dir.glob("*.onnx")):
         name = path.stem
         card = voices_dir / f"{name}.MODEL_CARD"
@@ -211,10 +268,12 @@ def write_summary(voices_dir: Path) -> None:
             if card.exists()
             else {"licence": "?", "verdict": "unknown", "notes": []}
         )
-        rows.append(
+        rows[name] = (
             f"| `{name}` | {parsed['verdict']} | {parsed['licence']} "
             f"| {'; '.join(parsed['notes']) or '-'} |"
         )
+
+    ordered = [rows[name] for name in sorted(rows)]
 
     (voices_dir / "VOICE_LICENCES.md").write_text(
         "\n".join([
@@ -228,7 +287,7 @@ def write_summary(voices_dir: Path) -> None:
             "",
             "| Voice | Verdict | Licence | Notes |",
             "|---|---|---|---|",
-            *rows,
+            *ordered,
             "",
             "`restricted` must not ship in a build handed to other people.",
             "`check` and `unstated` need the dataset URL read before it does.",

@@ -41,11 +41,32 @@ class FakeProcess:
         self.returncode = -9
 
 
+def free_port() -> int:
+    """An ephemeral port the OS says is free right now.
+
+    These tests used fixed ports (9197-9199, 9101). That works until something
+    else has recently used one: Windows holds a closed listener in TIME_WAIT,
+    the bind fails, and the test reports a product failure that is really a
+    scheduling collision. Running the frozen artifact on 9101 immediately
+    before the suite was enough to break it.
+    """
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 def session(session_id: str = "SESSION_001", port: int = 9101) -> ManagedSession:
     return ManagedSession(session_id=session_id, health_port=port, args=[])
 
 
 def supervisor(sessions=None, **kw) -> Supervisor:
+    # These tests exercise supervision mechanics -- restart, backoff, crash
+    # loops -- not user consent, which has its own suite in test_lifecycle.py.
+    # Without this they would depend on whatever the developer's real
+    # lifecycle.json happens to say, which is both flaky and beside the point.
+    kw.setdefault("ignore_consent", True)
     return Supervisor(sessions or [session()], **kw)
 
 
@@ -292,18 +313,19 @@ async def test_control_endpoints_are_served(tmp_path):
             return {"ok": name}
         return action
 
+    port = free_port()
     server = HealthServer(
         provider=lambda: [ServiceHealth(component="t", state=HealthState.OK)],
-        port=9199,
+        port=port,
         controls={n: make(n) for n in ("pause", "resume", "say")},
     )
     server.start()
     try:
-        with urllib.request.urlopen("http://127.0.0.1:9199/controls", timeout=3) as r:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/controls", timeout=3) as r:
             assert set(_json.loads(r.read())["available"]) == {"pause", "resume", "say"}
 
         req = urllib.request.Request(
-            "http://127.0.0.1:9199/control/say",
+            f"http://127.0.0.1:{port}/control/say",
             data=b'{"text": "hello"}', method="POST",
             headers={"Content-Type": "application/json"},
         )
@@ -322,15 +344,16 @@ async def test_unknown_control_lists_what_is_available():
     from runtime.health import HealthServer
     from shared.contracts import HealthState, ServiceHealth
 
+    port = free_port()
     server = HealthServer(
         provider=lambda: [ServiceHealth(component="t", state=HealthState.OK)],
-        port=9198,
+        port=port,
         controls={"pause": lambda p: {"ok": True}},
     )
     server.start()
     try:
         req = urllib.request.Request(
-            "http://127.0.0.1:9198/control/nope", data=b"{}", method="POST"
+            f"http://127.0.0.1:{port}/control/nope", data=b"{}", method="POST"
         )
         with pytest.raises(urllib.error.HTTPError) as exc:
             urllib.request.urlopen(req, timeout=3)
@@ -351,21 +374,22 @@ async def test_a_failing_control_does_not_take_down_the_server():
     def boom(_payload):
         raise RuntimeError("control exploded")
 
+    port = free_port()
     server = HealthServer(
         provider=lambda: [ServiceHealth(component="t", state=HealthState.OK)],
-        port=9197, controls={"boom": boom},
+        port=port, controls={"boom": boom},
     )
     server.start()
     try:
         req = urllib.request.Request(
-            "http://127.0.0.1:9197/control/boom", data=b"{}", method="POST"
+            f"http://127.0.0.1:{port}/control/boom", data=b"{}", method="POST"
         )
         with pytest.raises(urllib.error.HTTPError) as exc:
             urllib.request.urlopen(req, timeout=3)
         assert exc.value.code == 500
 
         # Still serving afterwards.
-        with urllib.request.urlopen("http://127.0.0.1:9197/health", timeout=3) as r:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=3) as r:
             assert r.status == 200
     finally:
         server.stop()

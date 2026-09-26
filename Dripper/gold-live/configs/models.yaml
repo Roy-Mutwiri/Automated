@@ -1,0 +1,60 @@
+# Local model candidates, ordered smallest to largest.
+#
+# This is configuration and not code on purpose: which model is right changes
+# far faster than the selection logic does, and updating it must not require a
+# rebuild -- exactly like the voice catalogue in scripts/get_voices.py.
+#
+# Milestone 1 is CPU-first. `vram_gb` is recorded for later and is NOT read by
+# the selector: Windows reports VRAM through Win32_VideoController.AdapterRAM,
+# a uint32 that caps at 4 GB and misreports on many cards, and sizing a
+# multi-gigabyte download from a wrong number is worse than not trying.
+#
+# ram_gb is the working set to reserve, not the file size. It is deliberately
+# larger than `bytes`, because the KV cache grows with context and concurrency
+# and a "it fits" calculation based on weights alone is optimistic.
+
+defaults:
+  # A model that fits but generates too slowly is not a production choice, so
+  # latency is a hard gate rather than a preference. Budget is for one typical
+  # utterance of roughly 40 words.
+  utterance_words: 40
+  max_utterance_s: 12.0
+  # Fraction of *available* RAM a model's working set may occupy. The rest is
+  # for Windows, Piper, onnxruntime and the audio pipeline, which all run on
+  # the same machine and are not free.
+  ram_fraction: 0.6
+  # Pull needs room for the download plus unpacking headroom.
+  disk_headroom: 1.3
+  # Context the session actually asks for. Sizing ignores the model's
+  # advertised maximum (llama3.2 reports 131072) because Ollama allocates the
+  # requested context, not the maximum, and the KV cache is sized from it.
+  context_tokens: 8192
+
+tiers:
+  - id: llama3.2:1b
+    tier: minimum
+    bytes: 1_300_000_000
+    ram_gb: 3
+    vram_gb: 2
+    note: last resort for low-memory machines
+
+  - id: llama3.2:3b
+    tier: baseline
+    bytes: 2_020_000_000
+    ram_gb: 4
+    vram_gb: 4
+    note: the minimum recommended for production commentary
+
+  - id: qwen2.5:7b
+    tier: good
+    bytes: 4_700_000_000
+    ram_gb: 12
+    vram_gb: 8
+    note: noticeably better phrasing; needs real headroom on CPU
+
+  - id: qwen2.5:14b
+    tier: best
+    bytes: 9_000_000_000
+    ram_gb: 24
+    vram_gb: 12
+    note: GPU territory; listed for completeness, rarely viable on CPU

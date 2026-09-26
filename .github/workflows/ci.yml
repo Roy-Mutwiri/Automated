@@ -1,0 +1,415 @@
+name: CI
+
+# Runners: ubuntu-latest and windows-latest, both GitHub's standard hosted
+# images. There are deliberately no larger runners, no runner groups, no
+# self-hosted labels, no GitHub Packages, no Codespaces and no paid marketplace
+# actions anywhere in this file -- every action used is first-party
+# (actions/checkout, actions/setup-python, actions/upload-artifact,
+# actions/download-artifact) and the release is cut with the `gh` CLI that ships
+# on the runner. Standard runners are free for public repositories.
+#
+# So if a run reports "The job was not started because your account is locked
+# due to a billing issue", that is an account-level state on the repository
+# owner's GitHub account. Nothing in this workflow can cause it and no change
+# here can clear it -- it is fixed in GitHub billing settings, not in YAML.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+# Least privilege by default; only the release job widens it.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A superseded pull-request push is worth cancelling. A tag build is not:
+  # it publishes, and a half-cancelled release is worse than a slow one.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    working-directory: Dripper/gold-live
+
+jobs:
+  # Fails within seconds of a mistagged release rather than twenty minutes
+  # later at the publish step. The packaged artifact is named from
+  # pyproject.toml, so a tag that disagrees with it can only ever produce an
+  # archive whose name contradicts the release it is attached to.
+  version-guard:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match the version in pyproject.toml
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          project=$(awk -F'"' '/^version = /{print $2; exit}' pyproject.toml)
+          echo "tag=${tag}  pyproject=${project}"
+          if [ -z "$project" ]; then
+            echo "::error::Could not read the version from Dripper/gold-live/pyproject.toml."
+            exit 1
+          fi
+          if [ "$tag" != "$project" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match pyproject.toml version ${project}."
+            echo "::error::The build would produce GoldLive-Windows-x64-v${project}.zip, which is"
+            echo "::error::not what ${GITHUB_REF_NAME} promises. Bump one to match the other."
+            exit 1
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          # Both are system packages behind thin CFFI wrappers: soundfile fails
+          # at import without libsndfile, sounddevice without libportaudio. The
+          # code degrades gracefully when they are missing, but CI should
+          # exercise the real libraries rather than the fallback path.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsndfile1 libportaudio2
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest -q --durations=10
+
+  # The suite also runs on the platform GoldLive actually ships to. The Linux
+  # jobs cover the engine; only this one covers WinError-5 rename races, MAX_PATH
+  # and the real Windows audio device enumeration.
+  windows-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Give Windows room for long paths
+        working-directory: .
+        run: |
+          # MAX_PATH is 260 characters and the workspace already spends ~30 of
+          # them. sounddevice ships its PortAudio DLL five directories deep
+          # inside site-packages, and a deep checkout makes that DLL fail to
+          # LOAD rather than fail to be found -- OSError 0xce, which reads like
+          # a corrupt install and is only a long name. Both switches below are
+          # per-runner and disappear with the VM.
+          git config --system core.longpaths true
+          New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
+            -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force | Out-Null
+          # pytest's tmp_path lives under TEMP, and the runner's default TEMP is
+          # itself deep. A two-character root keeps the whole suite clear of the
+          # limit.
+          New-Item -ItemType Directory -Force 'C:\t' | Out-Null
+          'TEMP=C:\t' | Add-Content -Path $env:GITHUB_ENV
+          'TMP=C:\t'  | Add-Content -Path $env:GITHUB_ENV
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+
+      - name: Test
+        run: pytest -q --durations=10
+
+  integration:
+    # The unit suite covers the engine. This covers the wiring.
+    #
+    # runtime/dryrun.py, runtime/soak.py and runtime/cli.py sat at 0% coverage
+    # and runtime/live.py at 16% -- not because the pipeline is untestable but
+    # because nothing ever executed these harnesses. They were built, they
+    # work, and they were never run twice. Running them here exercises feed ->
+    # engine -> director -> generator -> safety -> TTS end to end on every
+    # push, which is the standard runtime/readiness.py sets for itself: prove
+    # it by doing it, rather than asserting that the imports resolve.
+    #
+    # Both are hermetic. The dry run uses shared.mocks.FileTTS and the offline
+    # generator, so there is no model server, no audio device, no network and
+    # no API key; the soak runs on simulated time, so 24 hours costs ~35s.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsndfile1 libportaudio2
+          pip install -e ".[dev]"
+
+      - name: Dry run -- full pipeline, three sessions
+        # Three sessions, because the cross-session isolation check only runs
+        # when there is more than one. Its exit code became meaningful in the
+        # same commit that added this job: until then the harness printed
+        # "FAIL: SESSION_002 shares traces with SESSION_003" and exited 0.
+        run: PYTHONPATH=. python -m runtime.dryrun --mode offline --beats 24 --sessions 3
+
+      - name: Accelerated soak -- 24h of structure in ~35s
+        # Fails on dead air, content exhaustion or repetition drift. Simulated
+        # time, so this is a structural check, not a throughput measurement --
+        # the offline generator understates volume by design.
+        run: PYTHONPATH=. python -m runtime.soak --hours 24
+
+  contracts:
+    # The eight contracts are the interface between two people working in
+    # parallel. A change to them must be deliberate and reviewed, never a
+    # side effect of an implementation PR.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install pydantic pyyaml
+
+      - name: Detect contract changes
+        id: changed
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD \
+             | grep -q 'shared/contracts.py'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require a schema version bump
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          before=$(git show origin/${{ github.base_ref }}:Dripper/gold-live/shared/contracts.py \
+                   | grep -oP 'SCHEMA_VERSION = "\K[^"]+' || echo "none")
+          after=$(grep -oP 'SCHEMA_VERSION = "\K[^"]+' shared/contracts.py)
+          echo "before=$before after=$after"
+          if [ "$before" = "$after" ]; then
+            echo "::error::shared/contracts.py changed without bumping SCHEMA_VERSION."
+            echo "::error::Both halves of the system depend on these definitions."
+            echo "::error::Additive change -> minor bump. Removal or type change -> major."
+            exit 1
+          fi
+
+      - name: Regenerate schemas and check they are committed
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          PYTHONPATH=. python -m shared.contracts
+          if ! git diff --quiet -- shared/schemas; then
+            echo "::error::Generated schemas are stale. Run:"
+            echo "::error::  PYTHONPATH=. python -m shared.contracts"
+            git diff --stat -- shared/schemas
+            exit 1
+          fi
+
+  mocks:
+    # Every public interface on the platform side needs a mock, or the
+    # intelligence side is blocked waiting on unfinished code. Discipline that
+    # is not enforced does not survive month two.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check every platform interface has a mock
+        run: |
+          missing=0
+          for iface in market adapters tts llm audio; do
+            if [ -d "platform_/$iface" ] && ! grep -rqi "$iface" shared/mocks/ tests/; then
+              echo "::error::platform_/$iface has no mock or test double"
+              missing=1
+            fi
+          done
+          exit $missing
+
+  # Runs on pull requests too, so packaging is proven BEFORE merge rather than
+  # discovered afterwards on main. Read-only: a build triggered by a pull
+  # request must not be able to publish anything.
+  build:
+    runs-on: windows-latest
+    needs: [test, windows-test, integration]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Give Windows room for long paths
+        working-directory: .
+        run: |
+          # PyInstaller writes deeply nested paths under build/, and the
+          # verification step below extracts the archive again. Same reasoning
+          # as windows-test.
+          git config --system core.longpaths true
+          New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
+            -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force | Out-Null
+          New-Item -ItemType Directory -Force 'C:\t' | Out-Null
+          'TEMP=C:\t' | Add-Content -Path $env:GITHUB_ENV
+          'TMP=C:\t'  | Add-Content -Path $env:GITHUB_ENV
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+
+      # build.py runs PyInstaller; make_zip assembles the distribution the
+      # install docs name -- GoldLive-Windows-x64-v<version>.zip, with the user
+      # README, the docs, and the check that refuses to ship anything that
+      # could start GoldLive without a person asking. `build --zip` produces a
+      # differently named archive with none of that.
+      #
+      # --skip-tests is not a shortcut here: test, windows-test and integration
+      # all have to pass before this job is allowed to start.
+      - name: Build
+        run: |
+          python -m build_tools.build --skip-tests
+          python -m build_tools.make_zip
+
+      # Extract the archive and run the executable a user would double-click.
+      # Not the one in dist/ -- the one that comes out of the ZIP, because the
+      # ZIP is the only thing anybody downloads. This step exists because a
+      # release once shipped an entry point that could not start: both
+      # executables were present, so the structural check passed, while the
+      # copy at the top of the folder had no _internal/ beside it and died with
+      # "Failed to load Python DLL". Presence is not proof; running it is.
+      - name: Verify the packaged executable actually runs
+        run: |
+          $zip = Get-ChildItem dist/GoldLive-Windows-x64-*.zip
+          if ($zip.Count -ne 1) {
+            throw "expected exactly one distribution zip, found $($zip.Count)"
+          }
+          Expand-Archive -Path $zip.FullName -DestinationPath 'C:\v' -Force
+          $exe = 'C:\v\GoldLive\GoldLive.exe'
+          if (-not (Test-Path $exe)) { throw "no GoldLive.exe at the top of the archive" }
+          & $exe selftest --imports
+          if ($LASTEXITCODE -ne 0) {
+            throw "GoldLive.exe selftest --imports failed with exit code $LASTEXITCODE"
+          }
+          & 'C:\v\GoldLive\GoldLive Setup.exe' --help | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "GoldLive Setup.exe could not start (exit code $LASTEXITCODE)"
+          }
+          Write-Host "both packaged entry points start and import cleanly"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GoldLive-windows
+          path: Dripper/gold-live/dist/GoldLive-Windows-x64-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  # Separate job purely to isolate the write permission. `build` produces the
+  # artifact under contents:read on every trigger; only this job can publish,
+  # and only for a tag. Nothing here rebuilds -- it releases exactly the bytes
+  # that were tested.
+  release:
+    runs-on: ubuntu-latest
+    needs: [version-guard, build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    defaults:
+      run:
+        # This job never checks the repository out, so the repository-wide
+        # working-directory does not exist here.
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GoldLive-windows
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          count=$(ls -1 GoldLive-Windows-x64-*.zip 2>/dev/null | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "::error::expected exactly one distribution zip, found ${count}"
+            exit 1
+          fi
+          zip=$(ls -1 GoldLive-Windows-x64-*.zip)
+          expected="GoldLive-Windows-x64-${GITHUB_REF_NAME}.zip"
+          if [ "$zip" != "$expected" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match packaged artifact ${zip}"
+            exit 1
+          fi
+          # --verify-tag: refuse to invent a tag. The tag must already exist, so
+          # a release can only ever describe a commit someone tagged.
+          gh release create "$GITHUB_REF_NAME" "$zip" --verify-tag \
+            --title "GoldLive $GITHUB_REF_NAME" \
+            --notes "Windows x64 build. Extract, run 'GoldLive Setup.exe', then 'GoldLive.exe'. The AI model and voices are downloaded by Setup, not shipped here. Ollama and VB-CABLE are not installed for you - Setup detects them and says what is missing."
+
+      - name: Confirm the asset is attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # `gh release create` can succeed with the release made and the upload
+          # failed. A release with no download is worse than no release: the
+          # install docs point straight at it.
+          assets=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
+          echo "attached: ${assets:-<none>}"
+          if ! echo "$assets" | grep -q "GoldLive-Windows-x64-${GITHUB_REF_NAME}.zip"; then
+            echo "::error::release ${GITHUB_REF_NAME} exists but the ZIP is not attached to it"
+            exit 1
+          fi
+
+  # A tag that quietly produces no release is the failure mode this whole file
+  # exists to prevent: the run goes green, the Releases page stays empty, and
+  # the install instructions point at nothing. `if: always()` means this job
+  # runs even when `release` was skipped, and turns that silence into a red X
+  # that says which job did not run.
+  release-published:
+    if: always() && startsWith(github.ref, 'refs/tags/v')
+    needs: [version-guard, build, release]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: A tag must produce a published release
+        run: |
+          echo "version-guard: ${{ needs.version-guard.result }}"
+          echo "build:         ${{ needs.build.result }}"
+          echo "release:       ${{ needs.release.result }}"
+          if [ "${{ needs.release.result }}" != "success" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} did not publish a release."
+            echo "::error::release job result: ${{ needs.release.result }}."
+            echo "::error::'skipped' means a job it depends on failed or was cancelled;"
+            echo "::error::check version-guard and build above. Nothing was published."
+            exit 1
+          fi
+          echo "Release ${GITHUB_REF_NAME} published with its ZIP attached."

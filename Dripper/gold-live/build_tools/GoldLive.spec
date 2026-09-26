@@ -30,10 +30,19 @@ ROOT = Path(SPECPATH).parent
 datas = [
     (str(ROOT / "configs"), "configs"),
     (str(ROOT / ".env.example"), "."),
+    (str(ROOT / "pyproject.toml"), "."),
     (str(ROOT / "build_tools" / "THIRD_PARTY_NOTICES.md"), "."),
 ]
 
-# Pydantic and yaml pull things in dynamically that static analysis misses.
+# Imports that static analysis cannot see. Two categories, both real:
+#
+#   dynamic   pydantic and yaml build things at import time
+#   lazy      modules imported INSIDE a function, which PyInstaller's
+#             bytecode scan never reaches
+#
+# The lazy ones are why a packaged build shipped without websockets and piper
+# and therefore could not fetch a price or speak. They are named explicitly
+# here and verified after the build by `GoldLive.exe selftest --imports`.
 hiddenimports = [
     "pydantic.deprecated.decorator",
     "yaml",
@@ -41,46 +50,74 @@ hiddenimports = [
     *collect_submodules("pydantic"),
 ]
 
-# Optional extras. Present only if installed at build time, so the base build
-# stays small and a fully-capable build is a superset.
+# Every third-party package the runtime imports, declared statically.
 #
-# sounddevice and soundfile wrap native libraries (PortAudio, libsndfile) that
-# are NOT Python modules -- collect_data_files alone misses them and the built
-# exe fails at import with an opaque OSError on a machine that has no system
-# copy. collect_dynamic_libs is what actually ships the DLLs.
+# This used to be a `try: __import__ / except ImportError: skip` loop, which
+# made the contents of the shipped artifact a function of whatever happened to
+# be installed in the build machine's virtualenv -- the same build script
+# produced a different product on different machines. It is now a manifest:
+# if something here is missing, the build FAILS rather than quietly shipping a
+# reduced product.
+#
+# Keep this in sync with [project].dependencies in pyproject.toml.
+BUNDLED = [
+    "websockets",     # gold market feed        (lazy: exchange_feed.py, feeds.py)
+    "piper",          # text to speech          (lazy: tts/piper.py)
+    "onnxruntime",    # piper's inference engine
+    "httpx",          # LLM client, REST feeds  (lazy: supervisor.check_ready)
+    "numpy",          # audio buffers, similarity index
+    "sounddevice",    # audio output            (lazy: audio/router.py)
+    "soundfile",      # WAV read/write          (lazy: audio/router.py)
+    "mss",            # screen capture
+]
+
+# sounddevice, soundfile and onnxruntime wrap native libraries (PortAudio,
+# libsndfile, onnxruntime.dll) that are NOT Python modules -- collect_data_files
+# alone misses them and the built exe fails at import with an opaque OSError on
+# a machine with no system copy. collect_dynamic_libs is what ships the DLLs.
 binaries = []
-optional = ["httpx", "numpy", "sounddevice", "soundfile", "mss"]
 missing = []
-for package in optional:
+for package in BUNDLED:
     try:
         __import__(package)
-    except ImportError:
-        missing.append(package)
+    except ImportError as exc:
+        missing.append(f"{package} ({exc})")
         continue
     hiddenimports.append(package)
+    hiddenimports += collect_submodules(package)
     datas += collect_data_files(package)
     binaries += collect_dynamic_libs(package)
 
 if missing:
-    print(
-        f"[spec] NOT BUNDLED: {', '.join(missing)}\n"
-        "[spec] The build will run but those capabilities are unavailable "
-        "to anyone you share it with. Install them and rebuild for a full build."
-    )
-else:
-    print("[spec] full-capability build: audio and screen capture included")
+    lines = [
+        "",
+        "[spec] BUILD FAILED -- required packages are not installed:",
+        *[f"    {m}" for m in missing],
+        "",
+        "Install them and rebuild:  pip install -e .",
+        "",
+        "Shipping without them produces an executable that cannot fetch a price",
+        "or speak -- silently, because both subsystems degrade rather than crash.",
+        "That is exactly the failure this check exists to prevent, so the build",
+        "does not continue.",
+        "",
+    ]
+    raise SystemExit("\n".join(lines))
+
+print(f"[spec] bundling {len(BUNDLED)} runtime packages: {', '.join(BUNDLED)}")
 
 excludes = [
     # Never ship a test framework or notebook stack to a customer.
     "pytest", "_pytest", "IPython", "jupyter", "notebook",
-    "matplotlib", "tkinter", "PIL.ImageTk",
+    # tkinter is NOT excluded: the control panel is built on it.
+    "matplotlib", "PIL.ImageTk",
     # Torch arrives via paddleocr on some systems and is enormous. The model
     # runs in a separate server, so it is not needed here.
     "torch", "torchvision",
 ]
 
 a = Analysis(
-    [str(ROOT / "runtime" / "cli.py")],
+    [str(ROOT / "build_tools" / "panel_entry.py")],
     pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
@@ -92,6 +129,22 @@ a = Analysis(
 )
 
 pyz = PYZ(a.pure)
+
+# A separate Setup executable so the extracted folder has one obvious starting
+# point. It shares this build's analysis of the codebase and differs only in
+# entry point: it provisions and stops, and can never start a session.
+setup_a = Analysis(
+    [str(ROOT / "build_tools" / "setup_entry.py")],
+    pathex=[str(ROOT)],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=excludes,
+    noarchive=False,
+)
+setup_pyz = PYZ(setup_a.pure)
 
 exe = EXE(
     pyz,
@@ -116,8 +169,29 @@ exe = EXE(
     else None,
 )
 
+setup_exe = EXE(
+    setup_pyz,
+    setup_a.scripts,
+    [],
+    exclude_binaries=True,
+    name="GoldLive Setup",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,       # setup is a readable report, so it keeps its console
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=str(ROOT / "build_tools" / "icon.ico")
+    if (ROOT / "build_tools" / "icon.ico").exists()
+    else None,
+)
+
 coll = COLLECT(
     exe,
+    setup_exe,
     a.binaries,
     a.datas,
     strip=False,

@@ -8,6 +8,7 @@ does not reveal.
 
 | Voice | Verdict | Licence | Notes |
 |---|---|---|---|
+| `en_US-bryce-medium` | public domain | public domain | - |
 | `en_US-john-medium` | public domain | public domain | - |
 | `en_US-ljspeech-high` | public domain | public domain | - |
 | `en_US-norman-medium` | public domain | public domain | - |

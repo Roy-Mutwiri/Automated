@@ -34,6 +34,11 @@ from intelligence.director import SpeechIntent
 from intelligence.generation import build_generator
 from intelligence.personas import load_personas
 from intelligence.proposer import CoverageMemory, TopicProposer
+from platform_.audio.retention import (
+    AUDIO_MAX_AGE_S,
+    AUDIO_MAX_BYTES,
+    RetentionPolicy,
+)
 from platform_.audio.router import AudioRouter
 from platform_.market.engine import MarketEngine
 from platform_.market.feeds import Feed, ReplayFeed, SyntheticFeed
@@ -51,6 +56,7 @@ from shared.contracts import (
 )
 from shared.store import TraceStore
 
+from shared.provisioning import author_salt
 from shared.paths import config_dir, config_path, data_path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -172,7 +178,22 @@ class LiveSession:
         self.adapter = None
         self.store = TraceStore(args.db)
         self.health_server: HealthServer | None = None
+        #: The session's event loop, captured once run() starts. The health
+        #: server answers on its own THREAD, so it cannot drive this loop
+        #: directly -- it has to hand work across the boundary.
+        self.loop: asyncio.AbstractEventLoop | None = None
         self._tasks: list[asyncio.Task] = []
+        #: Background tasks that died. A task that raises takes its whole
+        #: responsibility with it -- speaking, market ingestion, comments --
+        #: and asyncio never surfaces the exception unless someone asks. Until
+        #: this existed, a dead speak loop looked exactly like a healthy
+        #: session with nothing to say.
+        self._task_failures: dict[str, str] = {}
+        #: Consecutive speak-loop failures. The loop now survives a dead model
+        #: server by retrying, which is right -- but a session that cannot
+        #: generate must not keep reporting itself healthy while it silently
+        #: says nothing.
+        self._speak_errors = 0
         self.started_at = datetime.now(timezone.utc)
         self.paused = False
         self.muted = False
@@ -180,8 +201,111 @@ class LiveSession:
 
     # -- health -----------------------------------------------------------
 
+    def _on_task_done(self, task: asyncio.Task) -> None:
+        """Notice a background task dying, instead of never finding out.
+
+        asyncio holds a task's exception until someone retrieves it. Nothing
+        did, so when the speak loop raised -- for instance when the model
+        server vanished mid-generation -- the task ended, the session stopped
+        producing anything, and /health went on reporting OK because every
+        component it knew about was still fine. The session sat there alive and
+        mute, which is the worst of the three possible outcomes: a crash would
+        at least have been restarted.
+        """
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is None:
+            return
+        name = task.get_name()
+        self._task_failures[name] = f"{type(exc).__name__}: {exc}" or type(exc).__name__
+        log.error("background task %r died: %s", name, exc, exc_info=exc)
+
+    def _generation_health(self) -> ServiceHealth:
+        """Whether the host can actually produce speech right now.
+
+        There was no component for this at all, so killing the model server
+        left every existing check green -- market fine, audio fine, adapter
+        fine -- while the one thing the session exists to do was impossible.
+        DEGRADED first, because a brief blip should not trigger a restart;
+        FAILING once it is clearly not coming back on its own, which turns
+        /ready to 503 and lets the supervisor act.
+        """
+        errors = self._speak_errors
+        if errors == 0:
+            state, reason = HealthState.OK, None
+        elif errors < 5:
+            state = HealthState.DEGRADED
+            reason = f"generation failing ({errors} consecutive)"
+        else:
+            state = HealthState.FAILING
+            reason = (f"generation has failed {errors} times consecutively; "
+                      "the model server is probably gone")
+        return ServiceHealth(
+            component="generation", session_id=self.session_id, state=state,
+            checks=[HealthCheck(name="speak_loop", ok=errors == 0,
+                                detail=f"{errors} consecutive failures")],
+            degraded_reason=reason,
+        )
+
+    def _tasks_health(self) -> ServiceHealth:
+        """FAILING when a task has died, so /ready turns 503 and the supervisor
+        restarts a session that can no longer do its job."""
+        dead = dict(self._task_failures)
+        return ServiceHealth(
+            component="tasks", session_id=self.session_id,
+            state=HealthState.FAILING if dead else HealthState.OK,
+            checks=[
+                HealthCheck(name=name, ok=name not in dead,
+                            detail=dead.get(name, "running"))
+                for name in ("market", "bars", "speak", "heartbeat",
+                             "checkpoint", "comments")
+            ],
+            degraded_reason=(
+                "background task(s) dead: " + ", ".join(sorted(dead))
+                if dead else None
+            ),
+        )
+
+    def _adapter_health(self) -> ServiceHealth:
+        """Ask the adapter for its health from the health server's thread.
+
+        This used to call `asyncio.get_event_loop().run_until_complete(...)`
+        inside a `contextlib.suppress(Exception)`. The health server runs in a
+        separate thread by design -- so it keeps answering when the event loop
+        is stalled -- and driving an already-running loop from another thread
+        raises every time. Suppressed, that meant the adapter component simply
+        never appeared in /health or /ready: comment ingestion could be dead
+        for hours and the endpoint would look perfectly healthy.
+
+        run_coroutine_threadsafe is the correct way across that boundary. A
+        timeout is essential: this call is on the path of every health probe,
+        and a wedged adapter must not wedge the endpoint that reports it.
+        """
+        adapter = self.adapter
+        loop = self.loop
+        if loop is None or not loop.is_running():
+            return ServiceHealth(
+                component="comment_adapter", session_id=self.session_id,
+                state=HealthState.DEGRADED,
+                checks=[HealthCheck(name="loop", ok=False, detail="session not started")],
+                degraded_reason="session loop is not running",
+            )
+        try:
+            future = asyncio.run_coroutine_threadsafe(adapter.health(), loop)
+            return future.result(timeout=2.0)
+        except Exception as exc:
+            # Report the failure rather than hiding it: an adapter that cannot
+            # answer within two seconds is itself the news.
+            return ServiceHealth(
+                component="comment_adapter", session_id=self.session_id,
+                state=HealthState.DEGRADED,
+                checks=[HealthCheck(name="health", ok=False, detail=str(exc) or type(exc).__name__)],
+                degraded_reason=f"adapter health unavailable: {exc or type(exc).__name__}",
+            )
+
     def health(self) -> list[ServiceHealth]:
-        out: list[ServiceHealth] = []
+        out: list[ServiceHealth] = [self._tasks_health(), self._generation_health()]
         now = datetime.now(timezone.utc)
 
         conf = self.engine.confidence(now)
@@ -211,13 +335,22 @@ class LiveSession:
                                     detail=f"depth={snap['queue_depth']}"),
                         HealthCheck(name="tts", ok=snap["tts_failures"] < 3,
                                     detail=f"failures={snap['tts_failures']}"),
+                        # Spoken audio used to grow without bound. Surfaced
+                        # here so a retention policy that stops working is
+                        # visible in health rather than in a full disk.
+                        HealthCheck(
+                            name="audio_disk",
+                            ok=snap["audio_bytes"] <= self.router.retention.policy.max_bytes,
+                            detail=f"{snap['audio_files']} files, "
+                                   f"{snap['audio_bytes'] / 1e6:.1f} MB "
+                                   f"(limit {self.router.retention.policy.describe()})",
+                        ),
                     ],
                 )
             )
 
         if self.adapter is not None:
-            with contextlib.suppress(Exception):
-                out.append(asyncio.get_event_loop().run_until_complete(self.adapter.health()))
+            out.append(self._adapter_health())
 
         if self.runtime is not None:
             out.append(
@@ -312,7 +445,7 @@ class LiveSession:
                 "session_id": self.session_id,
                 "paused": self.paused,
                 "muted": self.muted,
-                "utterances": len(self.runtime.transcript) if self.runtime else 0,
+                "utterances": self.runtime.spoken_count if self.runtime else 0,
                 "director_queue": self.runtime.director.queue_depth if self.runtime else 0,
             }
 
@@ -336,86 +469,197 @@ class LiveSession:
             self.engine.on_bar_close_check(datetime.now(timezone.utc))
 
     async def _comment_loop(self) -> None:
+        """Ingest viewer comments.
+
+        Every stage is logged and every failure is contained. Previously an
+        exception anywhere in on_comment propagated out of the `async for`,
+        killed this task, and -- because nothing ever retrieves a cancelled
+        task's exception -- did so in total silence. The session carried on
+        looking healthy while comment ingestion was permanently dead, which is
+        indistinguishable from "no viewer has said anything yet".
+        """
         if self.adapter is None or self.runtime is None:
             return
-        async for comment in self.adapter.comments():
-            if self.stopping.is_set():
+        while not self.stopping.is_set():
+            try:
+                async for comment in self.adapter.comments():
+                    if self.stopping.is_set():
+                        return
+                    METRICS.inc("goldlive_comments_total", {"session": self.session_id})
+                    log.info(
+                        "[%s] comment received: %r (id=%s)",
+                        self.session_id, comment.text_raw[:120],
+                        comment.platform_msg_id[:12],
+                    )
+                    try:
+                        await self.runtime.on_comment(comment)
+                        log.info(
+                            "[%s] comment queued for reply (director depth=%d)",
+                            self.session_id, self.runtime.director.queue_depth,
+                        )
+                    except Exception:
+                        # One bad comment must not end comment ingestion.
+                        log.exception(
+                            "[%s] failed to handle comment %s",
+                            self.session_id, comment.platform_msg_id[:12],
+                        )
                 return
-            METRICS.inc("goldlive_comments_total", {"session": self.session_id})
-            await self.runtime.on_comment(comment)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("[%s] comment stream failed; reconnecting in 5s",
+                              self.session_id)
+                await asyncio.sleep(5)
 
     async def _speak_loop(self) -> None:
         assert self.runtime is not None
         while not self.stopping.is_set():
-            await asyncio.sleep(self.args.tick_s)
-            if self.paused:
-                continue
-            now = datetime.now(timezone.utc)
-            state = self.engine.snapshot(now)
+            try:
+                await self._speak_once()
+                self._speak_errors = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # The model server going away mid-generation used to raise
+                # here, kill this task, and leave the session alive and
+                # permanently mute. A transient failure must cost one beat, not
+                # the whole broadcast; a persistent one is surfaced through
+                # _task_failures rather than hidden.
+                self._speak_errors += 1
+                log.exception(
+                    "[%s] speak loop error (%d consecutive)",
+                    self.session_id, self._speak_errors,
+                )
+                if self._speak_errors >= 20:
+                    log.error(
+                        "[%s] speak loop failing persistently; giving up so the "
+                        "supervisor restarts this session", self.session_id,
+                    )
+                    raise
+                await asyncio.sleep(min(30.0, 2.0 * self._speak_errors))
 
-            METRICS.gauge(
-                "goldlive_market_staleness_ms", state.staleness_ms,
-                {"session": self.session_id},
+    async def _speak_once(self) -> None:
+        assert self.runtime is not None
+        await asyncio.sleep(self.args.tick_s)
+        if self.paused:
+            return
+        now = datetime.now(timezone.utc)
+        state = self.engine.snapshot(now)
+
+        METRICS.gauge(
+            "goldlive_market_staleness_ms", state.staleness_ms,
+            {"session": self.session_id},
+        )
+
+        for event in self.engine.drain_events():
+            self.runtime.on_market_event(event, now)
+
+        view = state.timeframes.get("5m")
+        phase = classify_phase(now, atr=view.atr if view else None)
+        await self.runtime.keep_fed(phase, state, now)
+        await self.runtime.offer_next_topic(phase, state, now)
+
+        # Monotonic counters, not list lengths. The lists are bounded deques
+        # now, so their length stops growing at the cap and the old delta would
+        # silently stop reporting. The counters also fix a latent bug: when two
+        # items were added in one tick, the previous loop read [-1] twice and
+        # recorded the same text for both.
+        before_unsafe = self.runtime.unsafe_count
+        before_rep = self.runtime.repetitive_count
+
+        response = await self.runtime.tick(state, now)
+
+        new_unsafe = self.runtime.unsafe_count - before_unsafe
+        for text, violations in list(self.runtime.dropped_unsafe)[-new_unsafe:]                 if new_unsafe else []:
+            METRICS.inc("goldlive_blocked_total",
+                        {"session": self.session_id, "reason": "safety"})
+            self.store.record_blocked(
+                self.session_id, "safety", text, "; ".join(violations)
+            )
+        new_rep = self.runtime.repetitive_count - before_rep
+        for text, sim in list(self.runtime.dropped_repetitive)[-new_rep:]                 if new_rep else []:
+            METRICS.inc("goldlive_blocked_total",
+                        {"session": self.session_id, "reason": "repetition"})
+            self.store.record_blocked(
+                self.session_id, "repetition", text, f"similarity={sim:.2f}"
             )
 
-            for event in self.engine.drain_events():
-                self.runtime.on_market_event(event, now)
+        if response is None:
+            return
 
-            view = state.timeframes.get("5m")
-            phase = classify_phase(now, atr=view.atr if view else None)
-            await self.runtime.keep_fed(phase, state, now)
-            await self.runtime.offer_next_topic(phase, state, now)
+        METRICS.inc("goldlive_utterances_total", {"session": self.session_id})
+        if response.provenance.first_token_ms:
+            METRICS.observe(
+                "goldlive_first_token_ms", response.provenance.first_token_ms,
+                {"session": self.session_id},
+            )
+        self.store.record_utterance(response)
 
-            before_unsafe = len(self.runtime.dropped_unsafe)
-            before_rep = len(self.runtime.dropped_repetitive)
+        # Muted still generates and records -- only audio is withheld,
+        # so the transcript stays complete and unmuting resumes a host
+        # that is current rather than an hour behind.
+        # Muting is enforced here rather than in the runtime, so a muted
+        # session still generates, records and traces normally -- unmuting
+        # then resumes a host that is current rather than an hour behind.
+        if self.router is not None and self.muted:
+            self.router.sink.stop()
 
-            response = await self.runtime.tick(state, now)
+            METRICS.gauge(
+                "goldlive_queue_depth", self.router.queue_depth,
+                {"session": self.session_id, "queue": "audio"},
+            )
 
-            for _ in range(len(self.runtime.dropped_unsafe) - before_unsafe):
-                METRICS.inc("goldlive_blocked_total",
-                            {"session": self.session_id, "reason": "safety"})
-                text, violations = self.runtime.dropped_unsafe[-1]
-                self.store.record_blocked(
-                    self.session_id, "safety", text, "; ".join(violations)
-                )
-            for _ in range(len(self.runtime.dropped_repetitive) - before_rep):
-                METRICS.inc("goldlive_blocked_total",
-                            {"session": self.session_id, "reason": "repetition"})
-                text, sim = self.runtime.dropped_repetitive[-1]
-                self.store.record_blocked(
-                    self.session_id, "repetition", text, f"similarity={sim:.2f}"
-                )
+        log.info("[%s] %s", self.session_id, response.text)
 
-            if response is None:
-                continue
+    # -- startup readiness ------------------------------------------------
 
-            METRICS.inc("goldlive_utterances_total", {"session": self.session_id})
-            if response.provenance.first_token_ms:
-                METRICS.observe(
-                    "goldlive_first_token_ms", response.provenance.first_token_ms,
-                    {"session": self.session_id},
-                )
-            self.store.record_utterance(response)
+    async def _preflight(self) -> bool:
+        """Refuse to start a session that could only produce placeholder output.
 
-            # Muted still generates and records -- only audio is withheld,
-            # so the transcript stays complete and unmuting resumes a host
-            # that is current rather than an hour behind.
-            # Muting is enforced here rather than in the runtime, so a muted
-            # session still generates, records and traces normally -- unmuting
-            # then resumes a host that is current rather than an hour behind.
-            if self.router is not None and self.muted:
-                self.router.sink.stop()
+        Every subsystem here degrades quietly by design -- the synthetic feed,
+        the offline generator, the placeholder tone, the simulated audio sink --
+        so a session with nothing installed starts happily and broadcasts
+        nothing of value. That is the failure this gate exists to make loud.
 
-                METRICS.gauge(
-                    "goldlive_queue_depth", self.router.queue_depth,
-                    {"session": self.session_id, "queue": "audio"},
-                )
+        Skipped when supervised: the supervisor has already run the same gates
+        once, and N sessions each opening a market socket and generating a test
+        utterance would be slow and pointless.
+        """
+        if os.environ.get("GOLDLIVE_SUPERVISED") == "1":
+            return True
+        if getattr(self.args, "allow_degraded", False):
+            log.warning(
+                "--allow-degraded: skipping readiness checks. Market data, "
+                "model output or audio may be simulated."
+            )
+            return True
 
-            log.info("[%s] %s", self.session_id, response.text)
+        from runtime.readiness import Level, check
+
+        result = await check(
+            session_id=self.session_id, market=self.args.market,
+            adapter=self.args.adapter, include_broadcast=False,
+        )
+        if result.level is Level.NOT_READY:
+            print()
+            print(result.render())
+            print()
+            log.error("not starting. Run `GoldLive.exe provision`, or pass "
+                      "--allow-degraded to start anyway (development only).")
+            return False
+        log.info("readiness: %s", result.level.value)
+        return True
 
     # -- lifecycle --------------------------------------------------------
 
     async def run(self) -> int:
+        # Captured here so the health server's thread can hand coroutines back
+        # to this loop; see _adapter_health.
+        self.loop = asyncio.get_running_loop()
+
+        if not await self._preflight():
+            return 2
+
         spec = load_session_config(self.session_id)
         personas = load_personas(config_dir("personas"))
         persona = personas[spec["persona_id"]]
@@ -504,14 +748,20 @@ class LiveSession:
         else:
             log.info("%s starting with no prior state", self.session_id)
 
-        self.router = AudioRouter(self.session_id, tts, Path(self.args.out))
+        self.router = AudioRouter(
+            self.session_id, tts, Path(self.args.out),
+            retention=RetentionPolicy(
+                max_age_s=self.args.audio_retention_hours * 3600,
+                max_bytes=int(self.args.audio_max_mb * 1024 * 1024),
+            ),
+        )
         await self.router.start()
         # The runtime submits through the router; live.py must not submit
         # a second time or the utterance is queued (and rendered) twice.
         self.runtime.router = self.router
 
         self.adapter = await build_adapter(
-            self.args.adapter, self.session_id, os.environ.get("AUTHOR_SALT", "change-me")
+            self.args.adapter, self.session_id, author_salt()
         )
 
         self.health_server = HealthServer(
@@ -541,9 +791,13 @@ class LiveSession:
             asyncio.create_task(self._speak_loop(), name="speak"),
             asyncio.create_task(heartbeat(self.health, self.store), name="heartbeat"),
             asyncio.create_task(self._checkpoint_loop(), name="checkpoint"),
+            asyncio.create_task(self._orphan_watchdog(), name="orphan_watchdog"),
         ]
         if self.adapter is not None:
             self._tasks.append(asyncio.create_task(self._comment_loop(), name="comments"))
+
+        for task in self._tasks:
+            task.add_done_callback(self._on_task_done)
 
         log.info(
             "%s live: persona=%s market=%s adapter=%s generator=%s",
@@ -554,6 +808,38 @@ class LiveSession:
         await self.stopping.wait()
         await self.shutdown(feed, llm)
         return 0
+
+    async def _orphan_watchdog(self) -> None:
+        """Stop if the supervisor that started this session has died.
+
+        Windows cannot deliver a graceful signal to a hard-killed process, so
+        a supervisor that is TerminateProcess'd, taskkill /F'd, or lost to a
+        crash never runs its shutdown path -- and every session it started
+        keeps running, holding the audio device and the health port. Repeated
+        start/stop cycles then accumulate orphans four at a time.
+
+        Only active when supervised. A session started by hand has no parent
+        to outlive.
+        """
+        parent = os.environ.get("GOLDLIVE_SUPERVISOR_PID")
+        if os.environ.get("GOLDLIVE_SUPERVISED") != "1" or not parent:
+            return
+        try:
+            parent_pid = int(parent)
+        except ValueError:
+            return
+
+        from runtime.lifecycle import _pid_alive
+
+        while not self.stopping.is_set():
+            await asyncio.sleep(self.args.orphan_check_s)
+            if not _pid_alive(parent_pid):
+                log.error(
+                    "[%s] supervisor %d is gone; stopping rather than "
+                    "becoming an orphan", self.session_id, parent_pid,
+                )
+                self.stopping.set()
+                return
 
     async def _checkpoint_loop(self) -> None:
         """Save state periodically, not only on clean shutdown.
@@ -602,6 +888,33 @@ class LiveSession:
         log.info("%s stopped cleanly", self.session_id)
 
 
+def _add_session_log_file(session_id: str) -> None:
+    """Also write this session's log to a file that outlives the process.
+
+    A supervised session inherits the supervisor's stdout, and when that is
+    itself redirected the child's output did not reliably reach the file -- so
+    after a crash there was nothing at all to read. A session that dies at 3am
+    has to leave evidence behind, which is the whole point of running it under
+    a supervisor.
+
+    Rotating, because this runs 24/7 and an unbounded log is its own outage.
+    """
+    from logging.handlers import RotatingFileHandler
+
+    try:
+        path = data_path("logs", f"{session_id}.log")
+        handler = RotatingFileHandler(
+            path, maxBytes=16 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        )
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+        )
+        logging.getLogger().addHandler(handler)
+        log.info("session log: %s", path)
+    except OSError as exc:
+        log.warning("could not open session log file: %s", exc)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Run one live session")
     ap.add_argument("--session", required=True)
@@ -618,6 +931,16 @@ def main() -> None:
         help="file = tail a text file you type into (development)",
     )
     ap.add_argument("--tts", default="file", choices=["file", "piper"])
+    ap.add_argument(
+        "--orphan-check-s", type=float, default=5.0,
+        help="how often a supervised session checks its parent is alive",
+    )
+    ap.add_argument(
+        "--allow-degraded", action="store_true",
+        help="start even when readiness gates fail. Development only: the "
+             "session may use simulated market data, canned text or a "
+             "placeholder tone.",
+    )
     ap.add_argument("--voices", default=str(data_path("voices", create_parent=False)))
     ap.add_argument("--voice", help="override the persona's voice for this run")
     ap.add_argument(
@@ -627,6 +950,14 @@ def main() -> None:
              "clears the bar.",
     )
     ap.add_argument("--out", default=str(data_path("out", create_parent=False)))
+    ap.add_argument(
+        "--audio-retention-hours", type=float, default=AUDIO_MAX_AGE_S / 3600,
+        help="how long spoken audio is kept before it is reclaimed",
+    )
+    ap.add_argument(
+        "--audio-max-mb", type=float, default=AUDIO_MAX_BYTES / (1024 * 1024),
+        help="hard ceiling on the spoken-audio directory, oldest evicted first",
+    )
     ap.add_argument("--db", default=str(data_path("data", "gold-live.db", create_parent=False)))
     ap.add_argument("--health-port", type=int, default=9101)
     ap.add_argument("--tick-s", type=float, default=2.0)
@@ -639,6 +970,7 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
     )
+    _add_session_log_file(args.session)
 
     session = LiveSession(args)
     loop = asyncio.new_event_loop()

@@ -25,21 +25,97 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import os
 import random
 import signal
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
-from shared.paths import config_path
+from runtime import lifecycle
+from shared.paths import config_path, data_root, is_frozen
 
 ROOT = Path(__file__).resolve().parent.parent
 log = logging.getLogger("supervisor")
+
+
+class SessionState(str, Enum):
+    """What the supervisor believes about one child session.
+
+    These were bare string literals assigned in seven places and compared in
+    three, so a typo would have created a new state silently and every
+    comparison against it would have quietly returned False. A str-Enum keeps
+    every existing comparison and serialisation working unchanged.
+
+        STARTING   spawned, not yet confirmed serving
+        RUNNING    alive and answering /ready
+        UNREADY    alive but /ready is failing; killed if it persists
+        STOPPED    deliberately not running -- shutdown, or the user stopped it
+        CRASH_LOOP failed too often in an hour; left down rather than churned
+    """
+
+    STARTING = "starting"
+    RUNNING = "running"
+    UNREADY = "unready"
+    STOPPED = "stopped"
+    CRASH_LOOP = "crash_loop"
+
+
+def _errored(reason: str) -> "lifecycle.Lifecycle":
+    lc = lifecycle.load(reconcile=False)
+    lc.mark_error(reason)
+    return lc
+
+
+def child_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Environment for a spawned child.
+
+    Children run with cwd set to the writable data directory, never the source
+    tree, because _MEIPASS is read-only and temporary when frozen. In source
+    mode that means `python -m runtime.supervisor` cannot find its own package
+    unless the project root is on the path explicitly -- relying on cwd worked
+    only because data_root() happens to be the checkout when GOLDLIVE_DATA_DIR
+    is unset, and broke the moment it was set.
+    """
+    env = dict(base if base is not None else os.environ)
+    env["GOLDLIVE_SUPERVISED"] = "1"
+    # So the child can notice if this process dies without cleaning up. On
+    # Windows a hard kill -- TerminateProcess, taskkill /F, a crash, power loss
+    # -- gives the supervisor no chance to stop anything, and the session would
+    # otherwise keep running, holding the audio device and the health port.
+    env["GOLDLIVE_SUPERVISOR_PID"] = str(os.getpid())
+    if not is_frozen():
+        existing = env.get("PYTHONPATH", "")
+        root = str(ROOT)
+        if root not in existing.split(os.pathsep):
+            env["PYTHONPATH"] = os.pathsep.join(p for p in (root, existing) if p)
+    return env
+
+
+def session_command(session_id: str, health_port: int, args: list[str]) -> list[str]:
+    """Build the argv that starts one session, correctly in both modes.
+
+    Frozen builds were spawning `GoldLive.exe -m runtime.live ...`, because
+    sys.executable is the exe rather than a Python interpreter. The exe has its
+    own subcommand dispatcher and answered "Unknown command: -m", so every
+    supervised session died instantly and the restart logic turned that into a
+    spawn loop. `GoldLive.exe supervise` had therefore never worked in the
+    artifact intended for distribution.
+
+    Pure function on purpose: the argv is the thing that was wrong, so it needs
+    to be assertable without starting a process.
+    """
+    tail = ["--session", session_id, "--health-port", str(health_port), *args]
+    if is_frozen():
+        return [sys.executable, "run", *tail]
+    return [sys.executable, "-m", "runtime.live", *tail]
+
 
 
 @dataclass
@@ -50,7 +126,7 @@ class ManagedSession:
     process: subprocess.Popen | None = None
     restarts: list[float] = field(default_factory=list)
     backoff_s: float = 1.0
-    state: str = "starting"
+    state: SessionState = SessionState.STARTING
     started_at: float | None = None
     last_ready_at: float | None = None
     give_up: bool = False
@@ -77,26 +153,136 @@ class Supervisor:
         max_backoff_s: float = 60.0,
         unready_grace_s: float = 120.0,
         term_grace_s: float = 10.0,
+        allow_degraded: bool = False,
+        market: str = "gold",
+        adapter: str = "file",
+        ignore_consent: bool = False,
     ) -> None:
         self.sessions = {s.session_id: s for s in sessions}
+        self.allow_degraded = allow_degraded
+        #: Tests and `--no-consent-gate` bypass the recorded intent.
+        self.ignore_consent = ignore_consent
+        self.market = market
+        self.adapter = adapter
         self.crash_loop_threshold = crash_loop_threshold
         self.max_backoff_s = max_backoff_s
         self.unready_grace_s = unready_grace_s
         self.term_grace_s = term_grace_s
         self.stopping = asyncio.Event()
 
+    def consent_to_run(self) -> bool:
+        """Has the user asked for GoldLive to be running?
+
+        Checked before every spawn and every restart, not once at startup, so
+        pressing STOP takes effect on the next supervision tick rather than
+        whenever the current session happens to end.
+        """
+        if self.ignore_consent:
+            return True
+        try:
+            return lifecycle.load(reconcile=False).may_run
+        except Exception:
+            # If the intent cannot be read, do not run. The safe default when
+            # consent is unknown is no.
+            log.exception("could not read lifecycle state; refusing to start")
+            return False
+
+    # -- startup readiness ------------------------------------------------
+
+    async def preflight(self) -> bool:
+        """Refuse to start sessions this machine cannot actually run.
+
+        Without this, a machine with no model and no voices spawns sessions
+        that come up "healthy" and broadcast canned text over a placeholder
+        tone -- and the supervisor dutifully keeps them alive. Failing here,
+        loudly, is the whole point of the readiness work.
+
+        Development modes bypass it explicitly via --allow-degraded, which is
+        logged so a degraded run is never mistaken for a real one.
+        """
+        if self.allow_degraded:
+            log.warning(
+                "--allow-degraded: starting without readiness checks. "
+                "Market data, model output or audio may be simulated."
+            )
+            return True
+
+        from runtime.readiness import Level, check
+
+        log.info("checking readiness before starting any session ...")
+        result = await check(
+            session_id=next(iter(self.sessions), "SESSION_001"),
+            market=self.market, adapter=self.adapter, include_broadcast=True,
+        )
+        print()
+        print(result.render())
+        print()
+        self._publish_readiness(result)
+
+        if result.level is Level.NOT_READY:
+            log.error(
+                "not starting: %s",
+                ", ".join(g.name for g in result.failed(("config_valid", "market_live",
+                                                         "model_real", "voice_real",
+                                                         "audio_out"))),
+            )
+            log.error("run `GoldLive.exe provision` to fix, or pass --allow-degraded "
+                      "to start anyway (development only).")
+            return False
+
+        if result.level is Level.SESSION_READY:
+            log.warning("session ready, but NOT broadcast ready -- "
+                        "audio will not reach LIVE Studio.")
+        return True
+
+    @staticmethod
+    def _publish_readiness(result) -> None:
+        """Write the readiness verdict where the control panel can read it.
+
+        The panel had a Readiness row reading readiness.json, and nothing ever
+        wrote that file, so it showed "-" forever. The verdict is only known
+        here, at preflight, so this is where it has to be recorded.
+        """
+        import json as _json
+
+        from shared.paths import data_path
+
+        try:
+            data_path("readiness.json").write_text(
+                _json.dumps(result.to_json(), indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            log.debug("could not publish readiness: %s", exc)
+
     # -- process control --------------------------------------------------
 
     def spawn(self, session: ManagedSession) -> None:
-        cmd = [sys.executable, "-m", "runtime.live", "--session", session.session_id,
-               "--health-port", str(session.health_port), *session.args]
-        log.info("starting %s: %s", session.session_id, " ".join(cmd[2:]))
+        # The consent gate. Without it, "the child is missing" and "the user
+        # pressed STOP" are indistinguishable from in here, and the restart
+        # logic would resurrect a session the user just shut down.
+        if not self.consent_to_run():
+            log.info("not starting %s: the user has not asked GoldLive to run",
+                     session.session_id)
+            return
+
+        cmd = session_command(session.session_id, session.health_port, session.args)
+        log.info("starting %s: %s", session.session_id, " ".join(cmd[1:]))
+
+        # Children skip their own provisioning and readiness work: the
+        # supervisor has already done it once, and N sessions each probing the
+        # market feed and generating a test utterance would be both slow and
+        # pointless.
+        env = child_env()
+
+        # cwd must be writable and must outlive the process. ROOT resolves
+        # inside PyInstaller's temporary _MEIPASS directory when frozen, which
+        # is deleted on exit and read-only in practice.
         session.process = subprocess.Popen(
-            cmd, cwd=ROOT, stdout=None, stderr=None
+            cmd, cwd=str(data_root()), env=env, stdout=None, stderr=None
         )
         session.started_at = time.time()
         session.last_ready_at = time.time()
-        session.state = "running"
+        session.state = SessionState.RUNNING
 
     async def terminate(self, session: ManagedSession) -> None:
         """SIGTERM, then SIGKILL. The session flushes traces on SIGTERM, so
@@ -115,7 +301,7 @@ class Supervisor:
             log.warning("%s ignored SIGTERM, killing", session.session_id)
             with contextlib.suppress(Exception):
                 session.process.kill()
-        session.state = "stopped"
+        session.state = SessionState.STOPPED
 
     # -- readiness --------------------------------------------------------
 
@@ -137,15 +323,23 @@ class Supervisor:
                 await asyncio.sleep(30)
                 continue
 
+            if not self.consent_to_run():
+                if session.state is not SessionState.STOPPED:
+                    log.info("user stopped GoldLive; not restarting %s",
+                             session.session_id)
+                    session.state = SessionState.STOPPED
+                self.stopping.set()
+                return
+
             if not session.alive:
                 code = session.process.returncode if session.process else "n/a"
-                if session.state == "running":
+                if session.state is SessionState.RUNNING:
                     log.warning("%s exited (code %s)", session.session_id, code)
                     session.restarts.append(time.time())
 
                 if session.restarts_last_hour() >= self.crash_loop_threshold:
                     session.give_up = True
-                    session.state = "crash_loop"
+                    session.state = SessionState.CRASH_LOOP
                     log.error(
                         "%s crash-looped %d times in an hour; leaving it DOWN. "
                         "A loop that restarts silently is worse than one that stops.",
@@ -170,10 +364,10 @@ class Supervisor:
 
             if await self.check_ready(session):
                 session.last_ready_at = time.time()
-                session.state = "running"
+                session.state = SessionState.RUNNING
             else:
                 unready_for = time.time() - (session.last_ready_at or time.time())
-                session.state = "unready"
+                session.state = SessionState.UNREADY
                 if unready_for > self.unready_grace_s:
                     log.error(
                         "%s not ready for %.0fs; killing so it can restart",
@@ -183,6 +377,19 @@ class Supervisor:
             await asyncio.sleep(10)
 
     async def run(self) -> int:
+        if not await self.preflight():
+            if not self.ignore_consent:
+                lifecycle.save(_errored("readiness gates failed"))
+            return 2
+
+        # Record that a supervisor now owns the run, with its pid, so a hard
+        # kill leaves evidence of a crash rather than a stale RUNNING that the
+        # control panel would show as a healthy green light.
+        if not self.ignore_consent:
+            lc = lifecycle.load(reconcile=False)
+            lc.mark_running(os.getpid())
+            lifecycle.save(lc)
+
         for session in self.sessions.values():
             self.spawn(session)
             await asyncio.sleep(2)  # stagger startup; model load is expensive
@@ -200,13 +407,15 @@ class Supervisor:
             *(self.terminate(s) for s in self.sessions.values()), return_exceptions=True
         )
         log.info("all sessions stopped")
+        if not self.ignore_consent:
+            lifecycle.mark_stopped()
         return 0
 
     async def _report(self) -> None:
         while not self.stopping.is_set():
             await asyncio.sleep(60)
             rows = [
-                f"{s.session_id}={s.state}"
+                f"{s.session_id}={s.state.value}"
                 f"(up {s.uptime_s / 60:.0f}m, {s.restarts_last_hour()} restarts/h)"
                 for s in self.sessions.values()
             ]
@@ -218,7 +427,7 @@ class Supervisor:
             "sessions": [
                 {
                     "session_id": s.session_id,
-                    "state": s.state,
+                    "state": s.state.value,
                     "alive": s.alive,
                     "uptime_s": round(s.uptime_s),
                     "restarts_1h": s.restarts_last_hour(),
@@ -251,10 +460,21 @@ def build_sessions(only: list[str] | None, passthrough: list[str]) -> list[Manag
 def main() -> None:
     ap = argparse.ArgumentParser(description="Supervise session processes")
     ap.add_argument("--sessions", nargs="*", help="defaults to all in sessions.yaml")
+    # Production defaults. `supervise` with no arguments must run the real
+    # thing: a real feed, real speech, a real model. synthetic/mock/file are
+    # development modes and have to be asked for by name.
     ap.add_argument("--mode", default="auto")
-    ap.add_argument("--market", default="synthetic")
-    ap.add_argument("--adapter", default="mock")
-    ap.add_argument("--tts", default="file")
+    ap.add_argument("--market", default="gold")
+    ap.add_argument("--adapter", default="file")
+    ap.add_argument("--tts", default="piper")
+    ap.add_argument(
+        "--allow-degraded", action="store_true",
+        help="start even when readiness gates fail (development only)",
+    )
+    ap.add_argument(
+        "--no-consent-gate", action="store_true",
+        help="ignore the recorded start/stop intent (tests and debugging only)",
+    )
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -266,7 +486,20 @@ def main() -> None:
         "--mode", args.mode, "--market", args.market,
         "--adapter", args.adapter, "--tts", args.tts,
     ]
-    supervisor = Supervisor(build_sessions(args.sessions, passthrough))
+    if not args.no_consent_gate:
+        # Typing `GoldLive.exe supervise` is itself an explicit start request.
+        # The control panel sets the same state before launching this process;
+        # doing it here too means the command works standalone without ever
+        # letting the supervisor run without a recorded intent.
+        lifecycle.request_start()
+
+    supervisor = Supervisor(
+        build_sessions(args.sessions, passthrough),
+        ignore_consent=args.no_consent_gate,
+        allow_degraded=args.allow_degraded,
+        market=args.market,
+        adapter=args.adapter,
+    )
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

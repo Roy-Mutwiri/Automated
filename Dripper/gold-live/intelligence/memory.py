@@ -68,6 +68,13 @@ def cosine(a: Counter[str], b: Counter[str]) -> float:
     return num / (da * db) if da and db else 0.0
 
 
+#: Viewer questions are counted so the host can answer what keeps coming up.
+#: Only frequently-repeated ones are ever read, so the table is capped: on a
+#: busy stream the number of distinct questions is otherwise unbounded.
+QUESTION_TABLE_LIMIT = 2_000
+QUESTION_TABLE_KEEP = 500
+
+
 class SimilarityIndex(ABC):
     @abstractmethod
     def add(self, text: str) -> None: ...
@@ -140,7 +147,21 @@ class SessionMemory:
         self.utterance_count += 1
 
     def record_question(self, normalised_text: str) -> None:
+        """Count a viewer question, keeping only what hot_questions can use.
+
+        This Counter is keyed by the text of the question, so on a real stream
+        it grows with every distinct thing anyone has ever asked -- unbounded,
+        for the life of the process. Only the frequently-repeated ones are ever
+        read back, so the rare ones are dropped once the table gets large.
+
+        Pruning keeps the most-asked rather than the most-recent, because that
+        is what hot_questions selects on; dropping a question that has been
+        asked ten times to make room for one asked once would defeat it.
+        """
         self.audience_questions[normalised_text] += 1
+        if len(self.audience_questions) > QUESTION_TABLE_LIMIT:
+            keep = self.audience_questions.most_common(QUESTION_TABLE_KEEP)
+            self.audience_questions = Counter(dict(keep))
 
     # -- reads ------------------------------------------------------------
 

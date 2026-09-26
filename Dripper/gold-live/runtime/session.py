@@ -15,12 +15,15 @@ from uuid import uuid4
 from intelligence import safety
 from intelligence.comments import CommentPipeline, ScoredComment
 from intelligence.content import ANGLE_INSTRUCTION, Beat, ContentPlanner, MarketPhase
+from intelligence.delivery import DeliveryPlanner
 from intelligence.director import Decision, Director, SpeechIntent
 from intelligence.generation import Generator
+from intelligence.host_state import HostState
 from intelligence.memory import SessionMemory
 from intelligence.personas import Persona
 from intelligence.proposer import TopicCandidate, TopicProposer
-from platform_.tts.base import TTSProvider
+from platform_.audio.router import plan_units
+from platform_.tts.base import Prosody, TTSProvider
 from shared.contracts import (
     AIResponse,
     AudioRequest,
@@ -35,6 +38,12 @@ from shared.contracts import (
 )
 
 log = logging.getLogger(__name__)
+
+#: How much recent history to keep in memory for diagnostics. Enough to inspect
+#: what just happened, small enough that a session running for weeks does not
+#: grow without bound. The monotonic counters beside these carry the totals.
+RETAINED_UTTERANCES = 500
+RETAINED_DROPS = 200
 
 SEVERITY_TO_PRIORITY = {
     5: Priority.CRITICAL,
@@ -74,6 +83,15 @@ class SessionRuntime:
         self.fallback_used = 0
 
         self.memory = SessionMemory(state.session_id)
+        #: How the host currently feels, and how that becomes delivery. Both
+        #: are driven by the same events the Director scores, which is what
+        #: makes the expression correspond to something real.
+        self.host = HostState()
+        self.delivery = DeliveryPlanner()
+        #: The event kind that last genuinely startled the host, consumed by
+        #: the next utterance. Held rather than applied immediately because
+        #: the reaction belongs to the speech, not to the moment of noticing.
+        self._startled_by = None
         self.director = Director(
             state.session_id, self.memory, max_silence_s=max_silence_s
         )
@@ -90,9 +108,24 @@ class SessionRuntime:
             )
         self.pipeline = CommentPipeline(state.session_id)
 
-        self.transcript: list[AIResponse] = []
-        self.dropped_unsafe: list[tuple[str, list[str]]] = []
-        self.dropped_repetitive: list[tuple[str, float]] = []
+        # Bounded, with monotonic counters alongside.
+        #
+        # These were plain lists that only ever grew. self.transcript retained
+        # every AIResponse for the life of the session purely so len() could
+        # number a wav file, and dropped_repetitive grew about four times
+        # faster still, because roughly three quarters of everything generated
+        # is rejected. On a 24/7 host aimed at an 8 GB machine that is a leak
+        # with no upper bound. export_state() never used any of it -- it reads
+        # memory.short_term, which was already bounded.
+        #
+        # The counters are what callers actually wanted: a total that keeps
+        # rising. The deques keep a recent window for diagnostics.
+        self.transcript: deque[AIResponse] = deque(maxlen=RETAINED_UTTERANCES)
+        self.dropped_unsafe: deque[tuple[str, list[str]]] = deque(maxlen=RETAINED_DROPS)
+        self.dropped_repetitive: deque[tuple[str, float]] = deque(maxlen=RETAINED_DROPS)
+        self.spoken_count = 0
+        self.unsafe_count = 0
+        self.repetitive_count = 0
 
     # -- ingest -----------------------------------------------------------
 
@@ -121,6 +154,13 @@ class SessionRuntime:
         )
 
     def on_market_event(self, ev: MarketEvent, now: datetime | None = None) -> None:
+        when = now or utcnow()
+        # Fold it into how the host feels before it becomes a candidate to
+        # talk about. observe_event decides whether this was genuinely new --
+        # the fourth break of structure in two minutes is the market being
+        # busy, not a surprise.
+        if self.host.observe_event(ev, when):
+            self._startled_by = ev.kind
         self.director.offer(
             SpeechIntent(
                 trigger=TriggerType.MARKET_EVENT,
@@ -358,6 +398,10 @@ class SessionRuntime:
 
     async def tick(self, market: MarketState, now: datetime | None = None) -> AIResponse | None:
         now = now or utcnow()
+        # A stale feed is a real reason to sound less certain, and the host
+        # already refuses to quote prices in that state -- the delivery should
+        # match what the words are admitting.
+        self.host.observe_market(market.confidence, now)
         decision: Decision | None = self.director.tick(now)
         if decision is None:
             return None
@@ -376,6 +420,7 @@ class SessionRuntime:
                 "; ".join(verdict.report.violations),
             )
             self.dropped_unsafe.append((result.text, verdict.report.violations))
+            self.unsafe_count += 1
             return None
 
         response = AIResponse(
@@ -393,12 +438,13 @@ class SessionRuntime:
             interruptible=decision.intent.priority < Priority.CRITICAL,
         )
 
-        audio_ms = await self._speak(response, decision)
+        audio_ms = await self._speak(response, decision, now)
         self.director.mark_speaking(decision.intent, audio_ms, now)
         self.memory.record_utterance(response.text, decision.intent.topic, now)
         self.state.last_spoke_at = now
         self.state.utterances_1h += 1
         self.transcript.append(response)
+        self.spoken_count += 1
         return response
 
     async def _generate_non_repetitive(
@@ -470,7 +516,9 @@ class SessionRuntime:
         words = sum(len(s.split()) for s in segments)
         return int((max(1, words) / self.WORDS_PER_MINUTE) * 60_000)
 
-    async def _speak(self, response: AIResponse, decision: Decision) -> int:
+    async def _speak(
+        self, response: AIResponse, decision: Decision, now: datetime | None = None
+    ) -> int:
         """Hand the utterance to whoever owns audio, and report how long it
         will take so the Director knows it is busy.
 
@@ -494,13 +542,44 @@ class SessionRuntime:
             preempts=decision.preempts,
         )
 
+        # How it is said, decided once, from state the events already built.
+        plan = self.delivery.plan(
+            self.host,
+            now or utcnow(),
+            priority=decision.intent.priority,
+            startling_event=self._startled_by,
+        )
+        # Consumed: a surprise is reacted to once, by the next thing spoken.
+        self._startled_by = None
+        # The RENDERED plan, not the raw one. Logging the raw plan showed
+        # values the synthesiser never receives -- a real run logged
+        # pace=1.10 against a PACE_MAX of 1.08, which is exactly the kind of
+        # thing that sends someone hunting a bug that does not exist.
+        log.debug(
+            "[%s] delivery %s",
+            self.state.session_id,
+            plan.renderable_with(self.tts.capabilities).describe(),
+        )
+
         if self.router is not None:
-            await self.router.submit(req)
+            await self.router.submit(req, plan)
             return self._estimate_duration_ms(req.segments)
 
+        # No router: the dry run, which is what writes audio anyone actually
+        # listens to. It used to synthesise one file per sentence with no
+        # prosody at all, so the path used for judging how the host sounds was
+        # the one path that had none of the work applied to it.
+        # plan_units is what the router renders, so the dry run and the live
+        # path cannot drift apart in what they actually produce.
+        units = plan_units(plan.renderable_with(self.tts.capabilities), req.segments)
+        prosody = Prosody.for_utterance(req.utterance_id, plan.pace)
         total = 0
-        for i, segment in enumerate(req.segments):
-            path = self.out_dir / f"{len(self.transcript):03d}_{req.utterance_id.hex[:8]}_{i}.wav"
-            res = await self.tts.synthesize(segment, req.voice_id, path)
+        for i, unit in enumerate(units):
+            # spoken_count, not len(transcript): the deque stops growing at
+            # its cap, which would make filenames collide after that point.
+            path = self.out_dir / f"{self.spoken_count:03d}_{req.utterance_id.hex[:8]}_{i}.wav"
+            res = await self.tts.synthesize(
+                unit.text, req.voice_id, path, prosody=prosody
+            )
             total += res.duration_ms
         return total

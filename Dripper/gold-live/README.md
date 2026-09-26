@@ -1,174 +1,129 @@
-# Gold Live
+# GoldLive
 
-A 24/7 multi-session AI broadcasting system for XAUUSD commentary.
+An AI host that talks about the live gold market — real prices, real
+generated commentary, real synthesised speech.
 
-Architecture and rationale: see the [architecture review](https://claude.ai/code/artifact/d7887018-f727-4728-b354-d204ed440fe3).
-Read §00 before building anything on top of this.
+**GoldLive never starts on its own.** It runs only while you have pressed
+START, and STOP always stops it. No service, no scheduled task, no registry
+entry, no Startup shortcut.
 
-**Status: M0 + M1 complete.** Contracts, mocks, Director, memory, safety gate
-and a runnable dry run. No live market feed, no platform adapter, no device
-agent yet.
+There are two ways in, and they are not the same thing:
 
-## The model runs locally
+| | Who it is for | What you need |
+|---|---|---|
+| [**Install the Windows build**](#install-the-windows-build) | anyone who wants to run GoldLive | nothing — Python is inside the app |
+| [**Run it from source**](#run-it-from-source) | anyone changing the code | Python 3.12+, a checkout |
 
-All generation runs on a self-hosted model on the central machine. Nothing is
-pre-scripted: the host's words, and the choice of what to talk about, are both
-generated from live context.
+---
 
-Any OpenAI-compatible server works — vLLM, llama.cpp, Ollama, TGI, SGLang.
-vLLM is recommended for two specific reasons:
+## Install the Windows build
 
-- **Continuous batching.** Seven sessions share one GPU. They never speak at the
-  same instant (the Director rate-limits each), so real load is ~10 generations
-  a minute. A batching server absorbs that on one card; a serial one will not.
-- **Prefix caching.** Each session's persona prompt is byte-identical on every
-  request for the life of the session. Without `--enable-prefix-caching` you
-  reprocess it on every utterance and pay hundreds of milliseconds for nothing.
+1. Download **`GoldLive-Windows-x64-v0.5.0.zip`** from the
+   [Releases page](https://github.com/Roy-Mutwiri/Automated/releases/latest).
+   Direct link once v0.5.0 is published:
+   [`GoldLive-Windows-x64-v0.5.0.zip`](https://github.com/Roy-Mutwiri/Automated/releases/download/v0.5.0/GoldLive-Windows-x64-v0.5.0.zip)
+   (~103 MB)
+2. Right-click the ZIP → **Extract All**
+3. Open the extracted `GoldLive` folder and run **`GoldLive Setup.exe`**
+
+Setup checks your PC, downloads the AI model and voice, and proves each piece
+works before reporting `READY TO START`. Then open **`GoldLive.exe`** and press
+**START**. **STOP** always stops it.
+
+The ZIP is built and published by CI from the tagged commit — the same bytes
+that were tested, never a hand-made upload. If the Releases page is empty,
+no version has been tagged yet; build it yourself with the steps below.
+
+Full instructions: [docs/INSTALL_WINDOWS.md](docs/INSTALL_WINDOWS.md) ·
+[docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+
+## Run it from source
+
+For development. This gives you the engine and the test suite, not an
+installed application.
 
 ```bash
-vllm serve <model> --port 8000 --enable-prefix-caching
-```
+git clone https://github.com/Roy-Mutwiri/Automated.git
+cd Automated/Dripper/gold-live
 
-**Benchmark before buying hardware** — spec sheets measure the wrong thing:
-
-```bash
-PYTHONPATH=. .venv/Scripts/python -m scripts.bench_llm
-```
-
-Reports time-to-first-token (decides when audio starts), tokens/sec under
-concurrency, and prefix-cache hits. Target: p95 TTFT under 900ms at your
-session count.
-
-## Run it
-
-```bash
 python -m venv .venv
-.venv/Scripts/python -m pip install -e ".[dev]"
+.venv/Scripts/python -m pip install -e ".[dev]"    # Windows
+# .venv/bin/python -m pip install -e ".[dev]"      # Linux/macOS
 
-# Local model if its server is up, else offline templates
-PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun
-
-PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun --mode local    # require it
-PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun --mode offline  # structure only
-PYTHONPATH=. .venv/Scripts/python -m runtime.dryrun --sessions 3    # isolation check
-
-PYTHONPATH=. .venv/Scripts/python -m pytest
+.venv/Scripts/python -m pytest -q                  # the suite
+.venv/Scripts/python -m runtime.dryrun --mode offline   # the pipeline, no model
 ```
 
-Output (audio + text transcripts) lands in `out/<SESSION_ID>/`.
+`--mode offline` needs no model server, no audio device, no network and no API
+key. Output lands in `out/<SESSION_ID>/`.
 
-## What M1 is for
-
-It answers the one question no architecture can: **does the output sound like
-something a person would listen to for an hour?** Run it with `--live`, read
-the transcript, listen to the audio. If it is boring, everything downstream is
-wasted effort — and you have found that out in week one rather than month four.
-
-The offline generator uses fixed templates and is deliberately repetitive. That
-is not the product; it exists so the whole pipeline runs with no API key and so
-the repetition detector has something real to catch.
-
-## Layout
-
-```
-shared/         contracts, event bus, mocks          BOTH OWN
-intelligence/   director, memory, safety, generation  ROY
-platform_/      market, adapters, tts, audio          BROTHER
-runtime/        session process, dry run              BOTH
-configs/        personas and session config           BOTH
-tests/
-```
-
-`shared/contracts.py` is the interface between the two halves. Changing it gets
-its own PR, both approvals, and a version bump. Everything else is free to move.
-
-Pydantic models are the source of truth; JSON Schema is generated from them:
+To produce the same ZIP that Releases carries:
 
 ```bash
-PYTHONPATH=. .venv/Scripts/python -m shared.contracts   # writes shared/schemas/
+.venv/Scripts/python -m build_tools.build --skip-tests
+.venv/Scripts/python -m build_tools.make_zip
+# -> dist/GoldLive-Windows-x64-v0.5.0.zip
 ```
 
-## The parts that carry the design
+Building the Windows executable requires Windows. Those are the commands CI
+runs, so they are the ones documented here.
 
-**`intelligence/director.py`** — decides whether to speak, about what, and
-whether to interrupt. Deterministic scoring: base priority, decayed by age,
-penalised by topic cooldown and semantic repetition, boosted by silence. The
-LLM writes the words; it does not choose the moment.
+> **Windows path length.** `pip` puts PortAudio's DLL five directories deep
+> inside `site-packages`. Under a long checkout path the total exceeds
+> `MAX_PATH` and the DLL fails to load with `OSError 0xce`, which looks like a
+> broken install and is only a long name. Clone somewhere short (`C:\src\...`),
+> or enable long paths:
+> `git config --system core.longpaths true`.
 
-**`intelligence/safety.py`** — a control with tests, not a tone instruction.
-Blocks numeric price claims when `MarketState.confidence != LIVE`, and blocks
-outcome-certainty language. Runs after generation, before audio.
+---
 
-**`intelligence/proposer.py`** — decides what to talk about next, generated
-rather than scripted. The model is given the market, the audience's questions
-and everything already covered, and asked what is genuinely worth saying now.
-Proposals are then filtered against coverage memory, because being told not to
-repeat is not the same as not repeating.
+## You install these yourself
 
-**`intelligence/memory.py`** — four layers plus repetition detection. Ships
-with character n-gram cosine (no dependencies); swap in embeddings behind
-`SimilarityIndex` when soak tests show it is needed.
+| | Why | Where |
+|---|---|---|
+| **Ollama** | runs the AI model | <https://ollama.com> |
+| **VB-CABLE** | only for broadcasting audio | <https://vb-audio.com/Cable> |
 
-**`configs/content.yaml`** — cold-start and fallback seed **only**. It is what
-the stream falls back to when the model is unreachable; a degraded stream
-reading from a list beats a silent one. `SessionRuntime.fallback_used` counts
-how often that happens and belongs on the dashboard — in normal operation it
-should be near zero. This file is not the content plan.
+Both register system-level components, so GoldLive detects them and asks
+rather than installing them behind your back.
 
-**Session isolation** is enforced in four independent layers — process, Redis
-namespace, `session_id` on every record, and a runtime assertion in the comment
-pipeline. `tests/test_isolation.py` includes the adversarial vocabulary test.
+## What is proven, and what is not
 
-## Soak testing — the test that actually matters
+Verified on the development machine, in the packaged build:
 
-Ten minutes of good output proves nothing. The failures that kill a 24/7 product
-only appear over days: content exhaustion, repetition drift, dead air, and the
-~48 hours a week that spot gold is closed.
+- Provisioning from scratch, idempotent on re-run
+- Real live gold price driving real AI commentary through real Piper speech
+- A viewer comment producing a comment-triggered spoken reply
+- START → RUNNING → STOP → STOPPED with no orphaned processes
+- Recovery from a killed session (21 s) and from the model server dying (15 s)
+- One-hour soak: stable threads, handles and queue depth
 
-```bash
-PYTHONPATH=. .venv/Scripts/python -m runtime.soak --hours 24
-PYTHONPATH=. .venv/Scripts/python -m runtime.soak --hours 72 --start-friday
-```
+**Not proven — do not rely on these yet:**
 
-Runs on a simulated clock, so 72 hours takes about a minute. Current results:
+- **Never installed on a clean PC.** Only this development machine.
+- **Broadcasting to TikTok LIVE has never been tested end to end.**
+- **Comment ingestion from a real TikTok stream is untested.** Comments work
+  from a local file; screen-capture OCR is unproven.
+- No soak longer than one hour.
+- Multi-session operation is not built.
 
-| Run | Utterances | Longest silence | Drift | Result |
-|-----|-----------:|----------------:|-------|--------|
-| 24h weekday | 401 (16.7/h) | 6.0 min | 337 -> 332 | PASS |
-| 72h with weekend | 920 (12.8/h) | 9.3 min | 2641 -> 1813 | content exhausted |
+Current readiness level: `SESSION_READY` — the host genuinely speaks about
+real prices, but nothing has been shown to reach an audience.
 
-The weekend run still reports exhaustion, and that is accurate rather than a
-bug: 46 topics x 8 angles = 368 beats cannot fill a 49-hour close without
-reuse. The planner degrades rather than falling silent (see `degraded_level`),
-but **the inventory needs to be roughly 3x larger** — target ~120 topics, so
-nothing repeats inside 6-8 hours. That is writing, not engineering.
+## For developers
 
-Offline soak numbers understate throughput badly: templates cannot produce
-hundreds of distinct utterances, so most planned content is correctly blocked
-as repetitive. Offline runs validate STRUCTURE. Use `--live` to judge content.
+Commands are under [Run it from source](#run-it-from-source). A bare `pytest -q`
+works (see `pythonpath` in `pyproject.toml`); CI runs the same suite on Linux
+and on Windows, because the Windows-only failures — rename races, `MAX_PATH`,
+real device enumeration — are exactly the ones that reach users.
 
-## Two behaviours worth knowing
+Architecture and design decisions: [docs/PORTABILITY_SPEC.md](docs/PORTABILITY_SPEC.md)
 
-**Repetition policy is priority-dependent.** A severity-5 market event
-regenerates once and then speaks *anyway* rather than being silently dropped
-for sounding similar to something earlier. High priority regenerates once then
-drops; anything lower drops immediately. Found by running the dry run — the
-break of structure was being swallowed.
+Release process: [docs/RELEASING.md](docs/RELEASING.md)
 
-**Clocks are injected everywhere.** `SpeechIntent.created_at`, `Director.tick`,
-and the runtime's `on_*` methods all take an explicit `now`. Mixing wall-clock
-intent creation with a simulated scoring clock makes every intent look instantly
-expired.
+## Disclaimer
 
-## Not built yet
-
-M2 real market engine · M3 screen-capture adapter and classification · M4 device
-agent and audio routing · M5 supervision and observability · M6 scale to 3 ·
-M7 dashboard and 7 sessions.
-
-## Notes
-
-- Copy `.env.example` to `.env`. Never commit `.env`.
-- This project should live in its own repository with the `Automated` auto-push
-  watcher **off**. Per-file auto-commits bypass PRs and branch protection, which
-  is the opposite of what the two-owner contract workflow needs.
+GoldLive discusses market scenarios. It is **not financial advice**, it does
+not tell anyone when to buy or sell, and it refuses to quote a price it cannot
+currently verify. Prices come from tokenised gold (PAXG/XAUT) on a public
+exchange feed — close to spot, but not an official XAUUSD fix.

@@ -4,7 +4,14 @@ Dripper's working folder in the [`Automated`](../README.md) repo.
 
 ## Purpose
 
-_TODO: describe what Dripper does._
+**[GoldLive](gold-live/)** — an AI host that talks about the live gold market,
+packaged as a Windows application.
+
+| | |
+|---|---|
+| Install the released build | [gold-live/docs/INSTALL_WINDOWS.md](gold-live/docs/INSTALL_WINDOWS.md) |
+| Run it from source | [gold-live/README.md](gold-live/README.md#run-it-from-source) |
+| Download | [Releases](https://github.com/Roy-Mutwiri/Automated/releases) |
 
 ## Auto-commit
 
